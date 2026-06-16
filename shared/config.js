@@ -42,15 +42,35 @@
       sprint_freq: 1.95,     // fréquence en sprint (plus rapide = plus frénétique)
       crouch_freq: 0.8,      // fréquence accroupi (lent, furtif)
       base_amp: 0.011,       // amplitude (rad) à la marche
-      sprint_amp: 0.028,     // amplitude en sprint (plus ample)
+      sprint_amp: 0.018,     // amplitude en sprint (plus ample)
       crouch_amp: 0.006,     // amplitude accroupi (discret)
       vertical_ratio: 0.55,  // part verticale (horizontal + vertical EN PHASE = diagonale "/")
       roll_ratio: 0.6,       // inclinaison (lean) synchronisée → vie
       fig8: 0.35,            // touche figure-8 (double fréquence) pour casser la régularité
-      organic: 0.18,         // variation lente d'amplitude/fréquence (jamais parfaitement robotique)
+      organic: 0.28,         // variation lente d'amplitude/fréquence (jamais parfaitement robotique)
       ads_reduce: 0.85,      // réduction en visée (0..1) : 1 = quasi nul en ADS
       smooth_in: 6,          // vitesse de montée du sway (anti-snap au départ)
       smooth_out: 4,         // vitesse de descente (à l'arrêt)
+    },
+    // ===== Vibration au CHANGEMENT D'ARME (petit à-coup naturel quand l'arme arrive en main) =====
+    // Secousse au changement d'arme : FORTE et ample au début, puis se stabilise en douceur
+    // (enveloppe attack→decay, façon mantle). Pas un à-coup sec.
+    SWITCH_SHAKE: {
+      ENABLED: true,
+      amount: 0.022,         // amplitude au pic (rad) — ample
+      freq: 24,              // fréquence (basse = mouvement lourd, pas un buzz)
+      attack: 0.05,          // temps de montée vers le pic (s) — fort dès le début
+      decay_t: 0.30,         // temps de retombée douce (s)
+    },
+    // ===== Pulsation bleu clair sur les CÔTÉS quand on va vite (bunny hop / vélocité) =====
+    // Apparaît au-delà de min_speed, max à max_speed, pulse (vibration), s'éteint à vitesse normale.
+    SPEED_EDGE: {
+      enabled: true,
+      min_speed: 9,          // m/s : début de l'effet (au-dessus de la course normale ~8)
+      max_speed: 15,         // m/s : intensité maxi
+      max_opacity: 0.85,     // opacité maxi du halo bleu
+      pulse_freq: 9,         // vitesse de la pulsation (vibration)
+      pulse_amount: 0.28,    // amplitude de la pulsation
     },
     MAX_SPEED_SERVER: 17,
     SPREAD: { HIP: 0.022, ADS: 0.002, SLIDE: 0.03 },
@@ -118,9 +138,10 @@
     },
     SUPERGLIDE: {
       ENABLED: true, JUMP_ONLY: true, WINDOW: 0.25, GRACE: 0.14,
-      SPEED: 16.0, UP: 6.2, FOV_KICK: 8, FOV_DECAY: 2.6,
+      SPEED: 26.0, UP: 6.2, FOV_KICK: 8, FOV_DECAY: 2.6,
     },
-    MANTLE_SHAKE: 0.05,
+    MANTLE_SHAKE: 0.15,
+    CLIMB_SHAKE_MULT: 0.45,   // grimpe de mur : fraction du shake mantle (plus bas = plus doux)
     FOV: { VIEW: 75, ADS: 60, WEAPON: 45 },
     WEAPON_NAME: 'R-69',
     WEAPON_ICON: '/textures/hud/weapon.png',
@@ -161,6 +182,9 @@
         // recul rotationnel directionnel : l'arme part en haut-droite puis revient fluide au centre
         // pitch = montée (haut), yaw = départ vers la droite, roll = légère inclinaison
         rkick: { pitch: 0.09, yaw: -0.56, roll: -0.4, max: 0.6, rise_speed: 20, return_speed: 6 },
+        // Secousse caméra LOURDE par balle (façon shake de changement d'arme, mais grave) :
+        // montre que le Wingman tape fort. amount = ampleur, freq basse = "thump", down_bias = poids vers le bas.
+        fire_shake: { amount: 0.024, freq: 15, attack: 0.015, decay_t: 0.17, down_bias: 0.7 },
         sfx_shot: 'wingman_shot', sfx_reload: 'wingman_reload',
         scale: 1, position: [0, 0.1, 0], rotation_y_deg: 0, sight: null,
         muzzle: [0, 0.04, -0.6],
@@ -196,12 +220,13 @@
         dedupe_suffix: '.001',
         blade_meshes: ['lightsaber', 'saber'],           // meshes de LAME à faire briller
         blade_exclude: ['cap', 'foregrip', 'hilt', 'handle', 'grip'], // manche : ne brille pas
-        scale: 1, position: [0.05, -0.10, -0.25], sight: null,
+        scale: 1, position: [0.15, 0.02, -0.25], sight: null,
         // La lame du modèle pointe le long de l'axe Y local → on l'oriente vers l'avant via
         // rotation_deg [x,y,z] (degrés). AJUSTE CES 3 VALEURS pour bien caler le sabre en main.
-        rotation_deg: [-78, 180, 0],
+        rotation_deg: [-78, 220, 0],
         // pose en main (hanche) : x+ =droite, y+ =haut, z+ =vers soi | rot x+ =pointe bas, y+ =droite, z+ =roll
-        hip: { pos: [0.16, -0.24, -0.28], rot: [0.18, -0.22, 0.12] },
+        // sabre remonté (était -0.24) pour qu'il soit bien visible en main.
+        hip: { pos: [0.16, -0.08, -0.28], rot: [0.18, -0.22, 0.12] },
         ads: { rot: [0, 0, 0], dist: 0.22, align: [0, 0] },
       },
     ],
@@ -232,6 +257,9 @@
       kick_decay: 9,         // retour de l'à-coup au centre
       hitstop_hit: 0.075,    // durée du gel de l'arme quand ça touche (s)
       hitstop_finisher: 0.11,// gel plus long sur le coup final
+      // --- Pose "course KATANA" : quand on sprinte avec le sabre, il se lève et s'incline ---
+      // vers le bas/avant comme un samouraï qui court. Pose ADDITIVE (rad / m). 0 = désactivé.
+      katana_run: { pos_y: 0.07, pos_x: 0.05, pos_z: 0.05, tip_down: 0.6, roll: 0.4, yaw: -0.18, speed: 8 },
       // --- Combo : 3 coups procéduraux enchaînés ---
       // Pose ADDITIVE appliquée à l'arme : rot [x,y,z] rad (x+ =pointe bas, y+ =droite, z+ =roll
       // horaire), pos [x,y,z] m (x+ =droite, y+ =haut, z+ =vers soi).
@@ -404,7 +432,7 @@
     },
     CROUCH_JUMP_ROT: true,
     SPEED_FX_DURATION: 0.8,
-    SWITCH_TIME: 0.32,
+    SWITCH_TIME: 0.42,
     GAMEPAD_DEADZONE: 0,
     // Courbe de réponse du stick. 1.0 = LINÉAIRE PUR (= preset 4-3 Linéaire d'Apex). Garde 1.0
     // pour reproduire Apex. < 1.0 amplifie le centre (déforme), > 1.0 l'écrase. Ne pas s'en servir.

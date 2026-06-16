@@ -94,11 +94,23 @@
   .rosterrow.seated .role{color:var(--amber)}
   #spechelp{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);font-size:12px;color:#b6c2d0;letter-spacing:1px;display:none;background:rgba(10,16,38,.6);padding:6px 14px}
   #speedfx{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:4;mix-blend-mode:screen;transition:opacity .12s}
+  /* Pulsation bleu clair sur les CÔTÉS quand on va vite (bunny hop / grande vélocité) */
+  #speededge{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:5;mix-blend-mode:screen;
+    background:radial-gradient(ellipse 62% 96% at 50% 50%, rgba(0,0,0,0) 56%, rgba(120,205,255,.22) 80%, rgba(150,220,255,.6) 100%)}
   #sgdot{position:absolute;left:50%;top:41%;transform:translate(-50%,-50%);width:12px;height:12px;border-radius:50%;background:#4db8ff;box-shadow:0 0 10px rgba(77,184,255,.9);display:none;opacity:.5;transition:opacity .06s,width .06s,height .06s}
   #sgdot.ready{opacity:1;width:18px;height:18px;background:#8fd8ff;box-shadow:0 0 18px rgba(140,220,255,1)}
 </style>
 </head>
 <body>
+<!-- Écran de CHARGEMENT : bloque le menu tant que tous les assets ne sont pas prêts -->
+<div id="preload" style="position:fixed;inset:0;z-index:9999;background:#0a0d12;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity .35s ease;font-family:inherit;color:#dfe7ef">
+  <div style="font-size:30px;font-weight:800;letter-spacing:4px">FEMZ <b style="color:#36e3ff">FPS</b></div>
+  <div style="font-size:12px;letter-spacing:2px;opacity:.7" id="preloadmsg">CHARGEMENT DES ASSETS…</div>
+  <div style="width:min(380px,70vw);height:6px;background:rgba(255,255,255,.12);border-radius:4px;overflow:hidden">
+    <div id="preloadbar" style="width:0%;height:100%;background:linear-gradient(90deg,#36e3ff,#7f8bff);transition:width .15s ease"></div>
+  </div>
+  <div style="font-size:11px;letter-spacing:1px;opacity:.55" id="preloadpct">0%</div>
+</div>
 <div id="game"></div>
 
 <div id="hud">
@@ -109,6 +121,7 @@
   <div id="hitmarker"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span></div>
   <div id="sgdot"></div>
   <canvas id="speedfx"></canvas>
+  <div id="speededge"></div>
   <div id="vitals">
     <div id="plName">—</div>
     <div id="shieldsegs">
@@ -167,6 +180,7 @@
 
 <div class="screen" id="lobby">
   <h1 style="font-size:34px">MÊLÉE <b>6 JOUEURS</b></h1>
+  <p id="lobbytip" style="margin:4px 0 10px;font-size:13px;color:var(--amber, #ffcf6b);letter-spacing:.5px">Vous avez 2 armes + 1 secrète 🔥 — vous êtes difficile à toucher si vous sautez pendant que vous glissez au sol !</p>
   <p id="lobbyinfo" style="margin-bottom:8px">Connexion…</p>
   <div id="roster"></div>
   <div>
@@ -269,6 +283,13 @@ const CONFIG = {
   MANTLE_MIN_H: 0.45,           // hauteur min du rebord au-dessus des pieds
   MANTLE_MAX_H: 1.7,            // hauteur max attrapable
   MANTLE_T: 0.45,               // durée de la grimpe
+  // ===== GRIMPE DE MUR (wall climb) : on monte le long d'un mur en le poussant en l'air =====
+  CLIMB_ENABLED: true,
+  CLIMB_SPEED: 4.5,             // vitesse de montée (m/s) — >= 4.5 pour ne pas déclencher le mantle
+  CLIMB_MAX_HEIGHT: 3.4,        // hauteur max grimpée d'un coup → AU-DELÀ le perso retombe (on grimpe plus haut)
+  CLIMB_MAX_ENTRY_SPEED: 3.4,   // au-dessus de cette vitesse h., on NE grimpe pas → le wall bounce reste prioritaire
+  CLIMB_COOLDOWN: 0.6,          // délai avant de pouvoir re-grimper (anti collage infini)
+  CLIMB_DETACH_PUSH: 3.2,       // poussée hors du mur au wall-jump / décrochage
   SUPERGLIDE_WINDOW: 0.25,      // fenêtre saut+crouch en FIN de grimpe (visible via le rond bleu)
   SUPERGLIDE_GRACE: 0.12,       // tolérance APRÈS la fin de la grimpe (appuis légèrement tardifs)
   SUPERGLIDE_SPEED: 13.5,
@@ -398,10 +419,21 @@ function recPush(meP, meYaw, mePitch, meAnim, enP, enYaw, enPitch, enAnim){
   if(REC.lastAt && now - REC.lastAt < minDt) return; // throttle à record_hz
   REC.lastAt = now;
   if(!REC.buf.length) recInit();
+  // FFA : on enregistre TOUS les autres joueurs (par siège) pour pouvoir rejouer la killcam
+  // depuis le point de vue du VRAI tueur (remappé dans startKillCam). 'en' = fallback 1v1.
+  const others = {};
+  if(typeof botMgr !== 'undefined' && botMgr){
+    for(const [seat, b] of botMgr){
+      if(!b || !b.pos) continue;
+      const lp = (b.buf && b.buf.length) ? (b.buf[b.buf.length-1].pitch||0) : 0;
+      others[seat] = { p:[b.pos.x,b.pos.y,b.pos.z], yaw:b.yaw||0, pitch:lp, anim:Object.assign({}, b.anim||{}) };
+    }
+  }
   REC.buf[REC.head] = {
     t: now,
     me: { p:[meP.x,meP.y,meP.z], yaw:meYaw, pitch:mePitch, anim:Object.assign({}, meAnim) },
     en: { p:[enP[0],enP[1],enP[2]], yaw:enYaw, pitch:enPitch, anim:Object.assign({}, enAnim) },
+    others,
   };
   REC.head = (REC.head + 1) % REC.cap;
   REC.count = Math.min(REC.count + 1, REC.cap);
@@ -833,6 +865,62 @@ function findLedge(){
   const dz2 = Math.max(best.minz+0.45, Math.min(pz + f.z*0.25, best.maxz-0.45));
   return { to: new THREE.Vector3(dx, best.h, dz2) };
 }
+/* ---------- GRIMPE DE MUR (wall climb) : monte le long d'un mur en l'air, retombe si trop haut ---------- */
+function updateClimb(dt, jumpEdge, wishDir, f){
+  const C = CONFIG;
+  me.climb.cool = Math.max(0, me.climb.cool - dt);
+  if(C.CLIMB_ENABLED === false){ me.climb.active = false; return; }
+  const fwd = new THREE.Vector3(f.x, 0, f.z); if(fwd.lengthSq() > 1e-6) fwd.normalize();
+  if(me.climb.active){
+    const n = findWallNormal(me.pos, me.pos.y);     // normale SORTANTE du mur
+    const climbedH = me.pos.y - me.climb.startY;
+    if(jumpEdge){                                    // SAUT → wall-jump (se repousse du mur)
+      me.climb.active = false; me.climb.cool = C.CLIMB_COOLDOWN;
+      const o = me.climb.normal;
+      me.vel.y = C.JUMP_VELOCITY;
+      me.vel.x += o.x * C.CLIMB_DETACH_PUSH; me.vel.z += o.z * C.CLIMB_DETACH_PUSH;
+      me.wallBounced = false;
+      playSfx('mantle');
+      return;
+    }
+    if(!n){                                          // plus de mur = SOMMET → on passe par-dessus
+      me.climb.active = false; me.climb.cool = C.CLIMB_COOLDOWN;
+      me.vel.y = Math.max(me.vel.y, 3.2);
+      me.vel.x -= me.climb.normal.x * 2.2; me.vel.z -= me.climb.normal.z * 2.2; // avance sur le rebord
+      return;
+    }
+    me.climb.normal.copy(n);
+    const facing = fwd.dot(n) < -0.35;               // on regarde encore le mur
+    const holding = !!wishDir && wishDir.dot(n) < -0.15; // on pousse encore vers le mur
+    if(climbedH >= C.CLIMB_MAX_HEIGHT || !facing || !holding){ // TROP HAUT / lâche → retombe
+      me.climb.active = false; me.climb.cool = C.CLIMB_COOLDOWN;
+      me.vel.y = Math.min(me.vel.y, -0.5);
+      me.vel.x += n.x * 1.4; me.vel.z += n.z * 1.4; // se décolle légèrement du mur
+      return;
+    }
+    // Monte le long du mur : on garde le strafe LE LONG du mur, et on reste collé (légère
+    // poussée vers le mur) ; la collision (collide) maintient la distance correcte.
+    me.climb.t += dt;
+    me.vel.y = C.CLIMB_SPEED + C.GRAVITY*dt;           // +gravité du frame → vitesse de montée constante (indép. du framerate)
+    const normComp = me.vel.x*n.x + me.vel.z*n.z;     // composante le long de la normale
+    me.vel.x = (me.vel.x - n.x*normComp) - n.x*1.0;   // tangentiel + collé au mur (-n)
+    me.vel.z = (me.vel.z - n.z*normComp) - n.z*1.0;
+    return;
+  }
+  // ----- Démarrage : en l'air, face à un mur, en poussant vers lui -----
+  if(me.onGround || me.slide.active || me.mantle.active || me.climb.cool > 0) return;
+  if(me.vel.y < -4) return;                          // pas en pleine chute
+  if(!wishDir) return;
+  // Conflit WALL BOUNCE : si on arrive VITE vers le mur, on laisse le wall bounce (saut) faire ;
+  // la grimpe ne s'accroche qu'à vitesse modérée → on garde le wall bounce d'avant.
+  if(Math.hypot(me.vel.x, me.vel.z) >= (C.CLIMB_MAX_ENTRY_SPEED ?? C.WALLBOUNCE_MIN_SPEED)) return;
+  const n = findWallNormal(me.pos, me.pos.y);
+  if(!n) return;
+  if(fwd.dot(n) >= -0.4) return;                     // doit faire face au mur
+  if(wishDir.dot(n) >= -0.2) return;                 // doit pousser vers le mur
+  me.climb.active = true; me.climb.t = 0; me.climb.startY = me.pos.y; me.climb.normal.copy(n);
+  playSfx('mantle');
+}
 
 /* ---------- Effets : textures procédurales ---------- */
 function makeRadialTexture(inner, outer){
@@ -877,13 +965,39 @@ function spawnImpactParticles(point, normal){
     scene.add(m);
   }
 }
+// Étincelles BLEUES quand le sabre touche un ennemi (gerbe de sparks additives + flash).
+function spawnSaberSparks(point){
+  const col = (GAMECFG.MELEE && GAMECFG.MELEE.blade_color) || 0x36e3ff;
+  const N = (GAMECFG.MELEE && GAMECFG.MELEE.spark_count) || 20;
+  for(let i=0;i<N;i++){
+    const s = 0.012 + Math.random()*0.024;
+    const mat = new THREE.MeshBasicMaterial({ color: col, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false });
+    mat.toneMapped = false;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(s,s,s), mat);
+    m.position.copy(point);
+    const v = new THREE.Vector3(Math.random()-.5, (Math.random()-.25), Math.random()-.5).normalize()
+      .multiplyScalar(2.6 + Math.random()*4.2);
+    v.y += 1.3; // gerbe vers le haut
+    impactParticles.push({ mesh:m, vel:v, life:0.26 + Math.random()*0.18, fade:0.44 });
+    scene.add(m);
+  }
+  // flash lumineux bref à l'impact
+  const light = new THREE.PointLight(col, 7, 4.5);
+  light.position.copy(point); scene.add(light);
+  impactParticles.push({ light, life:0.14 });
+}
 function updateImpactEffects(dt){
   for(let i=impactParticles.length-1;i>=0;i--){
     const p = impactParticles[i];
     p.life -= dt;
+    if(p.light){                              // flash : décroît vite puis disparaît
+      p.light.intensity = Math.max(0, p.light.intensity * (1 - dt*14));
+      if(p.life<=0){ scene.remove(p.light); impactParticles.splice(i,1); }
+      continue;
+    }
     p.vel.y -= 9.8*dt;
     p.mesh.position.addScaledVector(p.vel, dt);
-    p.mesh.material.opacity = Math.max(0, p.life/0.35);
+    p.mesh.material.opacity = Math.max(0, p.life/(p.fade||0.35));
     if(p.life<=0){ scene.remove(p.mesh); impactParticles.splice(i,1); }
   }
   for(let i=bulletHoles.length-1;i>=0;i--){
@@ -2049,7 +2163,8 @@ function applyCustomModels(){
 const melee = { active:false, t:0, dur:0.46, step:0, lastAt:-99999, hitChecked:false,
                 hitStop:0, trailOn:false, predicted:false, flare:0, _impactN:0.46 };
 let meleeShake = 0, meleeShakePhase = 0, meleeKickPitch = 0, meleeKickYaw = 0;
-let switchShake = 0, switchShakePhase = 0; // vibration naturelle au changement d'arme
+let switchShake = 0, switchShakePhase = 0, switchShakeT = 0; // vibration au changement d'arme (enveloppe attack/decay)
+let fireShake = 0, fireShakePhase = 0, fireShakeT = 0, fireShakeCfg = null; // secousse de tir lourde (ex: Wingman)
 let saberTrail = null; const saberTrailSamples = [];
 function saberWeaponIndex(){ const W = GAMECFG.WEAPONS||[]; for(let i=0;i<W.length;i++) if(W[i].melee) return i; return -1; }
 function isSaber(){ const W = curWeapon(); return !!(W && W.melee); }
@@ -2266,6 +2381,16 @@ function updateMelee(dt){
     updateSaberTrail(melee.trailOn);
   } else {
     updateSaberTrail(false);
+    // Pose "course KATANA" : en sprintant (sans frapper), le sabre se lève + s'incline vers le bas/avant.
+    const KR = S.katana_run || {};
+    const runTgt = (me.onGround && !me.slide.active && !me.mantle.active && !me.climb.active
+      && Math.hypot(me.vel.x, me.vel.z) > (CONFIG.SPRINT_SPEED||8)*0.55) ? 1 : 0;
+    melee.katanaW = (melee.katanaW||0) + (runTgt - (melee.katanaW||0)) * Math.min(1, dt*(KR.speed ?? 8));
+    if(melee.katanaW > 0.001){
+      const k = melee.katanaW;
+      gun.position.x += (KR.pos_x ?? 0.05)*k; gun.position.y += (KR.pos_y ?? 0.07)*k; gun.position.z += (KR.pos_z ?? 0.05)*k;
+      gun.rotation.x += (KR.tip_down ?? 0.6)*k; gun.rotation.z += (KR.roll ?? 0.4)*k; gun.rotation.y += (KR.yaw ?? -0.18)*k;
+    }
   }
 }
 
@@ -2301,7 +2426,7 @@ function switchWeapon(idx){
 function doWeaponSwap(idx){
   // changement effectif du modèle/munitions, à mi-animation (arme en bas)
   resetMelee(); // pas de swing/freeze résiduel d'une arme à l'autre
-  switchShake = 1; // petite vibration naturelle quand la nouvelle arme arrive en main
+  switchShake = 1; switchShakeT = 0; // vibration ample (forte au début) qui se stabilise — cf. SWITCH_SHAKE
   me.mags[me.weaponIdx] = me.mag;
   me.weaponIdx = idx; me.mag = me.mags[idx];
   me.reloading = false; reloadAnimT = -1;
@@ -2373,6 +2498,7 @@ const me = {
   crouchHeld: false, crouchToggleState: false, onGround: true,
   slide: { active: false, t: 0, dir: new THREE.Vector3(), speed: 0, cooldown: 0 },
   mantle: { active: false, t: 0, from: new THREE.Vector3(), to: new THREE.Vector3(), sgJump: false, sgCrouch: false },
+  climb: { active: false, t: 0, startY: 0, cool: 0, normal: new THREE.Vector3() },
   wallBounced: false, lastShotAt: 0,
 };
 const weapon = { state: 'equipped', t: 0 };
@@ -2918,10 +3044,15 @@ function startAmbient(){
 }
 function loadAudioBuffer(url, onOk){
   if(!url) return;
-  fetch(url).then(r=>{ if(!r.ok) throw 0; return r.arrayBuffer(); })
+  // Préfère la version .m4a (AAC, ~2× plus légère que le .mp3) ; retombe sur le .mp3 si absente.
+  const tryLoad = (u, onFail) => fetch(u)
+    .then(r=>{ if(!r.ok) throw 0; return r.arrayBuffer(); })
     .then(ab=>ensureAudioCtx().decodeAudioData(ab))
     .then(buf=>onOk && onOk(buf))
-    .catch(()=>{});
+    .catch(()=>{ onFail && onFail(); });
+  const m4a = url.endsWith('.mp3') ? url.slice(0,-4) + '.m4a' : url;
+  if(m4a !== url) tryLoad(m4a, ()=>tryLoad(url));
+  else tryLoad(url);
 }
 function initAudio(){
   ensureAudioCtx();
@@ -3017,6 +3148,8 @@ function shoot(){
   const W = curWeapon();
   me.mag--; me.mags[me.weaponIdx] = me.mag;
   me.fireT = (W.fire_rate ?? CONFIG.FIRE_RATE); me.lastShotAt = now;
+  // Secousse de tir LOURDE (ex: Wingman) : à-coup grave par balle pour "sentir" la puissance.
+  if(W.fire_shake){ fireShake = 1; fireShakeT = 0; fireShakeCfg = W.fire_shake; }
   const rmult = (W.recoil_mult ?? 1);
   const kback = (W.kick_back ?? 1);
   // Ramp-up de spray type R99/Apex : le recul augmente progressivement pendant une rafale,
@@ -3196,6 +3329,7 @@ function onHit(m){
     if(m.head) playSfx('hit_head');
     if(b){
       b._shPrev = m.sh;
+      if(m.melee && b.pos){ const sp = b.pos.clone(); sp.y += (b.anim && b.anim.c ? 1.0 : 1.4); spawnSaberSparks(sp); } // étincelles bleues
       const np = (b.pos ? b.pos.clone() : new THREE.Vector3()); np.y += (b.anim && b.anim.c ? 1.8 : 2.3);
       addDamage('bot'+m.target, m.dmg||0, !!m.head, np, m.sh > 0);
       showHealthBar('bot'+m.target, m.hp, m.sh, !!(b.anim && b.anim.c));
@@ -3277,6 +3411,7 @@ function doMyRespawn(m){
   me.reloading=false; reloadAnimT=-1; me.vel.set(0,0,0);
   me.slide.active = false; me.slide.cooldown = 0; me.crouchToggleState = false;
   me.mantle.active = false; me.wallBounced = false;
+  me.climb.active = false; me.climb.cool = 0; me.climb.normal.set(0,0,0); // pas de grimpe résiduelle au respawn
   resetMelee(); // pas de coup de sabre résiduel après la mort/respawn
   weapon.state = 'equipped'; weapon.t = 0; gun.visible = true; runArms.visible = false;
   document.getElementById('reloadmsg').style.display='none';
@@ -3421,6 +3556,7 @@ function onJoinGame(m){
   me.reloading = false; reloadAnimT = -1; me.vel.set(0,0,0);
   me.slide.active = false; me.slide.cooldown = 0; me.crouchToggleState = false;
   me.mantle.active = false; me.wallBounced = false;
+  me.climb.active = false; me.climb.cool = 0; me.climb.normal.set(0,0,0); // pas de grimpe résiduelle au respawn
   resetMelee();
   weapon.state = 'equipped'; weapon.t = 0; gun.visible = true; runArms.visible = false;
   remote.exists = false; if(remote.soldier && remote.soldier.root) remote.soldier.root.visible = false;
@@ -3472,6 +3608,7 @@ function onBotStart(m){
   me.reloading = false; reloadAnimT = -1; me.vel.set(0,0,0);
   me.slide.active = false; me.crouchToggleState = false;
   me.mantle.active = false; me.wallBounced = false;
+  me.climb.active = false; me.climb.cool = 0; me.climb.normal.set(0,0,0); // pas de grimpe résiduelle au respawn
   weapon.state = 'equipped'; weapon.t = 0;
   alive = true;
   // pas d'adversaire 1v1 : on masque le remote
@@ -3951,6 +4088,25 @@ function updateSpeedFx(dt){
     ctx.stroke();
   }
 }
+// Pulsation bleu clair sur les côtés tant qu'on va VITE (bunny hop / grande vélocité). S'arrête à vitesse normale.
+let speedEdgePhase = 0, speedEdgeOpa = 0;
+function updateSpeedEdge(dt){
+  const el = document.getElementById('speededge'); if(!el) return;
+  const SE = GAMECFG.SPEED_EDGE || {};
+  let target = 0;
+  if(SE.enabled !== false && playing && alive){
+    const spd = Math.hypot(me.vel.x, me.vel.z);
+    const lo = SE.min_speed ?? 9, hi = SE.max_speed ?? 15;
+    const k = Math.max(0, Math.min(1, (spd - lo) / Math.max(0.1, hi - lo)));
+    if(k > 0){
+      speedEdgePhase += dt * (SE.pulse_freq ?? 9);
+      const pulse = 1 + Math.sin(speedEdgePhase) * (SE.pulse_amount ?? 0.28); // vibration
+      target = k * (SE.max_opacity ?? 0.85) * pulse;
+    }
+  }
+  speedEdgeOpa += (target - speedEdgeOpa) * Math.min(1, dt*10); // entrée/sortie douce
+  el.style.opacity = speedEdgeOpa.toFixed(3);
+}
 function doSuperglide(){
   const SG = GAMECFG.SUPERGLIDE;
   const f = new THREE.Vector3(-Math.sin(me.yaw), 0, -Math.cos(me.yaw));
@@ -4107,7 +4263,8 @@ function updateWeaponAnimation(dt, sprinting, moving){
   const _CP = ((typeof curWeapon === 'function' && curWeapon().crouch_pose) || GAMECFG.CROUCH_POSE) || {};
   const crouchPoseTarget = (_CP.ENABLED !== false && (me.slide.active || (isCrouching() && allowCrouchTilt))) ? 1 : 0;
   crouchPoseW += (crouchPoseTarget - crouchPoseW) * Math.min(1, dt*(_CP.speed ?? 10));
-  mantlePose += ((me.mantle.active?1:0) - mantlePose) * Math.min(1, dt*9);
+  // mantle ET grimpe de mur cachent l'arme + déclenchent le shake ; la grimpe la cache PLUS VITE.
+  mantlePose += (((me.mantle.active||me.climb.active)?1:0) - mantlePose) * Math.min(1, dt*(me.climb.active?16:9));
   // v5 : l'arme accompagne le saut (inertie) et encaisse l'atterrissage
   const vyN = Math.max(-1, Math.min(1, me.vel.y/8));
   airPose += ((me.onGround ? 0 : vyN) - airPose) * Math.min(1, dt*9);
@@ -4248,20 +4405,26 @@ function updateWeaponAnimation(dt, sprinting, moving){
 
   // Animation de changement d'arme : l'arme plonge (phase 1), on swap au point bas, puis remonte (phase 2)
   if(switchAnim.active){
-    const dur = (GAMECFG.SWITCH_TIME ?? 0.32);
+    const dur = (GAMECFG.SWITCH_TIME ?? 0.42);
     switchAnim.t += dt;
-    const half = dur/2;
-    let down; // 0 = en haut (normal), 1 = tout en bas
-    if(switchAnim.t < half){ down = switchAnim.t/half; }
-    else { down = 1 - (switchAnim.t-half)/half; }
-    down = Math.max(0, Math.min(1, down));
+    const half = dur*0.4;         // descente plus courte que la remontée
     // swap du modèle au point bas
     if(!switchAnim.swapped && switchAnim.t >= half){ doWeaponSwap(switchAnim.to); switchAnim.swapped = true; }
     if(switchAnim.t >= dur){ switchAnim.active = false; }
-    // courbe douce
-    const e = down*down*(3-2*down);
-    target.y += -0.42*e;          // l'arme descend hors de l'écran
-    target.z += 0.06*e;
+    // Mouvement façon MANTLE : l'arme plonge vite (cache), puis la nouvelle arme remonte
+    // AMPLE et FORT, avec un léger dépassement qui se stabilise en douceur (pas un V sec).
+    let dipY, dipZ;
+    if(switchAnim.t < half){
+      const x = switchAnim.t/half; const e = x*x;          // easeIn : plonge vite
+      dipY = -0.5*e; dipZ = 0.08*e;
+    } else {
+      const x = Math.min(1, (switchAnim.t-half)/(dur-half));
+      const eo = 1 - Math.pow(1-x, 3);                       // easeOutCubic : remontée douce
+      const overshoot = Math.sin(x*Math.PI) * 0.085 * (1-x); // petit rebond ample qui s'efface
+      dipY = -0.5*(1-eo) + overshoot;
+      dipZ = 0.08*(1-eo);
+    }
+    target.y += dipY; target.z += dipZ;
   }
 
   // Micro-vibrations de tir + balancement latéral (axe X façon Apex, viseur reste centré)
@@ -4458,7 +4621,8 @@ function applyCamera(dt){
   }
   // Mini-shake fluide pendant la grimpe (MANTLE_SHAKE dans shared/config.js, 0 = off)
   if((CONFIG.MANTLE_SHAKE_AMT ?? GAMECFG.MANTLE_SHAKE ?? 0) > 0 && mantlePose > 0.02){
-    const ms = (GAMECFG.MANTLE_SHAKE ?? 0) * mantlePose;
+    // grimpe de mur : shake atténué (CLIMB_SHAKE_MULT) pour rester confortable pendant la montée
+    const ms = (GAMECFG.MANTLE_SHAKE ?? 0) * mantlePose * (me.climb.active ? (GAMECFG.CLIMB_SHAKE_MULT ?? 0.45) : 1);
     const tt = performance.now()*0.018;
     camera.position.x += Math.sin(tt*1.7)*ms;
     camera.position.y += Math.sin(tt*2.3+1.1)*ms*0.8;
@@ -4514,6 +4678,34 @@ function applyCamera(dt){
     const k = Math.min(1, dt * (ML.kick_decay ?? 9));
     meleeKickPitch -= meleeKickPitch * k;
     meleeKickYaw   -= meleeKickYaw * k;
+  }
+
+  // CHANGEMENT D'ARME : secousse FORTE et ample au début, qui se stabilise (enveloppe attack→decay, façon mantle)
+  const SS = GAMECFG.SWITCH_SHAKE || {};
+  if(SS.ENABLED !== false && switchShake > 0.0001){
+    switchShakeT += dt;
+    const atk = SS.attack ?? 0.05, dec = SS.decay_t ?? 0.30;
+    const env = switchShakeT < atk ? (switchShakeT/atk) : Math.exp(-(switchShakeT-atk)/dec); // monte vite puis retombe doux
+    switchShakePhase += dt * (SS.freq ?? 24);
+    const amp = (SS.amount ?? 0.022) * env;
+    camera.rotateX(Math.sin(switchShakePhase) * amp);
+    camera.rotateZ(Math.cos(switchShakePhase*1.3) * amp * 0.7);
+    camera.rotateY(Math.sin(switchShakePhase*0.7) * amp * 0.5);
+    if(switchShakeT > atk + dec*5){ switchShake = 0; } // fin de l'enveloppe
+  }
+
+  // TIR LOURD (Wingman) : à-coup grave + basse fréquence par balle (= balles puissantes)
+  if(fireShake > 0.0001 && fireShakeCfg){
+    const FSH = fireShakeCfg;
+    fireShakeT += dt;
+    const fatk = FSH.attack ?? 0.02, fdec = FSH.decay_t ?? 0.16;
+    const fenv = fireShakeT < fatk ? (fireShakeT/fatk) : Math.exp(-(fireShakeT-fatk)/fdec);
+    fireShakePhase += dt * (FSH.freq ?? 16);
+    const famp = (FSH.amount ?? 0.02) * fenv;
+    camera.rotateX(Math.sin(fireShakePhase)*famp + famp*(FSH.down_bias ?? 0.5)); // biais vers le bas = poids
+    camera.rotateZ(Math.cos(fireShakePhase*1.2)*famp*0.6);
+    camera.rotateY(Math.sin(fireShakePhase*0.8)*famp*0.5);
+    if(fireShakeT > fatk + fdec*5){ fireShake = 0; }
   }
 
   // Micro-shake de course (réglable via RUN_SHAKE dans shared/config.js, 0 = off)
@@ -4802,7 +4994,7 @@ function playerUpdate(dt, g){
         me.vel.y = CONFIG.JUMP_VELOCITY; me.onGround = false;
         jumpShakeT = (GAMECFG.JUMP_SHAKE > 0) ? 1 : 0; // déclenche le shake (phase 1→0)
         jumpNoseTarget = (GAMECFG.WEAPON_ANIM_BLEND && GAMECFG.WEAPON_ANIM_BLEND.airborne && GAMECFG.WEAPON_ANIM_BLEND.airborne.jump_nose_dip) || 0; // nez qui pique
-      } else if(!me.wallBounced){
+      } else if(!me.wallBounced && !me.climb.active){
         /* --- WALL BOUNCE (façon Apex : l'élan repart vers où on REGARDE) --- */
         const n = findWallNormal(me.pos, me.pos.y);
         const hv = new THREE.Vector3(me.vel.x, 0, me.vel.z);
@@ -4832,11 +5024,13 @@ function playerUpdate(dt, g){
     }
   }
 
-  /* --- Détection de grimpe : en l'air, en poussant vers un rebord --- */
-  if(!me.onGround && !me.slide.active && me.vel.y < 4.5 && wishDir && wishDir.dot(f) > 0.3){
+  /* --- Détection de mantle (rebord bas) : en l'air, en poussant vers un rebord --- */
+  if(!me.onGround && !me.slide.active && !me.climb.active && me.vel.y < 4.5 && wishDir && wishDir.dot(f) > 0.3){
     const led = findLedge();
     if(led) startMantle(led);
   }
+  /* --- Grimpe de mur (rebord haut/mur) : monte le long, retombe si trop haut --- */
+  updateClimb(dt, jumpEdge, wishDir, f);
 
   /* --- Gravité / sol (terrain + dessus des caisses) --- */
   me.vel.y -= CONFIG.GRAVITY*dt;
@@ -4967,7 +5161,7 @@ function startDeathCam(killerSeat, head){
 
   // Créer MON corps visible (on ne se voit jamais en FPS) et jouer l'anim de mort
   if(RIG_READY && RIG_TEMPLATE){
-    deathCam.myBody = createSoldierRigged(myId===0 ? 0x5ce0ff : 0xffaa33);
+    deathCam.myBody = createSoldierRigged(entColor(myId));
     deathCam.myBody.root.position.set(me.pos.x, me.pos.y, me.pos.z);
     deathCam.myBody.root.rotation.set(0, me.yaw + Math.PI, 0);
     scene.add(deathCam.myBody.root);
@@ -5065,15 +5259,22 @@ function endDeathCam(){
 }
 // Prépare le replay : fige les frames et crée les deux corps reconstitués
 function startKillCam(){
-  // FFA : pas de replay killcam (câblé pour le 1v1). On reste sur l'orbite 3e personne
-  // de SA propre mort, puis on respawn → évite tout faux adversaire à l'écran.
-  if(FFA) return false;
+  // FFA : on rejoue la killcam depuis le POV du vrai tueur (piste 'en' remappée sur
+  // others[killerSeat] plus bas). Pas de replay seulement si la mort n'a pas de tueur valide.
+  const ks0 = deathCam.killerSeat;
+  if(ks0 == null || ks0 < 0 || ks0 === myId) return false; // mort sans tueur (chute/suicide) → orbite 3e pers.
   const DC = GAMECFG.DEATHCAM || {};
   // On fige MAINTENANT le snapshot : il couvre killcam_duration AVANT le kill + ce qui a été
   // capturé APRÈS le kill (phase post-mortem). La capture post-kill s'arrête ici.
   deathCam.kcFrozen = true;
   const postWin = (DC.post_kill_time ?? 1.5);
   deathCam.kcFrames = recSnapshot((DC.killcam_duration || 3.0) + postWin);
+  // FFA : on rejoue la killcam depuis le point de vue du VRAI tueur → on remappe la piste
+  // 'en' de chaque frame sur la trajectoire enregistrée du siège tueur (sinon 'en' est figé).
+  const ks = deathCam.killerSeat;
+  if(ks != null && ks >= 0 && ks !== myId){
+    for(const f of deathCam.kcFrames){ if(f.others && f.others[ks]) f.en = f.others[ks]; }
+  }
   const cutE = performance.now() - ((DC.killcam_duration || 3.0) + postWin)*1000;
   deathCam.kcEvents = (REC.events||[]).filter(e=>e.t>=cutE).map(e=>({t:e.t, type:e.type, who:e.who, data:e.data, played:false}));
   let firstW = 0;
@@ -5107,9 +5308,9 @@ function startKillCam(){
   // retirer mon corps 3e personne
   if(deathCam.myBody){ scene.remove(deathCam.myBody.root); deathCam.myBody = null; }
   // créer les deux corps : le TUEUR (en) et la VICTIME (moi)
-  deathCam.kcEnemyBody = createSoldierRigged((1-myId)===0 ? 0x5ce0ff : 0xffaa33);
+  deathCam.kcEnemyBody = createSoldierRigged(entColor(deathCam.killerSeat >= 0 ? deathCam.killerSeat : 0));
   scene.add(deathCam.kcEnemyBody.root);
-  deathCam.kcBody = createSoldierRigged(myId===0 ? 0x5ce0ff : 0xffaa33);
+  deathCam.kcBody = createSoldierRigged(entColor(myId));
   scene.add(deathCam.kcBody.root);
   const en = seatNames[deathCam.killerSeat] || 'ADVERSAIRE';
   dcBanner('REPLAY ▸ ÉLIMINÉ PAR ' + en + (deathCam.byHead ? '  (TÊTE)' : '') + '\n[ESPACE / SAUT] ▸ Passer');
@@ -5486,6 +5687,7 @@ function animate(){
   updateRagdolls(dt);
   updateCrosshair(dt);
   updateSpeedFx(dt);
+  updateSpeedEdge(dt);
   if(deathCam.active) updateDeathCam(dt, g);
   renderer.render(scene, camera);
   // l'arme par-dessus, avec son FOV propre. Masquée en 3e personne, visible en killcam (arme du tueur).
@@ -5521,6 +5723,36 @@ document.getElementById('pseudo').value = myName;
 clock = { _last: performance.now(), getDelta(){ const n = performance.now(); const d = (n - this._last) / 1000; this._last = n; return d; } }; // minuteur natif : remplace THREE.Clock (deprecie) sans dependance
 updateHPShieldUI(); updateAmmoUI();
 animate();
+// ---------- PRÉCHARGEMENT : on n'ouvre le menu qu'une fois TOUT chargé (armes, perso, audio) ----------
+(function preloadGate(){
+  const el = document.getElementById('preload'); if(!el) return;
+  const bar = document.getElementById('preloadbar'), pct = document.getElementById('preloadpct');
+  const wpnTotal = (GAMECFG.WEAPONS||[]).length;
+  const sfxTotal = Object.keys(GAMECFG.SFX_FILES||{}).length;
+  const total = wpnTotal + 1 /*rig*/ + sfxTotal;
+  const t0 = performance.now(), TIMEOUT = 12000;
+  let shown = 0;
+  function tick(){
+    const n = (weaponModels ? weaponModels.filter(Boolean).length : 0)
+            + (RIG_READY ? 1 : 0)
+            + Math.min(sfxTotal, Object.keys(audioBuffers).length);
+    shown += (n - shown) * 0.35; // barre lissée (pas de à-coups)
+    const frac = total > 0 ? Math.min(1, shown/total) : 1;
+    const p = Math.round(frac*100);
+    if(bar) bar.style.width = p + '%';
+    if(pct) pct.textContent = p + '%';
+    const done = n >= total, timedOut = performance.now() - t0 > TIMEOUT;
+    if((done && p >= 99) || timedOut){
+      if(bar) bar.style.width = '100%'; if(pct) pct.textContent = '100%';
+      el.style.opacity = '0';
+      setTimeout(()=>{ el.style.display = 'none'; }, 360);
+      console.log('[NEON] préchargement terminé', timedOut ? '(timeout)' : '', '— assets:', n+'/'+total);
+      return;
+    }
+    requestAnimationFrame(tick);
+  }
+  tick();
+})();
 </script>
 </body>
 </html>
