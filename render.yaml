@@ -1,0 +1,15 @@
+# Déploiement Render — NEON COMPOUND (serveur Node + WebSocket)
+# Render lit ce fichier à la connexion du repo (Blueprint) et crée le service.
+services:
+  - type: web
+    name: neon-compound
+    runtime: node
+    plan: free            # offre gratuite (s'endort après ~15 min d'inactivité, réveil ~50 s)
+    region: frankfurt     # proche de l'Europe ; mets "oregon" pour l'Amérique
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeploy: true       # chaque push GitHub redéploie automatiquement
+    envVars:
+      - key: NODE_VERSION
+        value: "20"

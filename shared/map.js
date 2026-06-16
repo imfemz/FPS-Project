@@ -41,9 +41,15 @@
     { x: 0, z: -8.5, w: 7, d: 7, h: 1.4, asc: [0, 1] },
   ];
 
+  // 6 points de spawn répartis sur le pourtour, chacun orienté vers le centre.
+  // (yaw = atan2(-x, -z) pour regarder l'origine.)
   const spawns = [
-    [-28, 0, -28, Math.PI * 0.25],
-    [28, 0, 28, Math.PI * 1.25],
+    [-28, 0,   0,  Math.PI * 0.5],   // ouest
+    [ 28, 0,   0, -Math.PI * 0.5],   // est
+    [  0, 0, -28,  0],               // sud
+    [  0, 0,  28,  Math.PI],         // nord
+    [-28, 0,  28,  Math.PI * 0.75],  // nord-ouest
+    [ 28, 0, -28, -Math.PI * 0.25],  // sud-est
   ];
 
   function groundHeightAt(px, pz) {

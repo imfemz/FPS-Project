@@ -1,8 +1,9 @@
 {
   "name": "neon-compound",
-  "version": "1.0.0",
-  "description": "FPS 1v1 multijoueur — three.js + serveur autoritaire ws (20 ticks/s)",
+  "version": "2.0.0",
+  "description": "FPS free-for-all jusqu'à 6 joueurs — three.js + serveur autoritaire ws (20 ticks/s)",
   "main": "server.js",
   "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
   "dependencies": { "ws": "^8.18.0" }
 }

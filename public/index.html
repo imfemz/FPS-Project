@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>NEON COMPOUND — Duel 1v1 en ligne</title>
+<title>NEON COMPOUND — Mêlée 6 joueurs en ligne</title>
 <link rel="icon" type="image/png" href="/textures/hud/logo.png">
 <style>
   :root{ --amber:#ffb444; --cyan:#5ce0ff; --red:#ff5a5a; --shield:#4db8ff; --ink:#0a1026; }
@@ -51,6 +51,15 @@
   .scorebox{padding:6px 18px;font-size:25px;font-weight:800;background:rgba(10,16,38,.7);border:1px solid rgba(255,255,255,.12)}
   #pscore{color:var(--amber)}#escore{color:var(--cyan)}
   #scoremid{font-size:10px;letter-spacing:2px;color:#b6ad9d;text-align:center}
+  /* Tableau des scores FFA (mêlée) */
+  #leaderboard{position:absolute;top:18px;left:50%;transform:translateX(-50%);min-width:210px;background:rgba(10,16,38,.66);border:1px solid rgba(255,255,255,.12);padding:7px 10px 8px;backdrop-filter:blur(2px)}
+  #leaderboard .lbtitle{font-size:9px;letter-spacing:2px;color:#9fb0c4;text-align:center;margin-bottom:5px;text-transform:uppercase}
+  #leaderboard .lbrow{display:flex;align-items:center;gap:8px;padding:2px 4px;font-size:13px;color:#dfe7ef}
+  #leaderboard .lbrow.me{background:rgba(255,255,255,.10)}
+  #leaderboard .lbdot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 6px rgba(255,255,255,.4)}
+  #leaderboard .lbname{flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+  #leaderboard .lbk{font-weight:800;color:var(--amber);min-width:18px;text-align:right}
+  #specinfo{position:absolute;top:120px;left:50%;transform:translateX(-50%);font-size:12px;letter-spacing:1px;color:var(--cyan);background:rgba(10,16,38,.6);padding:5px 14px;text-align:center}
   #killfeed{position:absolute;top:78px;right:26px;text-align:right;font-size:13px}
   #killfeed div{margin-bottom:6px;background:rgba(10,16,38,.7);padding:4px 10px;border-right:2px solid var(--amber);animation:fadeout 4s forwards}
   @keyframes fadeout{0%,70%{opacity:1}100%{opacity:0}}
@@ -114,9 +123,11 @@
     <div class="magwrap"><div class="mag" id="magcount">30</div><div class="res" id="ammosub">/ ∞</div></div>
   </div>
   <div id="reloadmsg">— RECHARGEMENT —</div>
-  <div id="score"><div class="scorebox" id="pscore">0</div><div id="scoremid">VOUS<br>vs<br>ADVERSAIRE</div><div class="scorebox" id="escore">0</div></div>
+  <div id="score" style="display:none"><div class="scorebox" id="pscore">0</div><div id="scoremid"></div><div class="scorebox" id="escore">0</div></div>
+  <div id="leaderboard"></div>
   <div id="killfeed"></div>
-  <div id="spechelp">SPECTATEUR — <b>1</b> / <b>2</b> : suivre un joueur · <b>F</b> : caméra libre</div>
+  <div id="specinfo" style="display:none">SPECTATEUR</div>
+  <div id="spechelp">SPECTATEUR — caméra libre : <b>ZQSD</b> déplacer · <b>Maj</b> + vite · souris pour regarder</div>
   <div id="ping">-- ms</div>
   <div id="gamepadicon">🎮 MANETTE</div>
 </div>
@@ -125,15 +136,15 @@
 
 <div class="screen show" id="menu">
   <h1>NEON <b>COMPOUND</b></h1>
-  <p>Duel 1v1 en ligne — premier à <b style="color:var(--amber)">5 éliminations</b>. Bouclier 75 + Vie 100.<br>
+  <p>Mêlée générale en ligne — jusqu'à <b style="color:var(--amber)">6 joueurs</b>, premier à <b style="color:var(--amber)">10 éliminations</b>. Bouclier 75 + Vie 100.<br>
   <kbd>ZQSD</kbd> bouger · <kbd>Clic G</kbd> tirer · <kbd>Clic D</kbd> viser · <kbd>Maj</kbd> sprint · <kbd>Espace</kbd> saut · <kbd>Ctrl</kbd> crouch/slide · <kbd>H</kbd> ranger l'arme · <kbd>R</kbd> recharger<br>
   Sprint + crouch = <b>slide</b> · saut en slide = <b>slide jump</b> · saut contre un mur en l'air = <b>wall bounce</b><br>
   Sauter vers un rebord = <b>grimpe auto</b> · saut + crouch en toute fin de grimpe = <b>superglide</b><br>
   Manette + remappage dans Options · tête = 25 dégâts, corps = 19 (réglable dans shared/config.js)</p>
   <input class="pseudoinput" id="pseudo" maxlength="16" placeholder="Votre pseudo"><br>
-  <button class="btn" id="playbtn">REJOINDRE LE SALON</button>
+  <button class="btn" id="playbtn">REJOINDRE LA MÊLÉE</button>
   <button class="btn ghost" id="optbtn">OPTIONS</button>
-  <p style="margin-top:10px;font-size:12px;color:#8fa3b8">Jusqu'à 8 connectés : 2 joueurs choisis au salon, les autres en spectateur.</p>
+  <p style="margin-top:10px;font-size:12px;color:#8fa3b8">Jusqu'à 6 joueurs simultanés. Au-delà, vous êtes spectateur et entrez automatiquement dès qu'une place se libère.</p>
 </div>
 
 <div class="screen" id="options">
@@ -155,7 +166,7 @@
 </div>
 
 <div class="screen" id="lobby">
-  <h1 style="font-size:34px">SALON <b>1v1</b></h1>
+  <h1 style="font-size:34px">MÊLÉE <b>6 JOUEURS</b></h1>
   <p id="lobbyinfo" style="margin-bottom:8px">Connexion…</p>
   <div id="roster"></div>
   <div>
@@ -223,7 +234,11 @@ const CONFIG = {
   JUMP_VELOCITY: 6.8,
   GRAVITY: 21,
   GROUND_ACCEL: 12,
-  AIR_ACCEL: 0.6,               // contrôle aérien réduit → l'élan du slide jump se conserve
+  AIR_ACCEL: 0.6,               // dérive SANS input en l'air (bas = l'élan du slide jump se conserve)
+  // Contrôle aérien quand on POUSSE une direction (gauche/droite/avant) : plus haut = on bouge
+  // plus vite vers l'input en l'air, plus réactif pour changer de direction. Ne s'applique qu'à
+  // l'input et aux vitesses non gérées par le tap-strafe → ne casse PAS l'élan du slide jump.
+  AIR_STRAFE_ACCEL: 5.0,
   SLIDE_INITIAL_SPEED: 11,
   SLIDE_FRICTION: 5,
   SLIDE_DURATION_MAX: 1.5,
@@ -277,11 +292,11 @@ CONFIG.FIRE_RATE = GAMECFG.FIRE_RATE;
 const ACTIONS = [
   ['forward','Avancer'],['back','Reculer'],['left','Gauche'],['right','Droite'],
   ['jump','Sauter'],['crouch','Crouch / Slide'],['sprint','Sprinter'],
-  ['reload','Recharger'],['shoot','Tirer'],['ads','Viser'],['holster','Ranger l\'arme'],
-  ['weapon1','Arme 1'],['weapon2','Arme 2'],['weapon3','Arme 3 (Sabre)'],
+  ['reload','Recharger'],['shoot','Tirer'],['ads','Viser'],['holster','Sabre laser 🔥'],
+  ['weapon1','Arme 1'],['weapon2','Arme 2'],
 ];
 // Le bind MANETTE de ces actions est géré par le stick droit (R3), pas rebindable séparément
-const GP_LOCKED_R3 = ['weapon1','weapon2','weapon3','holster'];
+const GP_LOCKED_R3 = ['weapon1','weapon2','holster'];
 const DEFAULTS = {
   kb: { forward:'KeyW', back:'KeyS', left:'KeyA', right:'KeyD', jump:'Space',
         crouch:'ControlLeft', sprint:'ShiftLeft', reload:'KeyR', shoot:'Mouse0', ads:'Mouse2', holster:'KeyH', weapon1:'Digit1', weapon2:'Digit2', weapon3:'Digit3' },
@@ -1123,11 +1138,12 @@ function onOrbTaken(m){
   const pos = o ? o.grp.position.clone() : null;
   removeOrb(m.id);
   if(pos) playSfxAt('orb_pickup', pos, 1);
-  if(!spec.active && m.by === myId){
+  if(m.by === myId){
     me.hp = m.hp; me.sh = m.sh;
     updateHPShieldUI();
-  } else if(!spec.active && m.by === (1-myId)){
-    enemyShPrev = m.sh; // son bouclier est de nouveau plein
+  } else {
+    const b = botMgr.get(m.by);
+    if(b){ b.hp = m.hp; b.sh = m.sh; b._shPrev = m.sh; } // son bouclier est de nouveau plein
   }
 }
 
@@ -2033,9 +2049,23 @@ function applyCustomModels(){
 const melee = { active:false, t:0, dur:0.46, step:0, lastAt:-99999, hitChecked:false,
                 hitStop:0, trailOn:false, predicted:false, flare:0, _impactN:0.46 };
 let meleeShake = 0, meleeShakePhase = 0, meleeKickPitch = 0, meleeKickYaw = 0;
+let switchShake = 0, switchShakePhase = 0; // vibration naturelle au changement d'arme
 let saberTrail = null; const saberTrailSamples = [];
 function saberWeaponIndex(){ const W = GAMECFG.WEAPONS||[]; for(let i=0;i<W.length;i++) if(W[i].melee) return i; return -1; }
 function isSaber(){ const W = curWeapon(); return !!(W && W.melee); }
+// Prochaine arme À FEU (saute le sabre) — pour le cycle clic-bref manette.
+function nextGunIdx(){
+  const W = GAMECFG.WEAPONS || []; const n = W.length;
+  for(let k=1;k<=n;k++){ const i = (me.weaponIdx + k) % n; if(W[i] && !W[i].melee) return i; }
+  return me.weaponIdx;
+}
+// Sortir / ranger le SABRE : touche holster. Sur le sabre → on revient à la dernière arme à feu.
+function toggleSaber(){
+  if(weapon.state !== 'equipped') return;
+  const si = saberWeaponIndex(); if(si < 0) return;
+  if(me.weaponIdx === si) switchWeapon((me.lastGunIdx != null) ? me.lastGunIdx : 0);
+  else { me.lastGunIdx = me.weaponIdx; switchWeapon(si); }
+}
 // Réinitialise l'état du coup (changement d'arme, mort/respawn) → pas de swing/freeze résiduel.
 function resetMelee(){
   melee.active = false; melee.t = 0; melee.hitStop = 0; melee.trailOn = false;
@@ -2271,6 +2301,7 @@ function switchWeapon(idx){
 function doWeaponSwap(idx){
   // changement effectif du modèle/munitions, à mi-animation (arme en bas)
   resetMelee(); // pas de swing/freeze résiduel d'une arme à l'autre
+  switchShake = 1; // petite vibration naturelle quand la nouvelle arme arrive en main
   me.mags[me.weaponIdx] = me.mag;
   me.weaponIdx = idx; me.mag = me.mags[idx];
   me.reloading = false; reloadAnimT = -1;
@@ -2335,7 +2366,7 @@ const me = {
   pos: new THREE.Vector3(0,0,0), vel: new THREE.Vector3(),
   yaw: 0, pitch: 0, eye: CONFIG.EYE_STAND,
   hp: 100, sh: 75,
-  weaponIdx: 0,
+  weaponIdx: 0, lastGunIdx: 0,
   mags: (GAMECFG.WEAPONS||[]).map(w=>w.mag||30),
   mag: (GAMECFG.WEAPONS && GAMECFG.WEAPONS[0] ? GAMECFG.WEAPONS[0].mag : CONFIG.MAG_SIZE),
   fireT: 0, reloading: false, reloadT: 0,
@@ -2347,10 +2378,16 @@ const me = {
 const weapon = { state: 'equipped', t: 0 };
 const switchAnim = { active: false, t: 0, to: 0, swapped: false }; // animation de changement d'arme
 let maxHp = 100, maxShield = 75;
-let myId = -1;        // siège (0/1) pendant un match, -1 sinon
-let myClientId = -1;  // identifiant salon
+let myId = -1;        // mon siège (0..MAX_PLAYERS-1) en jeu, -1 si spectateur
+let myClientId = -1;  // identifiant client
 let mySeated = false;
-let seatNames = ['Joueur 1', 'Joueur 2'];
+let MAX_PLAYERS = 6;
+const FFA = true;     // mode free-for-all (jusqu'à 6 joueurs)
+let seatNames = [];   // seat -> nom
+let lastScores = [];  // seat -> kills (dernier reçu)
+// Palette néon : une couleur distincte par siège
+const SEAT_COLORS = [0x5ce0ff, 0xffaa33, 0x9d6bff, 0x4dff88, 0xff5b6e, 0xffe14d];
+function entColor(seat){ const n = SEAT_COLORS.length; return SEAT_COLORS[((seat%n)+n)%n]; }
 /* ---------- Spectateur ---------- */
 const spec = { active:false, soldiers:[null,null], bufs:[[],[]], dead:[false,false],
                pos:new THREE.Vector3(0,14,26), follow:-1 };
@@ -2378,6 +2415,13 @@ function ensureBot(id, accent){
   }
   return b;
 }
+// Retire l'entité d'un siège (joueur parti) : enlève le perso de la scène + sa barre de vie.
+function removeEntity(id){
+  const b = botMgr.get(id);
+  if(b && b.soldier && b.soldier.root) scene.remove(b.soldier.root);
+  botMgr.delete(id);
+  try{ killHealthBar('bot'+id); }catch(e){}
+}
 
 /* ---------- Réseau ---------- */
 let ws = null, lastPingSent = 0, curPing = 0;
@@ -2385,33 +2429,33 @@ function connect(){
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}`);
   ws.onopen = ()=>{ ws.send(JSON.stringify({t:'hello', name: myName})); };
-  ws.onclose = ()=>{ if(playing) toMenu('Connexion perdue.'); };
+  ws.onclose = ()=>{
+    if(playing || spec.active){ toMenu('Connexion perdue.'); }
+    else { const pb=document.getElementById('playbtn'); if(pb){ pb.disabled=false; pb.textContent='REJOINDRE LA MÊLÉE'; } }
+  };
   ws.onmessage = (ev)=>{
     const m = JSON.parse(ev.data);
     switch(m.t){
       case 'init':
-        if(m.proto !== 8){
-          toMenu("Le serveur exécute une ANCIENNE version du jeu.\n\nDans le terminal : Ctrl+C pour l'arrêter, puis « npm start » pour le relancer.\nLe bon serveur affiche : NEON COMPOUND v7 — serveur prêt.");
+        if(m.proto !== 9){
+          toMenu("Le serveur exécute une ANCIENNE version du jeu.\n\nDans le terminal : Ctrl+C pour l'arrêter, puis « npm start » pour le relancer.\nLe bon serveur affiche : NEON COMPOUND v9 (FFA) — serveur prêt.");
           break;
         }
-        myClientId = m.id; maxHp = m.maxHp||100; maxShield = m.maxShield||75; break;
-      case 'full': toMenu('Serveur plein (2/2). Réessayez plus tard.'); break;
+        myClientId = m.id; maxHp = m.maxHp||100; maxShield = m.maxShield||75;
+        MAX_PLAYERS = m.maxPlayers || MAX_PLAYERS; break;
+      case 'full': toMenu('Serveur plein (16 connectés). Réessayez plus tard.'); break;
+      case 'joingame': onJoinGame(m); break;
       case 'roster': onRoster(m); break;
       case 'orb': spawnOrb(m.id, m.p); break;
       case 'orbgone': removeOrb(m.id); break;
       case 'orbtaken': onOrbTaken(m); break;
-      case 'aborted': killFeed((m.name||'Un joueur') + ' a quitté le match'); break;
-      case 'start': startMatch(m); break;
+      case 'playerleft': onPlayerLeft(m); break;
       case 'snap': onSnapshot(m); break;
       case 'shot': onRemoteShot(m); break;
       case 'hit': onHit(m); break;
       case 'kill': onKillMsg(m); break;
       case 'respawn': onRespawn(m); break;
       case 'end': onEnd(m); break;
-      case 'botstart': onBotStart(m); break;
-      case 'bothit': onBotHit(m); break;
-      case 'botkill': onBotKill(m); break;
-      case 'botrespawn': onBotRespawn(m); break;
       case 'pong': { curPing = Math.round(performance.now() - lastPingSent); document.getElementById('ping').textContent = curPing + ' ms'; break; }
     }
   };
@@ -2438,36 +2482,13 @@ setInterval(()=>{
 }, 33);
 
 function onRoster(m){
-  seatNames = m.seatNames || seatNames;
-  const r = document.getElementById('roster');
-  r.innerHTML = '';
-  let seated = 0;
-  for(const c of m.clients){
-    const isSeat = (c.seat === 0 || c.seat === 1);
-    if(isSeat) seated++;
-    const row = document.createElement('div');
-    row.className = 'rosterrow' + (isSeat ? ' seated' : '');
-    const s1 = document.createElement('span');
-    s1.textContent = c.name + (c.id === myClientId ? ' (vous)' : '');
-    const s2 = document.createElement('span'); s2.className = 'role';
-    s2.textContent = isSeat ? ('JOUEUR ' + (c.seat + 1)) : 'SPECTATEUR';
-    row.appendChild(s1); row.appendChild(s2);
-    r.appendChild(row);
-  }
-  mySeated = m.clients.some(c => c.id === myClientId && (c.seat === 0 || c.seat === 1));
-  document.getElementById('seatbtn').style.display = (m.phase === 'lobby' && !mySeated) ? '' : 'none';
-  document.getElementById('specbtn').style.display = (m.phase === 'lobby' && mySeated) ? '' : 'none';
-  document.getElementById('specbtn').textContent = 'SE RETIRER';
-  document.getElementById('lobbyinfo').textContent =
-    m.phase !== 'lobby' ? 'Match en cours — vous le rejoindrez en spectateur.' :
-    seated + '/2 joueurs prêts — le duel démarre dès que 2 personnes cliquent JOUER.';
-  if(m.phase === 'lobby'){
-    if(playing || spec.active){ // fin de cycle : tout le monde revient au salon
-      clearOrbs();
-      stopSpectate(); playing = false; alive = true; myId = -1;
-      document.exitPointerLock && document.exitPointerLock();
-    }
-    hideAll(); show('lobby');
+  if(m.names){ seatNames = []; for(const k in m.names) seatNames[+k] = m.names[k]; }
+  if(m.scores) lastScores = m.scores;
+  updateScoreboard();
+  if(spec.active){
+    const info = document.getElementById('specinfo');
+    if(info) info.textContent = 'SPECTATEUR — ' + (m.seated||0) + '/' + (m.maxPlayers||MAX_PLAYERS) +
+      ' joueurs · vous entrez automatiquement dès qu\'une place se libère';
   }
 }
 
@@ -2478,45 +2499,24 @@ function onSnapshot(m){
   // l'heure d'arrivée — le jitter de la connexion ne fait plus trembler l'adversaire
   const off = performance.now() - m.ts;
   svClockOff = (svClockOff === null) ? off : svClockOff + (off - svClockOff) * 0.05;
-  if(spec.active){
-    for(let s=0;s<2;s++){
-      const e = m.players[s]; if(!e) continue;
-      spec.bufs[s].push({ at: m.ts, p: e.p, yaw: e.yaw, anim: e.anim, dead: e.dead });
-      if(spec.bufs[s].length > 45) spec.bufs[s].shift();
-      spec.dead[s] = !!e.dead;
-    }
-    document.getElementById('pscore').textContent = m.scores[0];
-    document.getElementById('escore').textContent = m.scores[1];
-    return;
+  if(m.scores){ lastScores = m.scores; updateScoreboard(); }
+  // FFA : chaque AUTRE siège est rendu comme une entité (réutilise le moteur des bots).
+  const seen = new Set();
+  for(const k in m.players){
+    const s = +k;
+    if(s === myId) continue;            // c'est moi → vue première personne
+    const e = m.players[k]; if(!e) continue;
+    seen.add(s);
+    const b = ensureBot(s, entColor(s));
+    b.buf.push({ at: m.ts, p: e.p, yaw: e.yaw, pitch:(e.pitch||0), anim: e.anim, dead: e.dead });
+    if(b.buf.length > 45) b.buf.shift();
+    b.dead = !!e.dead;
+    if(Number.isFinite(e.hp)) b.hp = e.hp;   // hp/sh autoritaires (barre de vie)
+    if(Number.isFinite(e.sh)) b.sh = e.sh;
   }
-  if(myId < 0) return;
-  // ----- Bot mode : remplir les buffers d'interpolation des bots -----
-  if(m.bots){
-    botActive = true;
-    const seen = new Set();
-    for(const bb of m.bots){
-      seen.add(bb.id);
-      const b = ensureBot(bb.id, 0xff7755);
-      b.buf.push({ at: m.ts, p: bb.p, yaw: bb.yaw, anim: bb.anim, dead: bb.dead });
-      if(b.buf.length > 45) b.buf.shift();
-      b.dead = !!bb.dead;
-      if(Number.isFinite(bb.hp)) b.hp = bb.hp;   // hp/sh autoritaires (pour la barre de vie)
-      if(Number.isFinite(bb.sh)) b.sh = bb.sh;
-    }
-    document.getElementById('pscore').textContent = m.scores[myId] || 0;
-    document.getElementById('escore').textContent = '∞';
-    return; // en bot mode, pas de remote 1v1 à traiter
-  }
-  const e = m.players[1-myId];
-  if(!e) return;
-  remote.exists = true;
-  remote.buf.push({ at: m.ts, p: e.p, yaw: e.yaw, pitch: (e.pitch||0), anim: e.anim, dead: e.dead });
-  if(remote.buf.length > 45) remote.buf.shift();
-  remote.dead = !!e.dead;
-  if(Number.isFinite(e.hp)) remote.hp = e.hp;   // hp/sh autoritaires (pour la barre de vie)
-  if(Number.isFinite(e.sh)) remote.sh = e.sh;
-  document.getElementById('pscore').textContent = m.scores[myId];
-  document.getElementById('escore').textContent = m.scores[1-myId];
+  // retire les entités des sièges désormais absents (joueur parti)
+  for(const id of [...botMgr.keys()]) if(!seen.has(id)) removeEntity(id);
+  botActive = botMgr.size > 0;
 }
 function lerpAngle(a,b,t){ let d=b-a; while(d>Math.PI)d-=Math.PI*2; while(d<-Math.PI)d+=Math.PI*2; return a+d*t; }
 function interpRemote(){
@@ -3170,103 +3170,102 @@ function onRemoteShot(m){
   const o = new THREE.Vector3(...m.o), d = new THREE.Vector3(...m.d).normalize();
   const end = traceBulletOnMap(o, d);
   spawnTracer(o, end, 0x8fd8ff);
-  playSfxAt('shot', o, 0.9); // le tir ENNEMI s'entend, du bon côté
-  if(playing && alive) recEvent('shot', 'en', { w: (m.w|0) }); // pour la killcam (avec l'arme)
-  if(spec.active && m.seat !== undefined && spec.soldiers[m.seat]){
-    const f = spec.soldiers[m.seat].flash;
+  playSfxAt('shot', o, 0.9); // le tir adverse s'entend, du bon côté
+  // flash au canon de l'entité qui tire (siège m.seat)
+  const b = (m.seat !== undefined) ? botMgr.get(m.seat) : null;
+  if(b && b.soldier && b.soldier.flash){
+    const f = b.soldier.flash;
     f.scale.set(.3+Math.random()*.15, .3+Math.random()*.15, 1);
     f.visible = true; setTimeout(()=>{ f.visible = false; }, 60);
-  } else triggerRemoteMuzzleFlash();
+  }
 }
 function onHit(m){
-  if(spec.active){
-    const sol = spec.soldiers[m.target];
-    if(sol){
-      const p = sol.root.position.clone(); p.y += 2.3;
-      addDamage('seat'+m.target, m.dmg, m.head, p, m.sh > 0);
-      showHealthBar('seat'+m.target, m.hp, m.sh, false);
-    }
-    return;
-  }
-  if(m.by === myId){
-    if(m.melee){ meleeShake = Math.min(2.2, meleeShake + 0.35); melee.flare = 1; } // coup de sabre confirmé
-    const h = document.getElementById('hitmarker');
+  // --- Dégâts que J'INFLIGE à un autre joueur → hitmarker + sons + chiffres sur l'entité ---
+  if(m.by === myId && m.target !== myId){
+    if(m.melee){ meleeShake = Math.min(2.2, meleeShake + 0.35); melee.flare = 1; } // sabre confirmé
     const willKill = (m.hp <= 0);
+    const h = document.getElementById('hitmarker');
     h.classList.toggle('head', !!m.head && !willKill);
     h.classList.toggle('kill', willKill);
     h.style.opacity=1;
     setTimeout(()=>{ h.style.opacity=0; }, willKill?220:(m.head?140:95));
-    const hitShield = m.sh > 0; // il reste du bouclier après la balle → elle a tapé le shield
-    if(m.sh === 0 && enemyShPrev > 0) playSfx('shield_crack');     // balle qui BRISE le bouclier
-    else playSfx(hitShield ? 'hit_shield' : 'hit_flesh');          // sons distincts shield / vie
-    if(m.head) playSfx('hit_head');                                // surcouche aiguë headshot
-    enemyShPrev = m.sh;
-    const numPos = remote.pos.clone(); numPos.y += (remote.anim.c?1.7:2.3);
-    addDamage('enemy', m.dmg, m.head, numPos, hitShield);
-    showHealthBar('enemy', m.hp, m.sh, !!(remote.anim && remote.anim.c));
+    const b = botMgr.get(m.target);
+    const broke = (m.sh === 0) && (!b || b._shPrev === undefined || b._shPrev > 0);
+    if(broke) playSfx('shield_crack');
+    else playSfx(m.sh > 0 ? 'hit_shield' : 'hit_flesh');
+    if(m.head) playSfx('hit_head');
+    if(b){
+      b._shPrev = m.sh;
+      const np = (b.pos ? b.pos.clone() : new THREE.Vector3()); np.y += (b.anim && b.anim.c ? 1.8 : 2.3);
+      addDamage('bot'+m.target, m.dmg||0, !!m.head, np, m.sh > 0);
+      showHealthBar('bot'+m.target, m.hp, m.sh, !!(b.anim && b.anim.c));
+      if(b.soldier && b.soldier.rigged && m.hp > 0) playHitAnim(b.soldier);
+    }
   }
+  // --- Dégâts que JE SUBIS ---
   if(m.target === myId){
     me.hp = m.hp; me.sh = m.sh; updateHPShieldUI();
     const dEl = document.getElementById('damage');
     dEl.style.opacity=1; setTimeout(()=>dEl.style.opacity=0,230);
-    // killcam : le tueur (adversaire) me touche → on enregistre SON hitmarker + l'impact sur moi
-    if(playing && alive && m.by === (1-myId)){
-      if(m.melee) recEvent('melee', 'en', { w: saberWeaponIndex() }); // killcam : montre le sabre, pas le R-69
-      recEvent('hitmarker', 'en', { head: !!m.head, shield: m.sh > 0, broke: (m.sh===0), dmg: m.dmg||0 });
-      recEvent('impact', 'me', { head: !!m.head });
+  } else if(m.by !== myId){
+    // un AUTRE joueur en touche un autre (ou vue spectateur) → on rafraîchit la barre + réaction
+    const b = botMgr.get(m.target);
+    if(b){
+      b._shPrev = m.sh;
+      showHealthBar('bot'+m.target, m.hp, m.sh, !!(b.anim && b.anim.c));
+      if(b.soldier && b.soldier.rigged && m.hp > 0) playHitAnim(b.soldier);
     }
-  } else if(remote.soldier && remote.soldier.rigged && m.hp > 0){
-    // l'adversaire encaisse une balle (et n'est pas mort) → petite anim de réaction
-    playHitAnim(remote.soldier);
   }
 }
+function nameOfSeat(seat){ return seatNames[seat] || ('Joueur ' + ((seat|0) + 1)); }
 function onKillMsg(m){
-  if(spec.active){
-    document.getElementById('pscore').textContent = m.scores[0];
-    document.getElementById('escore').textContent = m.scores[1];
-    killFeed(seatNames[m.by] + ' ☠ ' + seatNames[m.victim] + (m.head ? ' (tête)' : ''));
-    const sol = spec.soldiers[m.victim];
-    if(sol){ const yr = sol.root.rotation.y; startRagdoll(sol, sol.root.position.clone(), {x:Math.sin(yr), z:Math.cos(yr)}); playSfxAt('death', sol.root.position, 1); fadeOutSoldier(sol); killHealthBar('seat'+m.victim); }
-    return;
-  }
-  document.getElementById('pscore').textContent = m.scores[myId];
-  document.getElementById('escore').textContent = m.scores[1-myId];
-  const en = seatNames[1-myId] || 'ADVERSAIRE';
-  killFeed(m.by===myId ? (m.head ? 'VOUS ☠ '+en+' (tête)' : 'VOUS ☠ '+en) : en+' ☠ VOUS');
+  if(m.scores){ lastScores = m.scores; updateScoreboard(); }
+  const byN = nameOfSeat(m.by), vN = nameOfSeat(m.victim);
+  const tag = m.head ? ' (tête)' : '';
+  if(m.by === myId)        killFeed('VOUS ☠ ' + vN + tag);
+  else if(m.victim === myId) killFeed(byN + ' ☠ VOUS' + tag);
+  else                     killFeed(byN + ' ☠ ' + vN + tag);
   if(m.victim === myId){
     if(deathCam.active) return; // déjà en séquence de mort, on ne relance pas
     startDeathCam(m.by, m.head);
-  } else if(remote.soldier){
-    // Perso riggé avec animation de mort → on joue le clip Death ; sinon ragdoll physique
-    remote.dead = true; // IMPORTANT : empêche la boucle de réécraser l'anim de mort
-    remote.soldier.root.position.set(remote.pos.x, remote.pos.y, remote.pos.z);
-    const played = remote.soldier.rigged && playDeathAnim(remote.soldier);
-    if(!played){
-      const yr = remote.soldier.root.rotation.y;
-      startRagdoll(remote.soldier, remote.pos.clone(), {x:Math.sin(yr), z:Math.cos(yr)});
-    } else {
-      console.log('[NEON] animation de mort jouée');
-    }
-    playSfxAt('death', remote.pos, 1);
-    fadeOutSoldier(remote.soldier);
-    killHealthBar('enemy');
-  }
-}
-function onRespawn(m){
-  if(spec.active){
-    spec.bufs[m.id] = []; spec.dead[m.id] = false;
-    if(spec.soldiers[m.id]) resetSoldierPose(spec.soldiers[m.id]);
     return;
   }
-  if(m.id === myId){
-    // Si la caméra de mort (3e personne / kill cam) est encore en cours, on diffère le respawn
-    // jusqu'à la fin de la séquence pour ne pas la couper.
-    if(deathCam.active){ deathCam.pendingRespawn = m; return; }
-    doMyRespawn(m);
-  } else {
-    remote.buf.length = 0;
-    enemyShPrev = maxShield; // son bouclier est rechargé
-    if(remote.soldier) resetSoldierPose(remote.soldier);
+  entityDie(m.victim);
+}
+// Mort d'une entité (autre joueur) : anim de mort ou ragdoll + fondu + retire la barre de vie.
+function entityDie(seat){
+  const b = botMgr.get(seat);
+  if(!b || !b.soldier) return;
+  b.dead = true; // empêche la boucle de réécraser l'anim de mort
+  if(!(b.soldier.rigged && playDeathAnim(b.soldier))){
+    const yr = b.soldier.root.rotation.y;
+    startRagdoll(b.soldier, (b.pos ? b.pos.clone() : b.soldier.root.position.clone()), {x:Math.sin(yr), z:Math.cos(yr)});
+  }
+  playSfxAt('death', b.pos || b.soldier.root.position, 1);
+  fadeOutSoldier(b.soldier);
+  killHealthBar('bot'+seat);
+}
+function onRespawn(m){
+  const seat = m.seat;
+  if(seat === myId){
+    if(deathCam.active){ deathCam.pendingRespawn = { p: m.p, yaw: m.yaw }; return; }
+    doMyRespawn({ p: m.p, yaw: m.yaw });
+    return;
+  }
+  // entité : la réinitialiser (et la recréer si son perso a fondu/ragdollé)
+  const b = botMgr.get(seat);
+  if(b){
+    b.dead = false; b.buf.length = 0; b._shPrev = maxShield;
+    if(b.pos) b.pos.set(m.p[0], m.p[1], m.p[2]);
+    b.yaw = m.yaw;
+    if(b.soldier){
+      resetSoldierPose(b.soldier);
+      b.soldier.root.visible = true;
+      b.soldier.root.position.set(m.p[0], m.p[1], m.p[2]);
+    } else {
+      removeEntity(seat);
+      ensureBot(seat, entColor(seat));
+    }
   }
 }
 function doMyRespawn(m){
@@ -3288,20 +3287,24 @@ function doMyRespawn(m){
   REC.spawnAt = performance.now();
 }
 function onEnd(m){
+  if(m.scores){ lastScores = m.scores; updateScoreboard(); }
   playing = false; document.exitPointerLock && document.exitPointerLock();
   hideAll(); show('endscreen');
-  if(spec.active || myId < 0){
-    document.getElementById('endtitle').textContent = 'VICTOIRE DE ' + (seatNames[m.winner] || '');
-    document.getElementById('endsub').textContent = 'Score : ' + m.scores[0] + ' — ' + m.scores[1] + ' · Retour au salon…';
-    return;
-  }
-  const won = m.winner === myId;
-  document.getElementById('endtitle').innerHTML = won ? 'VICTOIRE <b>★</b>' : '<span style="color:var(--red)">DÉFAITE</span>';
-  let s = 6;
+  const winN = nameOfSeat(m.winner);
+  const won = (m.winner === myId);
+  const title = document.getElementById('endtitle');
+  if(won) title.innerHTML = 'VICTOIRE <b>★</b>';
+  else if(myId >= 0) title.innerHTML = '<span style="color:var(--red)">VAINCU</span>';
+  else title.textContent = 'VICTOIRE DE ' + winN.toUpperCase();
+  const myK = (myId >= 0 && m.scores) ? (m.scores[myId]||0) : null;
   const sub = document.getElementById('endsub');
-  sub.textContent = `Score : ${m.scores[myId]} — ${m.scores[1-myId]} · Retour au salon dans ${s}s`;
-  const iv = setInterval(()=>{ s--; if(s<=0){ clearInterval(iv); return; }
-    sub.textContent = `Score : ${m.scores[myId]} — ${m.scores[1-myId]} · Retour au salon dans ${s}s`; }, 1000);
+  let s = Math.round((6000)/1000); // RESET_MS côté serveur
+  const render = ()=>{ sub.textContent =
+    (won ? 'Vous remportez la mêlée ! ' : (winN + ' atteint 10 kills. ')) +
+    (myK != null ? ('Vos kills : ' + myK + '. ') : '') +
+    'Nouvelle partie dans ' + s + 's…'; };
+  render();
+  const iv = setInterval(()=>{ s--; if(s<=0){ clearInterval(iv); return; } render(); }, 1000);
 }
 
 /* ---------- Démarrage de manche ---------- */
@@ -3313,42 +3316,29 @@ function setScoreNames(left, right){
   const b = document.createElement('div'); b.textContent = right;
   mid.appendChild(a); mid.appendChild(v); mid.appendChild(b);
 }
-function startSpectate(m){
-  hideAll();
-  clearOrbs();
-  if(m.orbs) for(const o of m.orbs) spawnOrb(o.id, o.p);
+// Spectateur FFA : caméra libre, tous les joueurs sont rendus via le moteur d'entités.
+function startSpectate(){
   myId = -1; playing = false; alive = true;
   spec.active = true; spec.follow = -1;
-  spec.bufs = [[],[]]; spec.dead = [false,false];
-  for(let s=0;s<2;s++){
-    if(!spec.soldiers[s]){
-      spec.soldiers[s] = createSoldier(s===0 ? 0xffaa33 : 0x5ce0ff);
-      scene.add(spec.soldiers[s].root);
-    }
-    spec.soldiers[s].root.visible = true;
-    spec.soldiers[s].root.rotation.x = 0;
-  }
+  remote.exists = false; if(remote.soldier && remote.soldier.root) remote.soldier.root.visible = false;
   gun.visible = false; runArms.visible = false;
   document.getElementById('hud').style.display = 'block';
   document.getElementById('vitals').style.display = 'none';
   document.getElementById('ammo').style.display = 'none';
   document.getElementById('crosshair').style.display = 'none';
-  document.getElementById('spechelp').style.display = 'block';
-  setScoreNames(seatNames[0], seatNames[1]);
-  document.getElementById('pscore').textContent = '0';
-  document.getElementById('escore').textContent = '0';
-  spec.pos.set(0, 14, 26); me.yaw = Math.PI; me.pitch = -0.45;
+  const sh = document.getElementById('spechelp'); if(sh) sh.style.display = 'block';
+  const si = document.getElementById('specinfo'); if(si) si.style.display = 'block';
+  spec.pos.set(0, 18, 30); me.yaw = Math.PI; me.pitch = -0.5;
   lock();
 }
 function stopSpectate(){
-  if(!spec.active) return;
   spec.active = false;
-  for(let s=0;s<2;s++) if(spec.soldiers[s]) spec.soldiers[s].root.visible = false;
   gun.visible = (weapon.state !== 'holstered');
   document.getElementById('vitals').style.display = '';
   document.getElementById('ammo').style.display = '';
   document.getElementById('crosshair').style.display = '';
-  document.getElementById('spechelp').style.display = 'none';
+  const sh = document.getElementById('spechelp'); if(sh) sh.style.display = 'none';
+  const si = document.getElementById('specinfo'); if(si) si.style.display = 'none';
 }
 function specUpdate(dt, g){
   const sens = 0.0021 * cfg.sensKb;
@@ -3399,49 +3389,72 @@ function interpBuf(buf, out){
   out.anim = b.anim || {};
   return out;
 }
-function startMatch(m){
+// Entrée en jeu / promotion spectateur->joueur / relance auto après victoire.
+function onJoinGame(m){
+  if(m.names){ seatNames = []; for(const k in m.names) seatNames[+k] = m.names[k]; }
+  if(m.scores) lastScores = m.scores;
+  myId = (typeof m.seat === 'number') ? m.seat : -1;
   clearOrbs();
   if(m.orbs) for(const o of m.orbs) spawnOrb(o.id, o.p);
-  if(!m.seats){ // garde-fou : serveur obsolète
-    toMenu("Version du serveur incompatible — arrêtez-le (Ctrl+C) puis relancez « npm start ».");
-    return;
+  // (re)crée les entités des autres joueurs à leur position de départ
+  clearBots();
+  if(m.players){
+    for(const k in m.players){
+      const s = +k; if(s === myId) continue;
+      const e = m.players[k]; const b = ensureBot(s, entColor(s));
+      if(b.pos) b.pos.set(e.p[0], e.p[1], e.p[2]);
+      b.yaw = e.yaw || 0; b.dead = !!e.dead;
+      if(b.soldier){ b.soldier.root.position.set(e.p[0], e.p[1], e.p[2]); b.soldier.root.visible = true; }
+    }
   }
-  if(m.seats){
-    seatNames = [m.seats[0].name, m.seats[1].name];
-    const mySeat = m.seats[0].id === myClientId ? 0 : (m.seats[1].id === myClientId ? 1 : -1);
-    if(mySeat === -1){ startSpectate(m); return; }
-    myId = mySeat;
-  }
+  botActive = botMgr.size > 0;
+  hideAll(); hide('endscreen');
+  document.getElementById('hud').style.display = 'block';
+  updateScoreboard();
+  if(myId < 0){ startSpectate(); return; }
   stopSpectate();
-  hideAll();
-  setScoreNames(seatNames[myId] + ' (vous)', seatNames[1-myId]);
-  document.getElementById('plName').textContent = (seatNames[myId] || myName).toUpperCase();
-  document.getElementById('spechelp').style.display = 'none';
-  const s = m.spawns[myId];
-  me.pos.set(s[0], 0, s[2]); me.yaw = s[3]; me.pitch = 0;
-  me.hp = maxHp; me.sh = maxShield; me.mag = CONFIG.MAG_SIZE;
+  spec.active = false;
+  const sp = (m.spawns && m.spawns[myId]) ? m.spawns[myId] : [0, 0, 0, 0];
+  me.pos.set(sp[0], 0, sp[2]); me.yaw = sp[3] || 0; me.pitch = 0;
+  me.hp = maxHp; me.sh = maxShield;
+  me.mags = (GAMECFG.WEAPONS||[]).map(w=>w.mag||30); me.mag = me.mags[me.weaponIdx];
   me.reloading = false; reloadAnimT = -1; me.vel.set(0,0,0);
-  me.slide.active = false; me.crouchToggleState = false;
+  me.slide.active = false; me.slide.cooldown = 0; me.crouchToggleState = false;
   me.mantle.active = false; me.wallBounced = false;
-  weapon.state = 'equipped'; weapon.t = 0;
-  enemyShPrev = maxShield;
-  alive = true; remote.buf.length = 0;
+  resetMelee();
+  weapon.state = 'equipped'; weapon.t = 0; gun.visible = true; runArms.visible = false;
+  remote.exists = false; if(remote.soldier && remote.soldier.root) remote.soldier.root.visible = false;
+  document.getElementById('reloadmsg').style.display = 'none';
+  document.getElementById('plName').textContent = (seatNames[myId] || myName || 'VOUS').toUpperCase();
+  document.getElementById('vitals').style.display = '';
+  document.getElementById('ammo').style.display = '';
+  document.getElementById('crosshair').style.display = '';
   updateHPShieldUI(); updateAmmoUI();
-  document.getElementById('pscore').textContent = '0';
-  document.getElementById('escore').textContent = '0';
-  if(!remote.soldier){
-    remote.soldier = createSoldier(myId===0 ? 0x5ce0ff : 0xffaa33);
-    scene.add(remote.soldier.root);
+  alive = true; playing = true;
+  REC.spawnAt = performance.now();
+  lock();
+}
+function onPlayerLeft(m){
+  removeEntity(m.seat);
+  if(m.name) killFeed(m.name + ' a quitté la partie');
+}
+// Tableau des scores (mêlée) : un rang par joueur, trié par kills.
+function updateScoreboard(){
+  const el = document.getElementById('leaderboard'); if(!el) return;
+  const rows = [];
+  for(let s=0; s<MAX_PLAYERS; s++){ if(seatNames[s] === undefined) continue; rows.push({ s, name: seatNames[s], k: (lastScores[s]||0) }); }
+  rows.sort((a,b)=> b.k - a.k);
+  el.innerHTML = '';
+  const title = document.createElement('div'); title.className = 'lbtitle'; title.textContent = 'MÊLÉE · 1ᵉʳ à 10'; el.appendChild(title);
+  if(!rows.length){ const r = document.createElement('div'); r.className = 'lbrow'; r.textContent = 'En attente de joueurs…'; el.appendChild(r); return; }
+  for(const r of rows){
+    const me2 = (r.s === myId);
+    const row = document.createElement('div'); row.className = 'lbrow' + (me2 ? ' me' : '');
+    const dot = document.createElement('span'); dot.className = 'lbdot'; dot.style.background = '#' + entColor(r.s).toString(16).padStart(6,'0');
+    const nm = document.createElement('span'); nm.className = 'lbname'; nm.textContent = r.name + (me2 ? ' (vous)' : '');
+    const kk = document.createElement('span'); kk.className = 'lbk'; kk.textContent = r.k;
+    row.appendChild(dot); row.appendChild(nm); row.appendChild(kk); el.appendChild(row);
   }
-  remote.soldier.root.rotation.x = 0;
-  const cd = document.getElementById('countdown');
-  let n = m.countdown; cd.style.display='flex'; cd.textContent = n;
-  const iv = setInterval(()=>{
-    n--;
-    if(n<=0){ clearInterval(iv); cd.style.display='none'; playing = true;
-      document.getElementById('hud').style.display='block'; lock(); }
-    else cd.textContent = n;
-  }, 1000);
 }
 // ----- Bot mode (client) -----
 function onBotStart(m){
@@ -3559,6 +3572,7 @@ function toMenu(msg){
   playing = false; alive = true; myId = -1;
   if(ws){ ws.onclose=null; ws.close(); ws=null; }
   hideAll(); show('menu');
+  const pb = document.getElementById('playbtn'); if(pb){ pb.disabled = false; pb.textContent = 'REJOINDRE LA MÊLÉE'; }
   if(msg) alert(msg);
 }
 const gameEl = document.getElementById('game');
@@ -3575,10 +3589,8 @@ document.getElementById('playbtn').onclick = ()=>{
   myName = (inp.value || '').trim().slice(0,16) || ('Joueur' + Math.floor(100 + Math.random()*900));
   inp.value = myName;
   localStorage.setItem('nc_pseudo', myName);
-  hideAll(); show('lobby');
-  document.getElementById('lobbyinfo').textContent = 'Connexion…';
-  document.getElementById('roster').innerHTML = '';
-  connect();
+  const btn = document.getElementById('playbtn'); btn.textContent = 'CONNEXION…'; btn.disabled = true;
+  connect();   // on rejoint directement la mêlée (joueur si place libre, sinon spectateur)
 };
 document.getElementById('lobbyback').onclick = ()=>toMenu();
 document.getElementById('seatbtn').onclick = ()=>{ if(ws && ws.readyState===1) ws.send(JSON.stringify({t:'seat', want:true})); };
@@ -4668,41 +4680,35 @@ function playerUpdate(dt, g){
     return;
   }
 
-  /* --- Changement d'arme (clavier : binds weapon1/weapon2) --- */
-  const w1 = cfg.kb.weapon1, w2 = cfg.kb.weapon2, w3 = cfg.kb.weapon3;
-  const w1Now = w1 && keysDown.has(w1), w2Now = w2 && keysDown.has(w2), w3Now = w3 && keysDown.has(w3);
+  /* --- Changement d'arme (clavier : weapon1/weapon2 ; le SABRE est sur la touche "holster") --- */
+  const w1 = cfg.kb.weapon1, w2 = cfg.kb.weapon2;
+  const w1Now = w1 && keysDown.has(w1), w2Now = w2 && keysDown.has(w2);
   if(w1Now && !prevW1) switchWeapon(0);
   if(w2Now && !prevW2) switchWeapon(1);
-  if(w3Now && !prevW3) switchWeapon(2);   // 3 = sabre laser
-  prevW1 = w1Now; prevW2 = w2Now; prevW3 = w3Now;
+  prevW1 = w1Now; prevW2 = w2Now;
 
-  /* --- Manette : stick droit (R3) — clic bref = changer d'arme, maintien = ranger/sortir ---
-     R3 est géré ici de façon EXCLUSIVE (comme Apex). On prend le bouton weapon_stick,
-     ou à défaut le bouton holster s'il pointe sur le même stick. */
+  /* --- Manette : stick droit (R3) — clic bref = arme à feu suivante, maintien = sortir/ranger le SABRE --- */
   let r3Consumed = false;
   if(g){
     const r3 = (cfg.gp.weapon_stick >= 0) ? cfg.gp.weapon_stick : cfg.gp.holster;
     const pressed = r3>=0 && g.buttons[r3] && g.buttons[r3].pressed;
     if(pressed && !r3Down){ r3Down = true; r3DownAt = performance.now(); r3Held = false; }
     else if(pressed && r3Down){
-      if(!r3Held && performance.now() - r3DownAt > 280){ // maintien → bascule holster
+      if(!r3Held && performance.now() - r3DownAt > 280){ // maintien → sortir/ranger le sabre laser
         r3Held = true;
-        setHolstered(weapon.state === 'equipped'); // sortie→range, rangé→sort
+        toggleSaber();
       }
     } else if(!pressed && r3Down){
       r3Down = false;
-      if(!r3Held){
-        // clic bref : si l'arme est sortie → arme suivante (cycle R69 → Wingman → Sabre) ; si rangée → ressortir
-        if(weapon.state === 'equipped') switchWeapon((me.weaponIdx + 1) % (GAMECFG.WEAPONS||[1]).length);
-        else if(weapon.state === 'holstered') setHolstered(false);
-      }
+      // clic bref : arme à feu suivante (le sabre n'est PAS dans ce cycle, il est sur le maintien)
+      if(!r3Held && weapon.state === 'equipped') switchWeapon(nextGunIdx());
     }
     // si le bouton holster manette EST le R3, on empêche le double-déclenchement plus bas
     if(cfg.gp.holster === r3) r3Consumed = true;
   }
 
-  /* --- Holster (clavier H, ou bouton manette dédié distinct du R3) --- */
-  if(holsterEdge && !r3Consumed) setHolstered(weapon.state==='equipped');
+  /* --- Touche "holster" (clavier H par défaut) = SORTIR / RANGER LE SABRE LASER --- */
+  if(holsterEdge && !r3Consumed) toggleSaber();
   updateWeaponState(dt);
 
   /* --- Crouch hold/toggle + entrée de slide --- */
@@ -4760,7 +4766,10 @@ function playerUpdate(dt, g){
       playSfx('slide_jump');
     }
   } else {
-    const accel = me.onGround ? CONFIG.GROUND_ACCEL : CONFIG.AIR_ACCEL;
+    let accel = me.onGround ? CONFIG.GROUND_ACCEL : CONFIG.AIR_ACCEL;
+    // En l'air AVEC une direction tenue : contrôle aérien renforcé (on dérive vers l'input,
+    // changement de direction plus vif). Sans input on garde AIR_ACCEL → l'élan se conserve.
+    if(!me.onGround && wl > 0.2) accel = CONFIG.AIR_STRAFE_ACCEL ?? CONFIG.AIR_ACCEL;
     let tapStrafed = false;
     // ===== TAP STRAFE : en l'air, l'input fait PIVOTER la direction de l'élan (vitesse gardée) =====
     if(!me.onGround && CONFIG.TAPSTRAFE_ENABLED && wishDir && wl > 0.2){
@@ -4967,7 +4976,8 @@ function startDeathCam(killerSeat, head){
   // masquer le viewmodel et le HUD de jeu
   const hud = document.getElementById('hud'); if(hud) hud.style.opacity = '0';
   deathCam.prevJump = true; // évite un skip involontaire si saut déjà tenu à la mort
-  dcBanner('ÉLIMINÉ\n[ESPACE / SAUT] ▸ Passer');
+  const killer = (killerSeat != null && killerSeat >= 0) ? nameOfSeat(killerSeat).toUpperCase() : null;
+  dcBanner((killer ? ('ÉLIMINÉ PAR ' + killer) : 'ÉLIMINÉ') + '\n[ESPACE / SAUT] ▸ Passer');
 }
 function updateDeathCam(dt, g){
   if(!deathCam.active) return;
@@ -5055,6 +5065,9 @@ function endDeathCam(){
 }
 // Prépare le replay : fige les frames et crée les deux corps reconstitués
 function startKillCam(){
+  // FFA : pas de replay killcam (câblé pour le 1v1). On reste sur l'orbite 3e personne
+  // de SA propre mort, puis on respawn → évite tout faux adversaire à l'écran.
+  if(FFA) return false;
   const DC = GAMECFG.DEATHCAM || {};
   // On fige MAINTENANT le snapshot : il couvre killcam_duration AVANT le kill + ce qui a été
   // capturé APRÈS le kill (phase post-mortem). La capture post-kill s'arrête ici.
