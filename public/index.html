@@ -263,6 +263,7 @@
   <div class="optrow"><span style="width:190px;text-align:right">Course auto (manette)</span><input type="checkbox" id="autosprint"></div>
   <div class="optrow"><span style="width:190px;text-align:right">Sensibilité souris</span><input type="range" id="senskb" min="0.5" max="3" step="0.1"><span id="senskbv"></span></div>
   <div class="optrow"><span style="width:190px;text-align:right">Sensibilité manette</span><input type="range" id="sensgp" min="0.5" max="3" step="0.1"><span id="sensgpv"></span></div>
+  <div class="optrow"><span style="width:190px;text-align:right">Zone morte manette</span><input type="range" id="deadzone" min="0" max="0.4" step="0.01"><span id="deadzonev"></span></div>
   <div class="optrow"><span style="width:190px;text-align:right">Aim assist (manette)</span><input type="checkbox" id="aimassist"></div>
   <div class="optrow"><span style="width:190px;text-align:right">Champ de vision (FOV)</span><input type="range" id="fov" min="50" max="100" step="1"><span id="fovv"></span></div>
   <div class="optrow"><span style="width:190px;text-align:right">Vitesse de visée (ADS)</span><input type="range" id="adsspeed" min="10" max="40" step="1"><span id="adsspeedv"></span></div>
@@ -424,7 +425,7 @@ const DEFAULTS = {
   kb: { forward:'KeyW', back:'KeyS', left:'KeyA', right:'KeyD', jump:'Space',
         crouch:'ControlLeft', sprint:'ShiftLeft', reload:'KeyR', shoot:'Mouse0', ads:'Mouse2', holster:'KeyH', weapon1:'Digit1', weapon2:'Digit2', weapon3:'Digit3' },
   gp: { forward:-1, back:-1, left:-1, right:-1, jump:0, crouch:1, sprint:10, reload:2, shoot:7, ads:6, holster:3, weapon_stick:11, weapon3:-1 },
-  sensKb: 1.0, sensGp: 1.0, aimAssist: true, crouchMode: 'hold', autoSprint: true, fov: 0,
+  sensKb: 1.0, sensGp: 1.0, aimAssist: true, crouchMode: 'hold', autoSprint: true, fov: 0, deadzone: 0.10,
   wheelSwitch: false,            // molette souris = changer d'arme (activable en options)
   adsSpeed: 22,                  // vitesse de montée en visée (ADS)
   crosshair: { size: 13, gap: 17, thickness: 2, color: '#ffffff', dot: false }, // viseur perso
@@ -503,7 +504,9 @@ function pollGamepad(){
   gpPrev = g.buttons.map(b=>b.pressed);
   return g;
 }
-const dz = (v, d = (GAMECFG.GAMEPAD_DEADZONE ?? 0)) => Math.abs(v) < d ? 0 : (v - Math.sign(v)*d)/((1 - d) || 1);
+// Deadzone manette : réglable par le joueur (cfg.deadzone). Zéro au centre = plus de drift/à-coups quand
+// une manette est branchée mais au repos (le stick au repos n'est jamais pile à 0).
+const dz = (v, d = (cfg.deadzone ?? GAMECFG.GAMEPAD_DEADZONE ?? 0.10)) => Math.abs(v) < d ? 0 : (v - Math.sign(v)*d)/((1 - d) || 1);
 function actionDown(name, g){
   if(keysDown.has(cfg.kb[name])) return true;
   if(g && cfg.gp[name]>=0 && g.buttons[cfg.gp[name]] && g.buttons[cfg.gp[name]].pressed) return true;
@@ -4329,7 +4332,15 @@ function toMenu(msg){
   if(msg) alert(msg);
 }
 const gameEl = document.getElementById('game');
-function lock(){ try{ if(document.hasFocus && document.hasFocus()) gameEl.requestPointerLock && gameEl.requestPointerLock(); }catch(e){} }
+function lock(){
+  try{
+    if(!(document.hasFocus && document.hasFocus()) || !gameEl.requestPointerLock) return;
+    // unadjustedMovement:true = entrée souris BRUTE (pas l'accélération macOS/OS) → fini les à-coups
+    // au petit déplacement. Fallback automatique si le navigateur ne le supporte pas.
+    const p = gameEl.requestPointerLock({ unadjustedMovement: true });
+    if(p && p.catch) p.catch(()=>{ try{ gameEl.requestPointerLock(); }catch(e){} });
+  }catch(e){ try{ gameEl.requestPointerLock(); }catch(e2){} }
+}
 document.addEventListener('pointerlockchange', ()=>{
   locked = document.pointerLockElement === gameEl;
   if(!locked && ((playing && alive) || spec.active) && !document.getElementById('options').classList.contains('show')){
@@ -4390,11 +4401,15 @@ function buildOptions(){
   }
   const sk = document.getElementById('senskb'), sg = document.getElementById('sensgp'),
         aa = document.getElementById('aimassist'), asEl = document.getElementById('autosprint');
-  sk.value = cfg.sensKb; sg.value = cfg.sensGp; aa.checked = cfg.aimAssist; asEl.checked = cfg.autoSprint;
+  sk.value = cfg.sensKb; sg.value = cfg.sensGp; aa.checked = (cfg.aimAssist !== false); asEl.checked = cfg.autoSprint;
   document.getElementById('senskbv').textContent = cfg.sensKb.toFixed(1);
   document.getElementById('sensgpv').textContent = cfg.sensGp.toFixed(1);
   sk.oninput = ()=>{ cfg.sensKb=+sk.value; document.getElementById('senskbv').textContent=cfg.sensKb.toFixed(1); saveCfg(); };
   sg.oninput = ()=>{ cfg.sensGp=+sg.value; document.getElementById('sensgpv').textContent=cfg.sensGp.toFixed(1); saveCfg(); };
+  const dzEl = document.getElementById('deadzone');
+  if(dzEl){ if(cfg.deadzone == null) cfg.deadzone = 0.10;
+    dzEl.value = cfg.deadzone; document.getElementById('deadzonev').textContent = cfg.deadzone.toFixed(2);
+    dzEl.oninput = ()=>{ cfg.deadzone=+dzEl.value; document.getElementById('deadzonev').textContent=cfg.deadzone.toFixed(2); saveCfg(); }; }
   aa.onchange = ()=>{ cfg.aimAssist=aa.checked; saveCfg(); };
   asEl.onchange = ()=>{ cfg.autoSprint=asEl.checked; saveCfg(); };
   const fv = document.getElementById('fov');
@@ -5438,7 +5453,7 @@ function playerUpdate(dt, g){
     // ===== AIM ASSIST façon Apex (slowdown progressif + rotation douce) =====
     // Réglages dans config.js > AIM_ASSIST. STRENGTH = ton "target compensation" (Apex PC 0.4, toi 0.3).
     const AA = GAMECFG.AIM_ASSIST || {};
-    const aaOn = cfg.aimAssist && (AA.ENABLED !== false);
+    const aaOn = (cfg.aimAssist !== false) && (AA.ENABLED !== false); // défaut ON (sauf si explicitement coupé)
     const aaStrength = (AA.STRENGTH ?? 0.3);                 // force globale (= valeur Apex)
     const aaBubble   = ((AA.BUBBLE_DEG ?? 8) * Math.PI/180); // rayon de la "bulle" en rad
     const aaBotBubble = aaBubble * (AA.BOT_BUBBLE_MULT ?? 1); // bulle ÉLARGIE sur les bots
