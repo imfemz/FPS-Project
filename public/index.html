@@ -457,9 +457,11 @@ addEventListener('wheel', e=>{
   switchWeapon((me.weaponIdx + dir + n) % n);
 }, { passive: true });
 
-let gpIndex = -1, gpPrev = [], gpActive = false;
-addEventListener('gamepadconnected', e=>{ gpIndex = e.gamepad.index; });
-addEventListener('gamepaddisconnected', e=>{ if(e.gamepad.index === gpIndex){ gpIndex = -1; gpActive = false; } });
+let gpIndex = -1, gpPrev = [], gpActive = false, _gpLogged = false;
+addEventListener('gamepadconnected', e=>{ gpIndex = e.gamepad.index;
+  console.log('[NEON] 🎮 manette CONNECTÉE :', e.gamepad.id, '| index', e.gamepad.index, '| boutons', e.gamepad.buttons.length, '| axes', e.gamepad.axes.length); });
+addEventListener('gamepaddisconnected', e=>{ console.log('[NEON] 🎮 manette DÉCONNECTÉE : index', e.gamepad.index);
+  if(e.gamepad.index === gpIndex){ gpIndex = -1; gpActive = false; _gpLogged = false; } });
 function pollGamepad(){
   const gps = navigator.getGamepads ? navigator.getGamepads() : [];
   let g = gpIndex>=0 ? gps[gpIndex] : null;
@@ -467,9 +469,11 @@ function pollGamepad(){
   // reconnexion, etc.), on récupère la 1re manette connectée. NB : le navigateur n'expose la manette
   // qu'APRÈS un appui sur un bouton, onglet au premier plan.
   if(!g){
-    for(let i=0;i<gps.length;i++){ if(gps[i] && gps[i].connected){ gpIndex = i; g = gps[i]; break; } }
+    for(let i=0;i<gps.length;i++){ if(gps[i] && gps[i].connected){ gpIndex = i; g = gps[i];
+      console.log('[NEON] 🎮 manette détectée (scan) :', gps[i].id, '| index', i); break; } }
   }
   if(!g) return null;
+  if(!_gpLogged){ _gpLogged = true; console.log('[NEON] 🎮 inputs manette ACTIFS :', g.id); }
   const any = g.buttons.some(b=>b.pressed) || g.axes.some(a=>Math.abs(a)>0.25);
   if(any) gpActive = true;
   if(listening && listening.dev==='gp'){
