@@ -5540,7 +5540,10 @@ function playerUpdate(dt, g){
       // ROTATION douce : tire le réticule vers la cible, SEULEMENT quand on bouge le stick droit
       // (comme Apex — pas en simple strafe). Échelle = STRENGTH*ROTATION*poids => fond aux bords.
       const aaRot = (AA.ROTATION ?? 0);
-      if(aaTarget && aaRot > 0 && (Math.abs(rx) > 0.06 || Math.abs(ry) > 0.06)){
+      // rx/ry sont DÉJÀ passés par la deadzone (le drift est filtré) → tout input non nul = visée réelle.
+      // (avant : seuil 0.06 sur la valeur post-deadzone → avec une deadzone le magnétisme ne s'activait
+      //  quasi plus en ADS lors des micro-corrections. On déclenche maintenant dès qu'on bouge le stick.)
+      if(aaTarget && aaRot > 0 && (Math.abs(rx) > 0.001 || Math.abs(ry) > 0.001)){
         const toT = aaTarget.clone().sub(camera.position); toT.normalize();
         const wantYaw = Math.atan2(-toT.x, -toT.z);
         const wantPitch = Math.asin(Math.max(-1,Math.min(1,toT.y)));

@@ -255,7 +255,7 @@
       damage: 70,            // dégâts par coup
       range: 3.8,            // portée du coup (m)
       // --- Cooldown : nombre de coups avant de devoir attendre la recharge (barre bleue HUD) ---
-      max_hits: 2,           // coups disponibles à pleine charge
+      max_hits: 3,           // coups disponibles à pleine charge
       recharge_time: 2.4,    // secondes pour remonter de 0 à plein
       cone_deg: 75,          // ouverture du cône d'attaque devant soi (°)
       interval_ms: 240,      // cadence mini entre 2 coups (anti-spam, côté serveur)
@@ -263,7 +263,7 @@
       magnet: true,
       magnet_range: 5.5,     // distance (m) à laquelle l'aimant s'active
       magnet_cone_deg: 80,   // l'ennemi doit être dans ce cône devant soi
-      magnet_strength: 0.7,  // force (0..1) de l'attraction de visée
+      magnet_strength: 0.3,  // force (0..1) de l'attraction de visée
       magnet_rate: 10,       // vitesse de rattrapage de la visée vers la cible
       // --- Rendu de la lame ---
       blade_color: 0x36e3ff, // couleur de la lame (cyan néon, assorti au thème)
