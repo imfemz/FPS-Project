@@ -32,13 +32,17 @@
       aa_samples: 4,           // niveau de MSAA (2 / 4 / 8) — ↑ = plus lisse, un peu plus lourd
       AO: true,                // occlusion ambiante (GTAO) : ombres de contact dans les coins/jointures
       // radius plus large = l'AO s'étend du pied des caisses jusqu'au SOL (pas juste entre caisses).
-      ao: { radius: 1.6, scale: 1.8, distanceExponent: 0.8, thickness: 1.2, samples: 18 },
+      // radius = distance de rendu de l'AO ; scale = opacité/force de l'ombrage.
+      ao: { radius: 2.8, scale: 2.8, distanceExponent: 0.7, thickness: 1.4, samples: 18 },
       BLOOM: true,             // halo lumineux sur les sources vives (sabre, néon, soleil)
       bloom: { strength: 0.55, radius: 0.5, threshold: 0.8 }, // ↑strength = plus de glow ; threshold = seuil de brillance
     },
     DAMAGE: { BODY: 13, HEAD: 16 },
     ADS_SPEED: 22,   // vitesse de montée en visée (ADS) plus rapide (réglable en jeu : "Vitesse de visée")
     MOMENTUM_FOV: 12, // élargissement FOV max (°) quand le momentum est au max (0 = off) — sensation de vitesse
+    // À la mort, le corps se dissout en PARTICULES qui tombent au sol et fade out (false = ancien fondu).
+    DEATH_DISSOLVE: true,
+    DEATH_DISSOLVE_CFG: { color: 0xcfe0ff, size: 0.075, life: 1.7, per_mesh: 90, max_points: 600 },
     RED_DOT_SIZE: 0.0016,
     RUN_SHAKE: 1.5,
     // ===== Sway caméra "vivant" : oscillation DIAGONALE gauche↔droite quand on bouge =====

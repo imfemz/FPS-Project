@@ -55,11 +55,12 @@
   #hitmarker.kill{transform:translate(-50%,-50%) rotate(45deg) scale(1.65)}
 
   /* ===== Carte VIE / BOUCLIER (bas gauche) ===== */
-  #vitals{position:absolute;left:26px;bottom:30px;width:240px;padding:13px 18px 15px;
+  #vitals{position:absolute;left:26px;bottom:30px;width:240px;min-height:135px;padding:13px 18px 15px;
+    display:flex;flex-direction:column;justify-content:center;
     background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius);
     backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));box-shadow:var(--shadow)}
   #vitals.hurt{animation:hudHurt .28s ease}
-  @keyframes hudHurt{0%{transform:translateX(0)}25%{transform:translateX(-4px)}50%{transform:translateX(3px)}75%{transform:translateX(-2px)}100%{transform:translateX(0)}}
+  @keyframes hudHurt{0%{transform:translateX(0) scale(var(--hud-scale,1))}25%{transform:translateX(-4px) scale(var(--hud-scale,1))}50%{transform:translateX(3px) scale(var(--hud-scale,1))}75%{transform:translateX(-2px) scale(var(--hud-scale,1))}100%{transform:translateX(0) scale(var(--hud-scale,1))}}
   #vitals .vtop{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:11px}
   #hpval{font-family:var(--mono);font-size:38px;font-weight:700;line-height:.85;color:var(--hp);letter-spacing:-1.5px}
   #vitals.flash #hpval{color:var(--red)}
@@ -73,7 +74,7 @@
   #shieldsegs .segfill{height:100%;width:100%;background:var(--shield);border-radius:2px;transition:width .2s ease}
 
   /* ===== Carte MUNITIONS / ARME (bas droite) ===== */
-  #ammo{position:absolute;right:26px;bottom:30px;width:240px;display:flex;align-items:center;justify-content:space-between;gap:16px;
+  #ammo{position:absolute;right:26px;bottom:30px;width:240px;min-height:135px;display:flex;align-items:center;justify-content:space-between;gap:16px;
     background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius);
     backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));box-shadow:var(--shadow);
     padding:13px 18px 15px}
@@ -819,6 +820,13 @@ function applyHudScales(){
     ammo.style.transform = 'scale(' + H.ammo_scale + ')';
     ammo.style.transformOrigin = 'bottom right';
   }
+  // même échelle pour la carte vie/bouclier (bas gauche) → exactement la même taille que la carte arme
+  const vitals = document.getElementById('vitals');
+  if(vitals && H.ammo_scale && H.ammo_scale !== 1){
+    vitals.style.setProperty('--hud-scale', H.ammo_scale);
+    vitals.style.transform = 'scale(var(--hud-scale))';
+    vitals.style.transformOrigin = 'bottom left';
+  }
   const score = document.getElementById('score');
   if(score && H.score_scale && H.score_scale !== 1){
     score.style.transform = 'translateX(-50%) scale(' + H.score_scale + ')';
@@ -1340,9 +1348,61 @@ function updateCorpseFades(dt){
   for(let i=corpseFades.length-1;i>=0;i--){
     const f = corpseFades[i]; f.t += dt;
     if(f.t < f.delay) continue;
-    const k = Math.max(0, 1 - (f.t - f.delay)/f.dur);
+    // À la fin de l'anim de mort : le corps se DISSOUT en particules qui tombent au sol et fade out.
+    if(GAMECFG.DEATH_DISSOLVE !== false && !f._done){
+      f._done = true;
+      spawnDeathDissolve(f.sol);
+      if(f.sol.root) f.sol.root.visible = false;
+      corpseFades.splice(i,1);
+      continue;
+    }
+    const k = Math.max(0, 1 - (f.t - f.delay)/f.dur);   // fallback : ancien fondu d'opacité
     setSoldierOpacity(f.sol, k);
     if(k <= 0){ if(f.sol.root) f.sol.root.visible = false; corpseFades.splice(i,1); }
+  }
+}
+/* ===== Dissolution en PARTICULES à la mort : le corps éclate en points qui tombent + fade ===== */
+const deathClouds = [];
+function spawnDeathDissolve(sol){
+  if(!sol || !sol.root) return;
+  sol.root.updateMatrixWorld(true);
+  const D = GAMECFG.DEATH_DISSOLVE_CFG || {};
+  const perMesh = D.per_mesh ?? 90, maxPts = D.max_points ?? 600;
+  const pts = []; const v = new THREE.Vector3();
+  sol.root.traverse(o=>{
+    if(pts.length/3 >= maxPts || !o.isMesh || !o.geometry) return;
+    const pa = o.geometry.attributes && o.geometry.attributes.position; if(!pa) return;
+    const step = Math.max(1, Math.floor(pa.count / perMesh));
+    for(let k=0;k<pa.count && pts.length/3 < maxPts;k+=step){
+      v.fromBufferAttribute(pa, k); o.localToWorld(v);
+      pts.push(v.x, v.y, v.z);
+    }
+  });
+  if(pts.length < 9) return;
+  const n = pts.length/3;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  const mat = new THREE.PointsMaterial({ size: D.size ?? 0.075, color: new THREE.Color(D.color || 0xcfe0ff),
+    transparent:true, opacity:1, depthWrite:false, blending:THREE.AdditiveBlending });
+  mat.toneMapped = false;
+  const cloud = new THREE.Points(geo, mat); cloud.frustumCulled = false; scene.add(cloud);
+  const vel = new Float32Array(n*3);
+  for(let i=0;i<n;i++){ vel[i*3]=(Math.random()-.5)*0.8; vel[i*3+1]=0.2+Math.random()*0.6; vel[i*3+2]=(Math.random()-.5)*0.8; }
+  deathClouds.push({ cloud, geo, mat, vel, life: D.life ?? 1.7, max: D.life ?? 1.7 });
+}
+function updateDeathClouds(dt){
+  for(let i=deathClouds.length-1;i>=0;i--){
+    const c = deathClouds[i]; c.life -= dt;
+    const pos = c.geo.attributes.position.array, vel = c.vel;
+    for(let j=0;j<vel.length;j+=3){
+      vel[j+1] -= 7*dt;                                  // gravité → ça tombe
+      let ny = pos[j+1] + vel[j+1]*dt;
+      if(ny < 0.03){ ny = 0.03; vel[j+1]=0; vel[j]*=0.6; vel[j+2]*=0.6; } // se pose au sol
+      pos[j] += vel[j]*dt; pos[j+1] = ny; pos[j+2] += vel[j+2]*dt;
+    }
+    c.geo.attributes.position.needsUpdate = true;
+    c.mat.opacity = Math.max(0, (c.life/c.max));
+    if(c.life <= 0){ scene.remove(c.cloud); c.geo.dispose(); c.mat.dispose(); deathClouds.splice(i,1); }
   }
 }
 function ragdollGroundY(x, z, feetY){
@@ -6140,6 +6200,7 @@ function animate(){
   updateHealthBars(dt);
   updateDamageNumbers(dt);
   updateCorpseFades(dt);
+  updateDeathClouds(dt);
   updateAudioListener();
   updateOrbs(dt);
   updateRagdolls(dt);
