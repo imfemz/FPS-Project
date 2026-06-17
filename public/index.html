@@ -430,7 +430,7 @@ const DEFAULTS = {
   kb: { forward:'KeyW', back:'KeyS', left:'KeyA', right:'KeyD', jump:'Space',
         crouch:'ControlLeft', sprint:'ShiftLeft', reload:'KeyR', shoot:'Mouse0', ads:'Mouse2', holster:'KeyH', weapon1:'Digit1', weapon2:'Digit2', weapon3:'Digit3' },
   gp: { forward:-1, back:-1, left:-1, right:-1, jump:0, crouch:1, sprint:10, reload:2, shoot:7, ads:6, holster:3, weapon_stick:11, weapon3:-1 },
-  sensKb: 1.0, sensGp: 1.0, aimAssist: true, crouchMode: 'hold', autoSprint: true, fov: 0, deadzone: 0.10,
+  sensKb: 1.0, sensGp: 1.0, aimAssist: true, crouchMode: 'hold', autoSprint: true, fov: 0, deadzone: 0.06,
   wheelSwitch: false,            // molette souris = changer d'arme (activable en options)
   adsSpeed: 22,                  // vitesse de montée en visée (ADS)
   crosshair: { size: 13, gap: 17, thickness: 2, color: '#ffffff', dot: false }, // viseur perso
@@ -5536,7 +5536,7 @@ function playerUpdate(dt, g){
       // SLOWDOWN progressif : la caméra ralentit d'autant plus que le réticule est proche du centre.
       // Au centre, vitesse = (1 - STRENGTH*SLOWDOWN) ; ex 0.3 => 70% de la vitesse (vs 50% avant).
       const slow = aaEffStrength * (AA.SLOWDOWN ?? 1.0) * aaWeight;
-      aimAssistFactor = 1 - Math.min(0.9, slow);
+      aimAssistFactor = 1 - Math.min(AA.SLOWDOWN_MAX ?? 0.55, slow); // plafond du ralentissement → reste réactif (avant 0.9 = caméra qui rampait)
       // ROTATION douce : tire le réticule vers la cible, SEULEMENT quand on bouge le stick droit
       // (comme Apex — pas en simple strafe). Échelle = STRENGTH*ROTATION*poids => fond aux bords.
       const aaRot = (AA.ROTATION ?? 0);

@@ -496,6 +496,9 @@
       // Profondeur du ralentissement au centre, en fraction de STRENGTH. 1.0 = au plus près la
       // caméra tombe à (1 - STRENGTH) de sa vitesse (ex 0.3 => 70%). 0 = pas de slowdown du tout.
       SLOWDOWN: 1.0,
+      // Plafond ABSOLU du ralentissement (0.55 = caméra jamais en dessous de 45% de sa vitesse près
+      // d'une cible) → garde la visée RÉACTIVE. Monte vers 0.8 pour plus collant, baisse pour plus brut.
+      SLOWDOWN_MAX: 0.55,
       // Force du magnétisme rotationnel, en fraction de STRENGTH. 0 = slowdown pur (zéro rotation).
       // Garde-le bas pour rester "PC" : la rotation est ce qui se sent le plus "auto-aim".
       ROTATION: 0.5,
@@ -504,13 +507,13 @@
       BUBBLE_DEG: 8,
       // Renforcement sur les BOTS (mode entraînement) : ils sont locaux, on peut être plus généreux
       // pour que l'assist se sente autant que sur un vrai adversaire. ×bulle et ×force.
-      BOT_BUBBLE_MULT: 1.7,
-      BOT_STRENGTH_MULT: 1.6,
+      BOT_BUBBLE_MULT: 1.2,
+      BOT_STRENGTH_MULT: 1.25,
       // Aim assist en HIPFIRE = cette fraction de la force ADS (0.6 = 60%). 1 = identique à l'ADS.
       HIP_MULT: 0.6,
       // En hipfire la bulle est agrandie de ce facteur (0.6 = +60%) pour que l'assist s'accroche même
       // quand on vise grossièrement (sans ADS). 0 = même bulle qu'en ADS.
-      HIP_BUBBLE_EXTRA: 0.6,
+      HIP_BUBBLE_EXTRA: 0.2,
       // Douceur de l'entrée/sortie de la bulle (constante de temps, s). C'EST le réglage qui enlève
       // le côté "brutal" : plus grand = transition plus molle. 0 = entrée instantanée (à éviter).
       SMOOTH: 0.08,
