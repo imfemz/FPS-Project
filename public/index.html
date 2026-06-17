@@ -4,16 +4,43 @@
 <meta charset="UTF-8">
 <title>NEON COMPOUND — Mêlée 6 joueurs en ligne</title>
 <link rel="icon" type="image/png" href="/textures/hud/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  :root{ --amber:#ffb444; --cyan:#5ce0ff; --red:#ff5a5a; --shield:#4db8ff; --ink:#0a1026; }
+  :root{
+    /* ===== DA premium minimaliste (noir / blanc / gris, accents discrets) ===== */
+    --bg:#0a0a0b;
+    --panel:rgba(20,20,23,.55);        /* fond des cartes flottantes */
+    --panel-2:rgba(28,28,32,.7);       /* cartes plus opaques (menus) */
+    --brd:rgba(255,255,255,.09);       /* bordures fines */
+    --brd-strong:rgba(255,255,255,.16);
+    --txt:#f4f5f7;                     /* texte principal */
+    --txt-dim:#9a9ca3;                 /* texte secondaire */
+    --txt-faint:#5d5f66;               /* texte tertiaire */
+    --hp:#f4f5f7;                      /* vie : blanc */
+    --shield:#7cc4ff;                  /* bouclier : bleu froid discret */
+    --accent:#5ce0ff;                  /* sabre / momentum / liens */
+    --red:#ff5a5a;                     /* dégâts / danger */
+    --radius:18px;
+    --radius-sm:12px;
+    --blur:14px;
+    --shadow:0 12px 40px rgba(0,0,0,.45);
+    --shadow-sm:0 6px 20px rgba(0,0,0,.35);
+    --font:'Inter','Segoe UI',system-ui,Arial,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
+    /* alias hérités (compat ancien code) */
+    --amber:#f4f5f7; --cyan:#5ce0ff; --ink:#0a0a0b;
+  }
   *{margin:0;padding:0;box-sizing:border-box}
-  html,body{width:100%;height:100%;overflow:hidden;background:var(--ink);font-family:'Segoe UI',Arial,sans-serif;color:#eef2f6}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:var(--font);color:var(--txt);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
   canvas{display:block}
   kbd{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);padding:1px 7px;border-radius:4px;font-size:13px}
 
   #hud{position:fixed;inset:0;pointer-events:none;display:none}
   #crosshair{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:80px;height:80px}
-  #crosshair span{position:absolute;background:#fff;box-shadow:0 0 3px rgba(0,0,0,.85);left:50%;top:50%}
+  #crosshair span{position:absolute;background:rgba(255,255,255,.82);box-shadow:0 0 2px rgba(0,0,0,.7);left:50%;top:50%;border-radius:1px}
   #crosshair .ch-dot{border-radius:50%;display:none}
   #crosshair .l{left:0}#crosshair .r{right:0}#crosshair .t{top:0}#crosshair .b{bottom:0}
   #hitmarker{position:absolute;left:50%;top:50%;width:34px;height:34px;opacity:0;transition:opacity .1s,transform .07s;transform:translate(-50%,-50%) rotate(45deg)}
@@ -27,72 +54,113 @@
   #hitmarker.head{transform:translate(-50%,-50%) rotate(45deg) scale(1.3)}
   #hitmarker.kill{transform:translate(-50%,-50%) rotate(45deg) scale(1.65)}
 
-  #vitals{position:absolute;left:30px;bottom:28px;width:300px;background:rgba(10,16,38,.55);border:1px solid rgba(255,255,255,.12);padding:10px 14px 12px;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,0 100%)}
-  #plName{font-size:14px;font-weight:700;letter-spacing:2px;color:var(--hud-name, #eef2f6);margin-bottom:7px;text-shadow:0 1px 3px rgba(0,0,0,.6)}
-  #shieldsegs{display:flex;gap:4px;margin-bottom:6px}
-  #shieldsegs .seg{flex:1;height:9px;background:rgba(255,255,255,.08);border:1px solid rgba(77,184,255,.45);clip-path:polygon(0 0,100% 0,calc(100% - 5px) 100%,0 100%)}
-  #shieldsegs .segfill{height:100%;width:100%;background:var(--hud-shield, #4db8ff);box-shadow:0 0 8px rgba(77,184,255,.6);transition:width .12s}
-  #healthbar{height:13px;background:rgba(255,255,255,.07);border:1px solid rgba(255,90,90,.5);clip-path:polygon(0 0,100% 0,calc(100% - 10px) 100%,0 100%)}
-  #healthfill{height:100%;width:100%;background:var(--hud-health, linear-gradient(90deg,var(--red),#ffe8e0));transition:width .15s}
+  /* ===== Carte VIE / BOUCLIER (bas gauche) ===== */
+  #vitals{position:absolute;left:26px;bottom:26px;width:250px;padding:13px 16px 15px;
+    background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius);
+    backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));box-shadow:var(--shadow)}
+  #vitals.hurt{animation:hudHurt .28s ease}
+  @keyframes hudHurt{0%{transform:translateX(0)}25%{transform:translateX(-4px)}50%{transform:translateX(3px)}75%{transform:translateX(-2px)}100%{transform:translateX(0)}}
+  #vitals .vtop{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:11px}
+  #hpval{font-family:var(--mono);font-size:38px;font-weight:700;line-height:.85;color:var(--hp);letter-spacing:-1.5px}
+  #vitals.flash #hpval{color:var(--red)}
+  #vitals .vside{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+  #plName{font-size:12px;font-weight:600;letter-spacing:.5px;color:var(--txt-dim);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #vitals .vlabel{font-family:var(--mono);font-size:9px;letter-spacing:3px;color:var(--txt-faint)}
+  #healthbar{height:4px;border-radius:3px;background:rgba(255,255,255,.10);overflow:hidden;margin-bottom:7px}
+  #healthfill{height:100%;width:100%;background:var(--hp);border-radius:3px;transition:width .25s cubic-bezier(.2,.8,.2,1)}
+  #shieldsegs{display:flex;gap:4px}
+  #shieldsegs .seg{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.10);overflow:hidden}
+  #shieldsegs .segfill{height:100%;width:100%;background:var(--shield);border-radius:2px;transition:width .2s ease}
 
-  #ammo{position:absolute;right:28px;bottom:22px;display:flex;align-items:center;gap:14px;
-    background:linear-gradient(110deg,rgba(12,18,38,.18),rgba(12,18,38,.62));
-    border:1px solid rgba(255,255,255,.14);border-left:3px solid var(--amber);
-    padding:10px 18px 10px 14px;clip-path:polygon(14px 0,100% 0,100% 100%,0 100%,0 14px)}
-  #wpnbox{display:flex;flex-direction:column;align-items:flex-end;gap:3px;border-right:1px solid rgba(255,255,255,.16);padding-right:14px}
-  #wpnname{font-size:15px;font-weight:800;letter-spacing:3px;color:#eef2f6;text-shadow:0 1px 3px rgba(0,0,0,.6)}
-  #wpnicon{height:26px;opacity:.95}
-  #wpnicon svg,#wpnicon img{height:26px;display:block}
-  #ammo .magwrap{display:flex;flex-direction:column;align-items:flex-end}
-  #ammo .mag{font-size:46px;font-weight:800;color:var(--amber);text-shadow:0 0 12px rgba(255,180,68,.5);line-height:.9}
-  #ammo .res{font-size:13px;color:#b6ad9d;letter-spacing:2px}
-  #reloadmsg{position:absolute;left:50%;bottom:22%;transform:translateX(-50%);color:var(--amber);font-size:13px;letter-spacing:4px;display:none}
-  #score{position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:14px;align-items:center}
-  .scorebox{padding:6px 18px;font-size:25px;font-weight:800;background:rgba(10,16,38,.7);border:1px solid rgba(255,255,255,.12)}
-  #pscore{color:var(--amber)}#escore{color:var(--cyan)}
-  #scoremid{font-size:10px;letter-spacing:2px;color:#b6ad9d;text-align:center}
-  /* Tableau des scores FFA (mêlée) */
-  #leaderboard{position:absolute;top:18px;left:50%;transform:translateX(-50%);min-width:210px;background:rgba(10,16,38,.66);border:1px solid rgba(255,255,255,.12);padding:7px 10px 8px;backdrop-filter:blur(2px)}
-  #leaderboard .lbtitle{font-size:9px;letter-spacing:2px;color:#9fb0c4;text-align:center;margin-bottom:5px;text-transform:uppercase}
-  #leaderboard .lbrow{display:flex;align-items:center;gap:8px;padding:2px 4px;font-size:13px;color:#dfe7ef}
-  #leaderboard .lbrow.me{background:rgba(255,255,255,.10)}
-  #leaderboard .lbdot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 6px rgba(255,255,255,.4)}
-  #leaderboard .lbname{flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
-  #leaderboard .lbk{font-weight:800;color:var(--amber);min-width:18px;text-align:right}
-  #specinfo{position:absolute;top:120px;left:50%;transform:translateX(-50%);font-size:12px;letter-spacing:1px;color:var(--cyan);background:rgba(10,16,38,.6);padding:5px 14px;text-align:center}
-  #killfeed{position:absolute;top:78px;right:26px;text-align:right;font-size:13px}
-  #killfeed div{margin-bottom:6px;background:rgba(10,16,38,.7);padding:4px 10px;border-right:2px solid var(--amber);animation:fadeout 4s forwards}
+  /* ===== Carte MUNITIONS / ARME (bas droite) ===== */
+  #ammo{position:absolute;right:26px;bottom:34px;display:flex;align-items:center;gap:16px;
+    background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius);
+    backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));box-shadow:var(--shadow);
+    padding:12px 18px}
+  #ammo.shoot{animation:ammoPulse .11s ease}
+  @keyframes ammoPulse{0%{transform:scale(1)}55%{transform:scale(.975)}100%{transform:scale(1)}}
+  #wpnbox{display:flex;flex-direction:column;align-items:flex-end;gap:6px;border-right:1px solid var(--brd);padding-right:16px}
+  #wpnname{font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:2px;color:var(--txt-dim)}
+  #wpnicon{height:24px;opacity:.92}
+  #wpnicon svg,#wpnicon img{height:24px;display:block}
+  #ammo .magwrap{display:flex;flex-direction:column;align-items:flex-end;min-width:62px}
+  #ammo .mag{font-family:var(--mono);font-size:42px;font-weight:700;color:var(--txt);line-height:.85;letter-spacing:-1px;transition:color .2s}
+  #ammo.low .mag{color:var(--red)}
+  #ammo .res{font-family:var(--mono);font-size:11px;color:var(--txt-faint);letter-spacing:2px}
+  /* Barre de COOLDOWN du sabre (bleu), sous la carte arme, en bas à droite */
+  #cooldownbar{position:absolute;right:26px;bottom:20px;width:158px;height:4px;border-radius:3px;
+    background:rgba(255,255,255,.10);overflow:hidden;display:none}
+  #cooldownbar .cdfill{height:100%;width:100%;background:var(--accent);border-radius:3px;box-shadow:0 0 8px rgba(92,224,255,.5)}
+  #cooldownbar.empty .cdfill{background:#ff7a7a;box-shadow:0 0 8px rgba(255,120,120,.55)}
+  #reloadmsg{position:absolute;left:50%;bottom:24%;transform:translateX(-50%);font-family:var(--mono);color:var(--txt);font-size:11px;letter-spacing:4px;display:none;
+    background:var(--panel);border:1px solid var(--brd);border-radius:999px;padding:6px 16px;backdrop-filter:blur(var(--blur));box-shadow:var(--shadow-sm)}
+  #score{position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center}
+  .scorebox{font-family:var(--mono);padding:6px 16px;font-size:22px;font-weight:700;background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius-sm);backdrop-filter:blur(var(--blur))}
+  #pscore{color:var(--txt)}#escore{color:var(--txt-dim)}
+  #scoremid{font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--txt-faint);text-align:center}
+  /* ===== Tableau des scores FFA (haut centre) — carte flottante ===== */
+  #leaderboard{position:absolute;top:18px;left:50%;transform:translateX(-50%);min-width:230px;
+    background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius-sm);padding:9px 12px 10px;
+    backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));box-shadow:var(--shadow-sm)}
+  #leaderboard .lbtitle{font-family:var(--mono);font-size:9px;letter-spacing:3px;color:var(--txt-faint);text-align:center;margin-bottom:7px;text-transform:uppercase}
+  #leaderboard .lbrow{display:flex;align-items:center;gap:9px;padding:3px 6px;font-size:13px;color:var(--txt-dim);border-radius:7px}
+  #leaderboard .lbrow.me{background:rgba(255,255,255,.08);color:var(--txt)}
+  #leaderboard .lbdot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+  #leaderboard .lbname{flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;font-weight:500}
+  #leaderboard .lbk{font-family:var(--mono);font-weight:700;color:var(--txt);min-width:18px;text-align:right}
+  #specinfo{position:absolute;top:120px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--txt-dim);background:var(--panel);border:1px solid var(--brd);border-radius:999px;padding:6px 16px;text-align:center;backdrop-filter:blur(var(--blur))}
+  #killfeed{position:absolute;top:84px;right:26px;text-align:right;font-size:12px}
+  #killfeed div{margin-bottom:6px;font-family:var(--mono);color:var(--txt-dim);background:var(--panel);border:1px solid var(--brd);border-radius:999px;padding:4px 12px;backdrop-filter:blur(var(--blur));animation:fadeout 4s forwards}
   @keyframes fadeout{0%,70%{opacity:1}100%{opacity:0}}
-  #ping{position:absolute;top:20px;right:26px;font-size:12px;color:#8fa3b8;letter-spacing:1px}
-  #gamepadicon{position:absolute;top:40px;right:26px;font-size:11px;color:var(--cyan);display:none;letter-spacing:1px}
-  #damage{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(255,40,60,.55) 100%);opacity:0;transition:opacity .25s}
+  #ping{position:absolute;top:22px;right:26px;font-family:var(--mono);font-size:11px;color:var(--txt-faint);letter-spacing:1px}
+  #gamepadicon{position:absolute;top:42px;right:26px;font-family:var(--mono);font-size:10px;color:var(--txt-dim);display:none;letter-spacing:1px}
+  #damage{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(255,40,60,.5) 100%);opacity:0;transition:opacity .25s}
+  /* ===== MOMENTUM (bas centre) : equalizer de dots qui s'allument avec la vitesse ===== */
+  #momentum{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:7px;opacity:.35;transition:opacity .3s}
+  #momentum .mdots{display:flex;gap:5px;align-items:center}
+  #momentum .mdot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.13);transition:background .1s,box-shadow .1s,transform .1s,height .1s}
+  #momentum .mdot.lit{background:var(--accent);box-shadow:0 0 8px rgba(92,224,255,.55);transform:scaleY(1.6)}
+  #momentum .mlabel{font-family:var(--mono);font-size:8px;letter-spacing:4px;color:var(--txt-faint)}
+  /* ===== TAGS de statut (haut centre, sous le leaderboard) ===== */
+  #toasts{position:absolute;left:50%;top:96px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;align-items:center;z-index:6}
+  .toast{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--txt);background:var(--panel);border:1px solid var(--brd);border-radius:999px;padding:5px 14px;
+    backdrop-filter:blur(var(--blur));box-shadow:var(--shadow-sm);opacity:0;transform:translateY(-6px);transition:opacity .2s,transform .2s}
+  .toast.show{opacity:1;transform:translateY(0)}
+  .toast.warn{color:#ffd27a;border-color:rgba(255,210,122,.3)}
+  .toast.bad{color:var(--red);border-color:rgba(255,90,90,.35)}
 
-  .screen{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,16,38,.93);z-index:10;text-align:center;padding:20px;overflow-y:auto}
+  /* ===== ÉCRANS (menu / lobby / options) — minimaliste premium ===== */
+  .screen{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:radial-gradient(ellipse at 50% 30%, #141417 0%, #0a0a0b 70%);z-index:10;text-align:center;padding:24px;overflow-y:auto}
   .screen.show{display:flex}
-  .screen h1{font-size:50px;font-weight:900;letter-spacing:6px}
-  .screen h1 b{color:var(--amber);text-shadow:0 0 24px rgba(255,180,68,.6)}
-  .screen p{color:#b6c2d0;margin:14px 0 24px;max-width:660px;line-height:1.8;font-size:14px}
-  .btn{cursor:pointer;background:var(--amber);color:var(--ink);border:none;font-size:16px;font-weight:800;letter-spacing:3px;padding:13px 42px;clip-path:polygon(12px 0,100% 0,calc(100% - 12px) 100%,0 100%);transition:transform .1s;margin:6px}
-  .btn:hover{transform:scale(1.05)}
-  .btn.ghost{background:transparent;color:var(--amber);outline:1px solid var(--amber)}
-  #countdown{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-size:120px;font-weight:900;color:var(--amber);text-shadow:0 0 40px rgba(255,180,68,.8);z-index:9;pointer-events:none}
+  .screen h1{font-size:46px;font-weight:800;letter-spacing:-1px;color:var(--txt)}
+  .screen h1 b{color:var(--txt);font-weight:900}
+  .screen p{color:var(--txt-dim);margin:16px 0 26px;max-width:640px;line-height:1.85;font-size:14px}
+  .btn{cursor:pointer;background:var(--txt);color:#0a0a0b;border:none;border-radius:999px;font-size:14px;font-weight:600;letter-spacing:.3px;
+    padding:13px 34px;transition:transform .12s ease,background .2s,opacity .2s;margin:6px;font-family:var(--font)}
+  .btn:hover{transform:translateY(-2px)}
+  .btn.ghost{background:transparent;color:var(--txt);border:1px solid var(--brd-strong)}
+  .btn.ghost:hover{background:rgba(255,255,255,.06)}
+  #countdown{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-family:var(--mono);font-size:120px;font-weight:700;color:var(--txt);z-index:9;pointer-events:none}
 
   #bindtable{border-collapse:collapse;margin:10px 0 14px;font-size:14px}
-  #bindtable th,#bindtable td{padding:6px 16px;border-bottom:1px solid rgba(255,255,255,.1)}
-  #bindtable th{color:#b6ad9d;font-size:11px;letter-spacing:2px;text-align:left}
-  .bindbtn{cursor:pointer;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:#fff;padding:4px 14px;min-width:110px;font-size:13px}
-  .bindbtn.listening{background:var(--amber);color:var(--ink);font-weight:700}
-  .bindbtn.active{background:var(--amber);color:var(--ink);font-weight:700}
-  .optrow{display:flex;align-items:center;gap:14px;margin:6px 0;font-size:14px;color:#b6c2d0}
-  .optrow input[type=range]{width:180px;accent-color:var(--amber)}
-  .optrow input[type=checkbox]{accent-color:var(--amber);width:17px;height:17px}
-  .pseudoinput{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);color:#fff;font-size:16px;padding:11px 16px;letter-spacing:1px;text-align:center;width:260px;margin-bottom:12px;outline:none}
-  .pseudoinput:focus{border-color:var(--amber)}
-  #roster{margin:6px 0 16px;min-width:340px;max-height:260px;overflow-y:auto}
-  .rosterrow{display:flex;justify-content:space-between;gap:24px;padding:8px 16px;background:rgba(255,255,255,.05);border-bottom:1px solid rgba(255,255,255,.08);font-size:15px}
-  .rosterrow .role{color:#8fa3b8;font-size:11px;letter-spacing:2px;align-self:center}
-  .rosterrow.seated .role{color:var(--amber)}
-  #spechelp{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);font-size:12px;color:#b6c2d0;letter-spacing:1px;display:none;background:rgba(10,16,38,.6);padding:6px 14px}
+  #bindtable th,#bindtable td{padding:6px 16px;border-bottom:1px solid var(--brd)}
+  #bindtable th{color:var(--txt-faint);font-family:var(--mono);font-size:10px;letter-spacing:2px;text-align:left}
+  .bindbtn{cursor:pointer;background:rgba(255,255,255,.06);border:1px solid var(--brd-strong);color:var(--txt);padding:5px 14px;min-width:110px;font-size:13px;border-radius:8px;font-family:var(--mono)}
+  .bindbtn:hover{background:rgba(255,255,255,.10)}
+  .bindbtn.listening{background:var(--txt);color:#0a0a0b;font-weight:600}
+  .bindbtn.active{background:var(--txt);color:#0a0a0b;font-weight:600}
+  .optrow{display:flex;align-items:center;gap:14px;margin:8px 0;font-size:14px;color:var(--txt-dim)}
+  .optrow input[type=range]{width:180px;accent-color:var(--accent)}
+  .optrow input[type=checkbox]{accent-color:var(--accent);width:17px;height:17px}
+  .pseudoinput{background:rgba(255,255,255,.05);border:1px solid var(--brd-strong);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 18px;letter-spacing:.5px;text-align:center;width:280px;margin-bottom:14px;outline:none;font-family:var(--font)}
+  .pseudoinput:focus{border-color:var(--accent)}
+  .pseudoinput::placeholder{color:var(--txt-faint)}
+  #roster{margin:6px 0 16px;min-width:360px;max-height:260px;overflow-y:auto}
+  .rosterrow{display:flex;justify-content:space-between;gap:24px;padding:11px 16px;background:var(--panel);border:1px solid var(--brd);border-radius:12px;margin-bottom:6px;font-size:15px;backdrop-filter:blur(var(--blur))}
+  .rosterrow .role{color:var(--txt-faint);font-family:var(--mono);font-size:10px;letter-spacing:2px;align-self:center}
+  .rosterrow.seated .role{color:var(--accent)}
+  #spechelp{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);font-size:12px;color:var(--txt-dim);letter-spacing:.5px;display:none;background:var(--panel);border:1px solid var(--brd);border-radius:999px;padding:7px 16px;backdrop-filter:blur(var(--blur))}
   #speedfx{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:4;mix-blend-mode:screen;transition:opacity .12s}
   /* Pulsation bleu clair sur les CÔTÉS quand on va vite (bunny hop / grande vélocité) */
   #speededge{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:5;mix-blend-mode:screen;
@@ -123,24 +191,30 @@
   <canvas id="speedfx"></canvas>
   <div id="speededge"></div>
   <div id="vitals">
-    <div id="plName">—</div>
+    <div class="vtop">
+      <div id="hpval">100</div>
+      <div class="vside"><div id="plName"></div><div class="vlabel">HP / SHIELD</div></div>
+    </div>
+    <div id="healthbar"><div id="healthfill"></div></div>
     <div id="shieldsegs">
       <div class="seg"><div class="segfill"></div></div>
       <div class="seg"><div class="segfill"></div></div>
       <div class="seg"><div class="segfill"></div></div>
     </div>
-    <div id="healthbar"><div id="healthfill"></div></div>
   </div>
   <div id="ammo">
     <div id="wpnbox"><span id="wpnname">R-69</span><span id="wpnicon"></span></div>
     <div class="magwrap"><div class="mag" id="magcount">30</div><div class="res" id="ammosub">/ ∞</div></div>
   </div>
-  <div id="reloadmsg">— RECHARGEMENT —</div>
+  <div id="cooldownbar"><div class="cdfill"></div></div>
+  <div id="momentum"><div class="mdots"></div><div class="mlabel">MOMENTUM</div></div>
+  <div id="toasts"></div>
+  <div id="reloadmsg">RECHARGEMENT</div>
   <div id="score" style="display:none"><div class="scorebox" id="pscore">0</div><div id="scoremid"></div><div class="scorebox" id="escore">0</div></div>
   <div id="leaderboard"></div>
   <div id="killfeed"></div>
   <div id="specinfo" style="display:none">SPECTATEUR</div>
-  <div id="spechelp">SPECTATEUR — caméra libre : <b>ZQSD</b> déplacer · <b>Maj</b> + vite · souris pour regarder</div>
+  <div id="spechelp">SPECTATEUR · caméra libre : <b>ZQSD</b> déplacer · <b>Maj</b> + vite · souris pour regarder</div>
   <div id="ping">-- ms</div>
   <div id="gamepadicon">🎮 MANETTE</div>
 </div>
@@ -148,16 +222,14 @@
 <div id="countdown"></div>
 
 <div class="screen show" id="menu">
+  <div style="font-family:var(--mono);font-size:11px;letter-spacing:5px;color:var(--txt-faint);margin-bottom:14px">FEMZ FPS</div>
   <h1>NEON <b>COMPOUND</b></h1>
-  <p>Mêlée générale en ligne — jusqu'à <b style="color:var(--amber)">6 joueurs</b>, premier à <b style="color:var(--amber)">10 éliminations</b>. Bouclier 75 + Vie 100.<br>
-  <kbd>ZQSD</kbd> bouger · <kbd>Clic G</kbd> tirer · <kbd>Clic D</kbd> viser · <kbd>Maj</kbd> sprint · <kbd>Espace</kbd> saut · <kbd>Ctrl</kbd> crouch/slide · <kbd>H</kbd> ranger l'arme · <kbd>R</kbd> recharger<br>
-  Sprint + crouch = <b>slide</b> · saut en slide = <b>slide jump</b> · saut contre un mur en l'air = <b>wall bounce</b><br>
-  Sauter vers un rebord = <b>grimpe auto</b> · saut + crouch en toute fin de grimpe = <b>superglide</b><br>
-  Manette + remappage dans Options · tête = 25 dégâts, corps = 19 (réglable dans shared/config.js)</p>
+  <p style="max-width:480px">Mêlée générale jusqu'à <b style="color:var(--txt)">6 joueurs</b>. Premier à <b style="color:var(--txt)">10 éliminations</b>.<br>
+  Mouvement rapide : slide, slide jump, wall bounce, grimpe, superglide.</p>
   <input class="pseudoinput" id="pseudo" maxlength="16" placeholder="Votre pseudo"><br>
-  <button class="btn" id="playbtn">REJOINDRE LA MÊLÉE</button>
-  <button class="btn ghost" id="optbtn">OPTIONS</button>
-  <p style="margin-top:10px;font-size:12px;color:#8fa3b8">Jusqu'à 6 joueurs simultanés. Au-delà, vous êtes spectateur et entrez automatiquement dès qu'une place se libère.</p>
+  <button class="btn" id="playbtn">Rejoindre</button>
+  <button class="btn ghost" id="optbtn">Options</button>
+  <p style="margin-top:14px;font-size:12px;color:var(--txt-faint);max-width:420px">Au-delà de 6 joueurs vous êtes spectateur, et entrez automatiquement dès qu'une place se libère.</p>
 </div>
 
 <div class="screen" id="options">
@@ -180,22 +252,23 @@
 
 <div class="screen" id="lobby">
   <h1 style="font-size:34px">MÊLÉE <b>6 JOUEURS</b></h1>
-  <p id="lobbytip" style="margin:4px 0 10px;font-size:13px;color:var(--amber, #ffcf6b);letter-spacing:.5px">Vous avez 2 armes + 1 secrète 🔥 — vous êtes difficile à toucher si vous sautez pendant que vous glissez au sol !</p>
-  <p id="lobbyinfo" style="margin-bottom:8px">Connexion…</p>
+  <p id="lobbytip" style="margin:4px 0 14px;font-size:13px;color:var(--accent);letter-spacing:.3px">Vous avez 2 armes + 1 secrète 🔥 · vous êtes difficile à toucher en sautant pendant un slide au sol.</p>
+  <p id="lobbyinfo" style="margin-bottom:8px;color:var(--txt-dim)">Connexion…</p>
   <div id="roster"></div>
   <div>
-    <button class="btn" id="seatbtn">JOUER</button>
-    <button class="btn ghost" id="specbtn">SPECTATEUR</button>
+    <button class="btn" id="seatbtn">Jouer</button>
+    <button class="btn ghost" id="specbtn">Spectateur</button>
   </div>
-  <button class="btn" id="botbtn" style="margin-top:10px;background:#2a6e4f">▸ MODE ENTRAÎNEMENT (BOTS)</button>
-  <button class="btn ghost" id="lobbyback" style="font-size:13px;padding:9px 26px;margin-top:14px">QUITTER</button>
+  <button class="btn ghost" id="botbtn" style="margin-top:10px">Mode entraînement (bots)</button>
+  <button class="btn ghost" id="lobbyback" style="font-size:13px;padding:9px 26px;margin-top:14px">Quitter</button>
 </div>
 
 <div class="screen" id="pause">
-  <h1 style="font-size:34px">PAUSE</h1>
-  <p>La partie continue en arrière-plan !</p>
-  <button class="btn" id="resumebtn">REPRENDRE</button>
-  <button class="btn ghost" id="pauseopt">OPTIONS</button>
+  <h1 style="font-size:34px">Pause</h1>
+  <p>La partie continue en arrière-plan.</p>
+  <button class="btn" id="resumebtn">Reprendre</button>
+  <button class="btn ghost" id="pauseopt">Options</button>
+  <button class="btn ghost" id="pausequit">Quitter vers le salon</button>
 </div>
 
 <div class="screen" id="endscreen">
@@ -241,10 +314,10 @@ import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
 /* ---------- CONFIG gameplay ---------- */
 const CONFIG = {
-  WALK_SPEED: 5.5,
-  SPRINT_SPEED: 8,
-  HOLSTER_SPRINT_SPEED: 9.5,
-  CROUCH_SPEED: 3,
+  WALK_SPEED: 6.6,            // déplacements plus rapides (jeu nerveux, avantage aux joueurs réactifs)
+  SPRINT_SPEED: 9.6,
+  HOLSTER_SPRINT_SPEED: 11.2,
+  CROUCH_SPEED: 3.4,
   JUMP_VELOCITY: 6.8,
   GRAVITY: 21,
   GROUND_ACCEL: 12,
@@ -287,7 +360,6 @@ const CONFIG = {
   CLIMB_ENABLED: true,
   CLIMB_SPEED: 4.5,             // vitesse de montée (m/s) — >= 4.5 pour ne pas déclencher le mantle
   CLIMB_MAX_HEIGHT: 3.4,        // hauteur max grimpée d'un coup → AU-DELÀ le perso retombe (on grimpe plus haut)
-  CLIMB_MAX_ENTRY_SPEED: 3.4,   // au-dessus de cette vitesse h., on NE grimpe pas → le wall bounce reste prioritaire
   CLIMB_COOLDOWN: 0.6,          // délai avant de pouvoir re-grimper (anti collage infini)
   CLIMB_DETACH_PUSH: 3.2,       // poussée hors du mur au wall-jump / décrochage
   SUPERGLIDE_WINDOW: 0.25,      // fenêtre saut+crouch en FIN de grimpe (visible via le rond bleu)
@@ -483,6 +555,7 @@ function buildScene(){
 
   buildSky(); // ciel de jour : dôme dégradé + soleil + nuages (remplaçable par /textures/sky.jpg)
   buildEnvironment(); // env map (reflets) générée pour le sol mouillé + l'arme
+  buildPostFX();      // occlusion ambiante + bloom (async, fallback rendu standard si échec)
 }
 
 // ===== Env map procédurale (reflets d'environnement) =====
@@ -514,6 +587,47 @@ function buildEnvironment(){
     scene.environment = envMapTex;
     tex.dispose(); pmrem.dispose();
   } catch(e) { /* env map indisponible → rendu sans reflets, pas grave */ }
+}
+
+// ===== POST-FX : occlusion ambiante (GTAO) + bloom → volume/profondeur (anti "plat") =====
+// Imports DYNAMIQUES : si le CDN échoue, on désactive juste le post-FX (le jeu tourne quand même).
+// Désactivable via GRAPHICS.POSTFX:false (ou AO:false / BLOOM:false) dans shared/config.js.
+let composer = null, gtaoPass = null;
+async function buildPostFX(){
+  const G = GAMECFG.GRAPHICS || {};
+  if(G.POSTFX === false || !renderer) return;
+  try {
+    const [EC, RP, OP, GT, UB] = await Promise.all([
+      import('three/addons/postprocessing/EffectComposer.js'),
+      import('three/addons/postprocessing/RenderPass.js'),
+      import('three/addons/postprocessing/OutputPass.js'),
+      import('three/addons/postprocessing/GTAOPass.js'),
+      import('three/addons/postprocessing/UnrealBloomPass.js'),
+    ]);
+    const c = new EC.EffectComposer(renderer);
+    c.setPixelRatio(Math.min(devicePixelRatio, 2));
+    c.setSize(innerWidth, innerHeight);
+    c.addPass(new RP.RenderPass(scene, camera));
+    if(G.AO !== false){                               // OCCLUSION AMBIANTE : ombres de contact
+      gtaoPass = new GT.GTAOPass(scene, camera, innerWidth, innerHeight);
+      try {
+        const ao = G.ao || {};
+        gtaoPass.updateGtaoMaterial && gtaoPass.updateGtaoMaterial({
+          radius: ao.radius ?? 0.5, distanceExponent: ao.distanceExponent ?? 1,
+          thickness: ao.thickness ?? 1, scale: ao.scale ?? 1.3, samples: ao.samples ?? 16,
+        });
+      } catch(e){}
+      c.addPass(gtaoPass);
+    }
+    if(G.BLOOM !== false){                             // BLOOM : néon, sabre, sources vives rayonnent
+      const b = G.bloom || {};
+      c.addPass(new UB.UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight),
+        b.strength ?? 0.5, b.radius ?? 0.5, b.threshold ?? 0.82));
+    }
+    c.addPass(new OP.OutputPass());                    // tone mapping ACES + sRGB en fin de chaîne
+    composer = c;
+    console.log('[NEON] post-FX activé : occlusion ambiante (GTAO) + bloom');
+  } catch(e){ composer = null; console.warn('[NEON] post-FX indisponible → rendu standard :', e); }
 }
 
 /* ---------- Ciel de jour & textures personnalisées ---------- */
@@ -907,13 +1021,13 @@ function updateClimb(dt, jumpEdge, wishDir, f){
     me.vel.z = (me.vel.z - n.z*normComp) - n.z*1.0;
     return;
   }
-  // ----- Démarrage : en l'air, face à un mur, en poussant vers lui -----
+  // ----- Démarrage : en l'air, face à un mur, en poussant vers lui (à n'importe quelle vitesse) -----
   if(me.onGround || me.slide.active || me.mantle.active || me.climb.cool > 0) return;
   if(me.vel.y < -4) return;                          // pas en pleine chute
   if(!wishDir) return;
-  // Conflit WALL BOUNCE : si on arrive VITE vers le mur, on laisse le wall bounce (saut) faire ;
-  // la grimpe ne s'accroche qu'à vitesse modérée → on garde le wall bounce d'avant.
-  if(Math.hypot(me.vel.x, me.vel.z) >= (C.CLIMB_MAX_ENTRY_SPEED ?? C.WALLBOUNCE_MIN_SPEED)) return;
+  // Le WALL BOUNCE garde la priorité au SAUT : si on saute, on ne s'accroche pas (le wall bounce
+  // se déclenche). Sinon (on POUSSE vers le mur sans sauter), on grimpe — même à pleine vitesse.
+  if(jumpEdge) return;
   const n = findWallNormal(me.pos, me.pos.y);
   if(!n) return;
   if(fwd.dot(n) >= -0.4) return;                     // doit faire face au mur
@@ -2161,7 +2275,8 @@ function applyCustomModels(){
    Réglages : shared/config.js > MELEE et l'arme melee:true dans WEAPONS.
    ========================================================================== */
 const melee = { active:false, t:0, dur:0.46, step:0, lastAt:-99999, hitChecked:false,
-                hitStop:0, trailOn:false, predicted:false, flare:0, _impactN:0.46 };
+                hitStop:0, trailOn:false, predicted:false, flare:0, _impactN:0.46,
+                charge:1, locked:false };  // charge 0→1 : se vide à chaque coup, se recharge avec le temps
 let meleeShake = 0, meleeShakePhase = 0, meleeKickPitch = 0, meleeKickYaw = 0;
 let switchShake = 0, switchShakePhase = 0, switchShakeT = 0; // vibration au changement d'arme (enveloppe attack/decay)
 let fireShake = 0, fireShakePhase = 0, fireShakeT = 0, fireShakeCfg = null; // secousse de tir lourde (ex: Wingman)
@@ -2223,6 +2338,14 @@ function setupSaberBlade(obj, w){
 function meleeAttack(){
   const S = GAMECFG.MELEE || {}; const swings = S.swings || [];
   if(!swings.length || !alive) return;
+  // COOLDOWN : chaque coup consomme une part de charge. Vidé → on attend que ça remonte.
+  const maxHits = S.max_hits ?? 5;
+  const cost = 1 / maxHits;
+  if(melee.charge < cost - 1e-4){            // plus assez de charge : il faut attendre
+    if(!melee.locked){ melee.locked = true; saberEmptyClick(); } // petit feedback "vide" une fois
+    return;
+  }
+  melee.charge = Math.max(0, melee.charge - cost);
   const now = performance.now();
   if(now - melee.lastAt > (S.combo_reset_ms ?? 750)) melee.step = 0;     // combo froid → 1er coup
   else melee.step = (melee.step + 1) % swings.length;                     // sinon coup suivant
@@ -2361,8 +2484,13 @@ function updateSaberTrail(active){
 function updateMelee(dt){
   const saber = isSaber();
   updateSaberGlow(dt, saber);
-  if(!saber){ if(saberTrail) saberTrail.visible = false; melee.active = false; melee.trailOn = false; return; }
+  if(!saber){ if(saberTrail) saberTrail.visible = false; melee.active = false; melee.trailOn = false; updateCooldownBar(); return; }
   const S = GAMECFG.MELEE || {};
+  // COOLDOWN sabre : la charge se recharge avec le temps ; la barre bleue se vide/remonte.
+  const maxHits = S.max_hits ?? 5;
+  melee.charge = Math.min(1, melee.charge + dt / (S.recharge_time ?? 3.2));
+  if(melee.charge >= 1/maxHits) melee.locked = false;
+  updateCooldownBar();
   if(melee.hitStop > 0){                       // gel de l'arme à l'impact (poids + vibration)
     melee.hitStop -= dt;
     applyMeleePose(meleePoseAt(melee._impactN));
@@ -2403,6 +2531,18 @@ function saberHitSound(finisher){
   sfx(1700, 380, 0.10, 0.10, 'sawtooth');
   setTimeout(()=>sfx(520, 120, 0.12, 0.08, 'square'), 12);
   if(finisher) setTimeout(()=>sfx(260, 70, 0.18, 0.07, 'triangle'), 24);
+}
+function saberEmptyClick(){ sfx(200, 150, 0.06, 0.035, 'square'); } // sabre déchargé : petit "clic vide"
+// Barre de COOLDOWN du sabre (bleue, bas droite) — MAJ seulement quand ça change (perf).
+function updateCooldownBar(){
+  const cb = document.getElementById('cooldownbar'); if(!cb) return;
+  const show = isSaber() && playing && alive;
+  if(cb._shown !== show){ cb.style.display = show ? 'block' : 'none'; cb._shown = show; }
+  if(!show) return;
+  const p = Math.round(melee.charge * 100);
+  if(p !== cb._p){ const f = cb.firstElementChild; if(f) f.style.width = p + '%'; cb._p = p; }
+  const empty = melee.charge < 1/((GAMECFG.MELEE||{}).max_hits ?? 5) - 1e-4;
+  if(empty !== cb._empty){ cb.classList.toggle('empty', empty); cb._empty = empty; }
 }
 
 const HIP_POS = new THREE.Vector3(.22,-.28,-.46); // position hanche (style Apex : bas-droite, proche)
@@ -2557,7 +2697,7 @@ function connect(){
   ws.onopen = ()=>{ ws.send(JSON.stringify({t:'hello', name: myName})); };
   ws.onclose = ()=>{
     if(playing || spec.active){ toMenu('Connexion perdue.'); }
-    else { const pb=document.getElementById('playbtn'); if(pb){ pb.disabled=false; pb.textContent='REJOINDRE LA MÊLÉE'; } }
+    else { const pb=document.getElementById('playbtn'); if(pb){ pb.disabled=false; pb.textContent='Rejoindre'; } }
   };
   ws.onmessage = (ev)=>{
     const m = JSON.parse(ev.data);
@@ -3129,8 +3269,8 @@ let prevCrouchState = false; // pour le SFX de crouch
 let prevW1 = false, prevW2 = false, prevW3 = false, r3Down = false, r3DownAt = 0, r3Held = false; // binds armes
 let jumpShakeT = 0; // shake de saut (décroît)
 let wbKickT = 999;          // timer du "lean gauche" de l'arme au wall bounce (999 = inactif, 0 = déclenché)
-let wbShake = 0;            // shake caméra au wall bounce (décroît), wbShakePhase pour la vibration
-let wbShakePhase = 0;
+let wbShake = 0;            // shake caméra au wall bounce (enveloppe attack/decay)
+let wbShakePhase = 0, wbShakeT = 0;
 let rotKick = 0; // flick de rotation du canon, par balle, décroissance rapide (ne s'accumule pas)
 let recoilTarget = 0, rotKickTarget = 0; // cibles fluides du recul visuel (l'arme s'y déplace en douceur)
 let fireVibe = 0;            // intensité courante des micro-vibrations de tir (monte au tir, redescend à l'arrêt)
@@ -3235,6 +3375,7 @@ function shoot(){
   recoilAccum += finalV * RC.RECOVERY_AMOUNT;
   recoilYawAccum += finalH * RC.RECOVERY_AMOUNT;
   updateAmmoUI();
+  triggerAmmoPulse();
   triggerMuzzleFlash();
   playShotSfx(W.sfx_shot || 'shot');
   const S = GAMECFG.SPREAD;
@@ -3338,7 +3479,7 @@ function onHit(m){
   }
   // --- Dégâts que JE SUBIS ---
   if(m.target === myId){
-    me.hp = m.hp; me.sh = m.sh; updateHPShieldUI();
+    me.hp = m.hp; me.sh = m.sh; updateHPShieldUI(); triggerDamageFeedback();
     const dEl = document.getElementById('damage');
     dEl.style.opacity=1; setTimeout(()=>dEl.style.opacity=0,230);
   } else if(m.by !== myId){
@@ -3356,6 +3497,7 @@ function onKillMsg(m){
   if(m.scores){ lastScores = m.scores; updateScoreboard(); }
   const byN = nameOfSeat(m.by), vN = nameOfSeat(m.victim);
   const tag = m.head ? ' (tête)' : '';
+  if(m.by === myId) showHUDToast(m.head ? 'ÉLIMINATION · TÊTE' : 'ÉLIMINATION', '', 1300); // feedback premium discret
   if(m.by === myId)        killFeed('VOUS ☠ ' + vN + tag);
   else if(m.victim === myId) killFeed(byN + ' ☠ VOUS' + tag);
   else                     killFeed(byN + ' ☠ ' + vN + tag);
@@ -3679,19 +3821,66 @@ function onBotRespawn(m){
 
 /* ---------- UI ---------- */
 function updateHPShieldUI(){
+  // Valeur principale = vie effective (PV + bouclier), façon Apex.
+  const hpv = document.getElementById('hpval');
+  if(hpv) hpv.textContent = Math.max(0, Math.round(me.hp + me.sh));
   document.getElementById('healthfill').style.width = Math.max(0, me.hp/maxHp*100)+'%';
-  // Bouclier en 3 segments façon Apex : chaque cellule se vide l'une après l'autre
+  // Bouclier en 3 segments : chaque cellule se vide l'une après l'autre
   const segs = document.querySelectorAll('#shieldsegs .segfill');
   const per = maxShield / segs.length;
   segs.forEach((f, i)=>{
     f.style.width = (Math.max(0, Math.min(1, (me.sh - i*per)/per))*100) + '%';
   });
 }
+// Flash + shake de la carte vie quand on prend des dégâts.
+function triggerDamageFeedback(){
+  const v = document.getElementById('vitals'); if(!v) return;
+  v.classList.remove('hurt','flash'); void v.offsetWidth; // relance l'anim
+  v.classList.add('hurt','flash');
+  clearTimeout(v._dmgT); v._dmgT = setTimeout(()=>v.classList.remove('flash'), 140);
+}
 function updateAmmoUI(){
   const holstered = weapon.state !== 'equipped';
-  const isMelee = !!curWeapon().melee;
-  document.getElementById('magcount').textContent = holstered ? '—' : (isMelee ? '∞' : me.mag);
+  const W = curWeapon(); const isMelee = !!W.melee;
+  document.getElementById('magcount').textContent = holstered ? '·' : (isMelee ? '∞' : me.mag);
   document.getElementById('ammosub').textContent = holstered ? 'RANGÉE' : (isMelee ? 'SABRE' : '/ ∞');
+  const ammoEl = document.getElementById('ammo');
+  const max = W.mag || CONFIG.MAG_SIZE || 30;
+  const low = !isMelee && !holstered && me.mag <= Math.ceil(max*0.25);
+  if(ammoEl) ammoEl.classList.toggle('low', low);
+}
+// Pulse de la carte munitions à chaque tir.
+function triggerAmmoPulse(){
+  const a = document.getElementById('ammo'); if(!a) return;
+  a.classList.remove('shoot'); void a.offsetWidth; a.classList.add('shoot');
+}
+// ===== TAGS de statut (toasts) — premium, discrets, auto-disparition =====
+function showHUDToast(text, type, dur){
+  const wrap = document.getElementById('toasts'); if(!wrap) return;
+  const t = document.createElement('div'); t.className = 'toast' + (type ? ' '+type : '');
+  t.textContent = text; wrap.appendChild(t);
+  requestAnimationFrame(()=>t.classList.add('show'));
+  setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(), 220); }, dur ?? 1400);
+}
+// ===== MOMENTUM : equalizer de dots qui s'allument avec la vitesse =====
+const MOMENTUM_DOTS = 9;
+let momentumLit = -1;
+function initMomentum(){
+  const d = document.querySelector('#momentum .mdots'); if(!d || d.children.length) return;
+  for(let i=0;i<MOMENTUM_DOTS;i++){ const s=document.createElement('span'); s.className='mdot'; d.appendChild(s); }
+}
+function updateMomentumHUD(){
+  const m = document.getElementById('momentum'); if(!m) return;
+  const dots = m.querySelectorAll('.mdot'); if(!dots.length) return;
+  const spd = (playing && alive) ? Math.hypot(me.vel.x, me.vel.z) : 0;
+  // 0 à SPRINT = échauffement, au-delà (slide jump / bunny hop) = dots pleins + accent vif
+  const norm = Math.min(1, spd / ((CONFIG.SPRINT_SPEED||9.6) * 1.6));
+  const lit = Math.round(norm * MOMENTUM_DOTS);
+  if(lit !== momentumLit){
+    momentumLit = lit;
+    dots.forEach((dt2,i)=>dt2.classList.toggle('lit', i < lit));
+    m.style.opacity = lit > 0 ? '1' : '.35';
+  }
 }
 function killFeed(txt){
   const f = document.getElementById('killfeed');
@@ -3709,7 +3898,7 @@ function toMenu(msg){
   playing = false; alive = true; myId = -1;
   if(ws){ ws.onclose=null; ws.close(); ws=null; }
   hideAll(); show('menu');
-  const pb = document.getElementById('playbtn'); if(pb){ pb.disabled = false; pb.textContent = 'REJOINDRE LA MÊLÉE'; }
+  const pb = document.getElementById('playbtn'); if(pb){ pb.disabled = false; pb.textContent = 'Rejoindre'; }
   if(msg) alert(msg);
 }
 const gameEl = document.getElementById('game');
@@ -3726,7 +3915,7 @@ document.getElementById('playbtn').onclick = ()=>{
   myName = (inp.value || '').trim().slice(0,16) || ('Joueur' + Math.floor(100 + Math.random()*900));
   inp.value = myName;
   localStorage.setItem('nc_pseudo', myName);
-  const btn = document.getElementById('playbtn'); btn.textContent = 'CONNEXION…'; btn.disabled = true;
+  const btn = document.getElementById('playbtn'); btn.textContent = 'Connexion…'; btn.disabled = true;
   connect();   // on rejoint directement la mêlée (joueur si place libre, sinon spectateur)
 };
 document.getElementById('lobbyback').onclick = ()=>toMenu();
@@ -3738,6 +3927,11 @@ document.getElementById('optbtn').onclick = ()=>{ hideAll(); buildOptions(); sho
 document.getElementById('pauseopt').onclick = ()=>{ hide('pause'); buildOptions(); show('options'); optionsFrom='pause'; };
 document.getElementById('optback').onclick = ()=>{ hide('options'); if(optionsFrom==='pause') show('pause'); else show('menu'); };
 document.getElementById('resumebtn').onclick = ()=>{ hide('pause'); lock(); };
+// QUITTER vers le salon (menu) pendant une partie — on pourra re-cliquer "Rejoindre" pour revenir
+const _pq = document.getElementById('pausequit'); if(_pq) _pq.onclick = ()=>{ toMenu(); };
+// ===== Sons d'interface (clic des boutons de menu) — discret, façon OS premium =====
+function uiClick(){ try{ ensureAudioCtx(); sfx(560, 900, 0.030, 0.05, 'sine'); setTimeout(()=>sfx(1150, 1320, 0.022, 0.022, 'sine'), 16); }catch(e){} }
+document.addEventListener('pointerdown', e=>{ const t=e.target; if(t && t.closest && t.closest('.btn,.bindbtn')) uiClick(); }, true);
 
 /* ---------- Options / remapping ---------- */
 let listening = null;
@@ -4638,14 +4832,17 @@ function applyCamera(dt){
     camera.position.y -= Math.sin(ph)*env*1.4;
     camera.rotateZ(Math.sin(ph*0.8)*env*0.6);
   }
-  // Shake caméra au WALL BOUNCE (léger, vibration brève qui décroît)
+  // Shake caméra au WALL BOUNCE : enveloppe attack→decay fluide (même feel que switch/tir lourd)
   if(wbShake > 0.0001){
-    const amp = (GAMECFG.WALLBOUNCE_SHAKE ?? 0) * wbShake;
-    wbShakePhase += dt * 34 * Math.PI;       // fréquence de la vibration
+    wbShakeT += dt;
+    const atk = 0.04, dec = 0.22;
+    const env = wbShakeT < atk ? (wbShakeT/atk) : Math.exp(-(wbShakeT-atk)/dec);
+    const amp = (GAMECFG.WALLBOUNCE_SHAKE ?? 0) * env;
+    wbShakePhase += dt * 26;                  // basse fréquence = naturel (pas un buzz)
     camera.rotateZ(Math.sin(wbShakePhase) * amp);
-    camera.rotateX(Math.cos(wbShakePhase*1.27) * amp * 0.7);
+    camera.rotateX(Math.cos(wbShakePhase*1.27) * amp * 0.8);
     camera.rotateY(Math.sin(wbShakePhase*0.83) * amp * 0.5);
-    wbShake = Math.max(0, wbShake - dt * 4.5); // dure ~0.22s
+    if(wbShakeT > atk + dec*5) wbShake = 0;
   }
   // Micro-shake caméra au tir (réglable via CAMERA_SHAKE dans shared/config.js).
   // Contrairement au recul principal, celui-ci est une vibration visuelle courte.
@@ -5016,7 +5213,7 @@ function playerUpdate(dt, g){
           me.vel.y = CONFIG.WALLBOUNCE_UP;
           me.wallBounced = true;
           wbKickT = 0;                                   // déclenche le "lean gauche" de l'arme
-          wbShake = 1;                                   // déclenche le shake caméra
+          wbShake = 1; wbShakeT = 0;                     // déclenche le shake caméra (enveloppe attack/decay)
           recoilTarget = Math.max(recoilTarget, 0.5);
           playSfx('wallbounce');
         }
@@ -5686,10 +5883,17 @@ function animate(){
   updateOrbs(dt);
   updateRagdolls(dt);
   updateCrosshair(dt);
+  updateMomentumHUD();
   updateSpeedFx(dt);
   updateSpeedEdge(dt);
   if(deathCam.active) updateDeathCam(dt, g);
-  renderer.render(scene, camera);
+  // Monde : via le composer (AO + bloom) si dispo, sinon rendu standard. Fallback si le composer plante.
+  let worldDrawn = false;
+  if(composer && (GAMECFG.GRAPHICS||{}).POSTFX !== false){
+    try { composer.render(); worldDrawn = true; }
+    catch(e){ console.warn('[NEON] post-FX render erreur → rendu standard', e); composer = null; }
+  }
+  if(!worldDrawn) renderer.render(scene, camera);
   // l'arme par-dessus, avec son FOV propre. Masquée en 3e personne, visible en killcam (arme du tueur).
   const showVM = !deathCam.active || deathCam.phase === 'killcam';
   if(gunCam && gunScene && showVM){
@@ -5712,6 +5916,8 @@ gameEl.addEventListener('click', ()=>{ ensureAudioCtx(); if(((playing && alive) 
 addEventListener('resize', ()=>{
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  if(composer) composer.setSize(innerWidth, innerHeight);
+  if(gtaoPass && gtaoPass.setSize) gtaoPass.setSize(innerWidth, innerHeight);
 });
 
 buildScene(); buildMap(); buildViewmodel(); buildReloadViewmodel(); applyCustomModels(); loadRiggedTemplate(); initAudio(); recInit();
@@ -5719,6 +5925,7 @@ applyCustomHUD();
 applyWeaponHUD();
 applyHudScales();
 buildCrosshair();
+initMomentum();
 document.getElementById('pseudo').value = myName;
 clock = { _last: performance.now(), getDelta(){ const n = performance.now(); const d = (n - this._last) / 1000; this._last = n; return d; } }; // minuteur natif : remplace THREE.Clock (deprecie) sans dependance
 updateHPShieldUI(); updateAmmoUI();
@@ -5732,26 +5939,26 @@ animate();
   const total = wpnTotal + 1 /*rig*/ + sfxTotal;
   const t0 = performance.now(), TIMEOUT = 12000;
   let shown = 0;
-  function tick(){
+  // setInterval (PAS requestAnimationFrame) : la barre progresse et le timeout se déclenche
+  // même si l'onglet est en arrière-plan (rAF est gelé quand l'onglet n'a pas le focus).
+  const iv = setInterval(()=>{
     const n = (weaponModels ? weaponModels.filter(Boolean).length : 0)
             + (RIG_READY ? 1 : 0)
             + Math.min(sfxTotal, Object.keys(audioBuffers).length);
-    shown += (n - shown) * 0.35; // barre lissée (pas de à-coups)
+    shown += (n - shown) * 0.5; // barre lissée
     const frac = total > 0 ? Math.min(1, shown/total) : 1;
     const p = Math.round(frac*100);
     if(bar) bar.style.width = p + '%';
     if(pct) pct.textContent = p + '%';
     const done = n >= total, timedOut = performance.now() - t0 > TIMEOUT;
     if((done && p >= 99) || timedOut){
+      clearInterval(iv);
       if(bar) bar.style.width = '100%'; if(pct) pct.textContent = '100%';
       el.style.opacity = '0';
       setTimeout(()=>{ el.style.display = 'none'; }, 360);
       console.log('[NEON] préchargement terminé', timedOut ? '(timeout)' : '', '— assets:', n+'/'+total);
-      return;
     }
-    requestAnimationFrame(tick);
-  }
-  tick();
+  }, 100);
 })();
 </script>
 </body>

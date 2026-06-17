@@ -26,9 +26,15 @@
       tex_brightness: 0.98,
       // --- Atmosphère ---
       fog_color: '#b8b1a4', fog_near: 50, fog_far: 150, // brume de profondeur
+      // --- POST-FX (vrai shader) : occlusion ambiante + bloom → volume, profondeur, néon qui rayonne ---
+      POSTFX: true,            // false = désactive tout le post-traitement (si souci de perf/rendu)
+      AO: true,                // occlusion ambiante (GTAO) : ombres de contact dans les coins/jointures
+      ao: { radius: 0.6, scale: 1.4, samples: 16 }, // ↑radius = AO plus large, ↑scale = plus marquée
+      BLOOM: true,             // halo lumineux sur les sources vives (sabre, néon, soleil)
+      bloom: { strength: 0.55, radius: 0.5, threshold: 0.8 }, // ↑strength = plus de glow ; threshold = seuil de brillance
     },
     DAMAGE: { BODY: 13, HEAD: 16 },
-    ADS_SPEED: 16,
+    ADS_SPEED: 22,   // vitesse de montée en visée (ADS) plus rapide (réglable en jeu : "Vitesse de visée")
     RED_DOT_SIZE: 0.0016,
     RUN_SHAKE: 1.5,
     // ===== Sway caméra "vivant" : oscillation DIAGONALE gauche↔droite quand on bouge =====
@@ -209,7 +215,7 @@
       {
         name: 'SABRE LASER',
         model: '/models/arms.glb',
-        icon: '/textures/hud/saber.svg',   // logo sabre laser affiché dans le HUD quand il est équipé
+        icon: '/textures/hud/saber.png',   // logo sabre laser affiché dans le HUD quand il est équipé
         melee: true,                 // arme de mêlée (gérée par le système MELEE, pas de tir/munitions)
         auto_center: true, auto_fit: true,
         fit_size: 0.9,               // longueur cible du sabre à l'écran (m) — ↑ = plus grand
@@ -235,6 +241,9 @@
     MELEE: {
       damage: 70,            // dégâts par coup
       range: 3.2,            // portée du coup (m)
+      // --- Cooldown : nombre de coups avant de devoir attendre la recharge (barre bleue HUD) ---
+      max_hits: 5,           // coups disponibles à pleine charge
+      recharge_time: 3.4,    // secondes pour remonter de 0 à plein
       cone_deg: 75,          // ouverture du cône d'attaque devant soi (°)
       interval_ms: 240,      // cadence mini entre 2 coups (anti-spam, côté serveur)
       // --- Rendu de la lame ---
@@ -259,7 +268,8 @@
       hitstop_finisher: 0.11,// gel plus long sur le coup final
       // --- Pose "course KATANA" : quand on sprinte avec le sabre, il se lève et s'incline ---
       // vers le bas/avant comme un samouraï qui court. Pose ADDITIVE (rad / m). 0 = désactivé.
-      katana_run: { pos_y: 0.07, pos_x: 0.05, pos_z: 0.05, tip_down: 0.6, roll: 0.4, yaw: -0.18, speed: 8 },
+      // pos_y bas/négatif = ne monte PAS hors champ ; tip_down+roll = tenu en diagonale (katana de course).
+      katana_run: { pos_y: -0.03, pos_x: 0.05, pos_z: 0.05, tip_down: 0.5, roll: 0.42, yaw: -0.16, speed: 8 },
       // --- Combo : 3 coups procéduraux enchaînés ---
       // Pose ADDITIVE appliquée à l'arme : rot [x,y,z] rad (x+ =pointe bas, y+ =droite, z+ =roll
       // horaire), pos [x,y,z] m (x+ =droite, y+ =haut, z+ =vers soi).
@@ -404,7 +414,7 @@
       return: 0.55,   // temps de RETOUR à zéro (s) — grand = "revient doucement".
     },
     // Léger shake de la caméra joueur au wall bounce. Amplitude en rad (≈ 0.01 = discret). 0 = off.
-    WALLBOUNCE_SHAKE: 0.012,
+    WALLBOUNCE_SHAKE: 0.028,   // amplitude du shake au wall bounce (enveloppe attack/decay, façon switch)
     SWAY_SMOOTH: 2,
     SWAY_AMOUNT: 2,
     IDLE_SWAY: { AMOUNT: 0.10, SPEED: 0.005 },
