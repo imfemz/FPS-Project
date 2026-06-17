@@ -2715,6 +2715,10 @@ function updateMelee(dt){
 
 // Sons procéduraux (souffle + clash électrique) — pas de fichier requis.
 function saberWhoosh(){
+  // À chaque coup : un son de sabre choisi AU HASARD (saber1/2/3). Sinon, synthèse de secours.
+  const variants = ['saber1','saber2','saber3'];
+  const pick = variants[(Math.random()*variants.length)|0];
+  if(audioBuffers[pick]){ playSfx(pick); return; }
   sfx(440, 110, 0.16, 0.06, 'sawtooth');
   sfx(920, 240, 0.12, 0.035, 'triangle');
 }
@@ -2756,6 +2760,7 @@ function switchWeapon(idx){
 }
 function doWeaponSwap(idx){
   // changement effectif du modèle/munitions, à mi-animation (arme en bas)
+  const wasMelee = !!(GAMECFG.WEAPONS[me.weaponIdx] && GAMECFG.WEAPONS[me.weaponIdx].melee); // arme quittée = sabre ?
   resetMelee(); // pas de swing/freeze résiduel d'une arme à l'autre
   switchShake = 1; switchShakeT = 0; // vibration ample (forte au début) qui se stabilise — cf. SWITCH_SHAKE
   me.mags[me.weaponIdx] = me.mag;
@@ -2768,7 +2773,11 @@ function doWeaponSwap(idx){
   proceduralGunParts.forEach(p=>{ p.visible = !anyModel; });
   if(W.sight) sightCenter.set(W.sight[0], W.sight[1], W.sight[2]); else sightCenter.set(0,.14,-.05);
   if(W.muzzle) muzzle.position.set(W.muzzle[0], W.muzzle[1], W.muzzle[2]); else muzzle.position.set(0,.015,-.9);
-  applyWeaponHUD(); updateAmmoUI(); playSfx('equip');
+  applyWeaponHUD(); updateAmmoUI();
+  // son d'équipement : propre au SABRE quand on le sort/range, sinon 'equip' standard
+  if(W.melee) playSfx(audioBuffers['saber_equip'] ? 'saber_equip' : 'equip');
+  else if(wasMelee) playSfx(audioBuffers['saber_holster'] ? 'saber_holster' : 'equip');
+  else playSfx('equip');
 }
 function adsPos(){
   const W = (typeof curWeapon==='function') ? curWeapon() : {};

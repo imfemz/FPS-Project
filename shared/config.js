@@ -560,6 +560,9 @@
       wingman_shot: '/audio/wingman_shot.mp3', wingman_reload: '/audio/wingman_reload.mp3',
       perfect_kill: '/audio/perfect_kill.mp3',   // jingle de félicitation au kill (notif PERFECT KILL / NICE SHOTS)
       velocity: '/audio/velocity.mp3',           // boucle "vitesse" jouée à la vélocité max (fondu d'entrée/sortie)
+      saber_equip: '/audio/saber_equip.mp3',     // sortie du sabre laser
+      saber_holster: '/audio/saber_holster.mp3', // rangement du sabre laser
+      saber1: '/audio/saber1.mp3', saber2: '/audio/saber2.mp3', saber3: '/audio/saber3.mp3', // coups de sabre (aléatoire)
     },
     SFX_VOLUME: 0.6,
     SHOT_PITCH_VAR: 0.18,
