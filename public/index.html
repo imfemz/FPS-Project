@@ -4107,7 +4107,7 @@ function onBotRespawn(m){
    ========================================================================== */
 let localBotMode = false, localBotKills = 0;
 const LBOT = { count: 5, speed: 2.5, respawn: 1500, engage_dist: 12,
-  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4 };  // séparation = distance mini entre bots ; radius = collision joueur ; hit_pad = hitbox généreuse
+  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.2 };  // séparation = distance mini entre bots ; radius = collision joueur ; hit_pad = hitbox un peu plus genereuse (la base est deja elargie)
 const _botTmp = new THREE.Vector3();
 // IA simple mais vivante : chaque bot erre vers une destination, se rapproche du joueur,
 // et strafe quand il est proche. b.anim.m anime les jambes (marche/course).

@@ -44,7 +44,7 @@
     MOMENTUM_FOV: 12, // élargissement FOV max (°) quand le momentum est au max (0 = off) — sensation de vitesse
     // À la mort, le corps se dissout en PARTICULES qui tombent au sol et fade out (false = ancien fondu).
     DEATH_DISSOLVE: true,
-    DEATH_DISSOLVE_CFG: { color: 0xdce8ff, size: 0.10, life: 1.8, per_mesh: 240, max_points: 2000, spread: 0.45, rise: 0.45 },
+    DEATH_DISSOLVE_CFG: { color: 0xdce8ff, size: 0.05, life: 1.8, per_mesh: 240, max_points: 2000, spread: 3.45, rise: 2.75 },
     RED_DOT_SIZE: 0.0016,
     RUN_SHAKE: 1.5,
     // ===== Sway caméra "vivant" : oscillation DIAGONALE gauche↔droite quand on bouge =====
@@ -533,7 +533,10 @@
       character_scale: 1,
       character_yaw_deg: 0,
       hitbox: {
-        radius: 0.32, bottom: 0.10, top: 1.80, top_crouch: 1.15, head: 0.30,
+        // Capsule ÉLARGIE pour bien englober le model 3D (torse ~0.34 de demi-largeur, haut ~1.79 m).
+        // radius 0.42 = marge confortable autour du buste (avant 0.32 ≈ pile au centre) ; bottom 0 = jambes
+        // couvertes jusqu'au sol ; top 1.86 = couvre la tête. Utilisé par le CLIENT et le SERVEUR (multi).
+        radius: 0.42, bottom: 0.0, top: 1.86, top_crouch: 1.22, head: 0.33,
       },
       character_anims: {
         idle:   'CharacterArmature|Idle',
