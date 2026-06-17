@@ -55,7 +55,7 @@
   #hitmarker.kill{transform:translate(-50%,-50%) rotate(45deg) scale(1.65)}
 
   /* ===== Carte VIE / BOUCLIER (bas gauche) ===== */
-  #vitals{position:absolute;left:26px;bottom:26px;width:250px;padding:13px 16px 15px;
+  #vitals{position:absolute;left:26px;bottom:30px;width:240px;padding:13px 18px 15px;
     background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius);
     backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));box-shadow:var(--shadow)}
   #vitals.hurt{animation:hudHurt .28s ease}
@@ -73,10 +73,10 @@
   #shieldsegs .segfill{height:100%;width:100%;background:var(--shield);border-radius:2px;transition:width .2s ease}
 
   /* ===== Carte MUNITIONS / ARME (bas droite) ===== */
-  #ammo{position:absolute;right:26px;bottom:34px;display:flex;align-items:center;gap:16px;
+  #ammo{position:absolute;right:26px;bottom:30px;width:240px;display:flex;align-items:center;justify-content:space-between;gap:16px;
     background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius);
     backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));box-shadow:var(--shadow);
-    padding:12px 18px}
+    padding:13px 18px 15px}
   /* pas de scale de la carte arme au tir — juste un léger pulse d'opacité sur le chiffre */
   #ammo.shoot .mag{animation:magPulse .12s ease}
   @keyframes magPulse{0%{opacity:1}50%{opacity:.5}100%{opacity:1}}
@@ -89,7 +89,7 @@
   #ammo.low .mag{color:var(--red)}
   #ammo .res{font-family:var(--mono);font-size:11px;color:var(--txt-faint);letter-spacing:2px}
   /* Barre de COOLDOWN du sabre (bleu), sous la carte arme, en bas à droite */
-  #cooldownbar{position:absolute;right:26px;bottom:20px;width:158px;height:4px;border-radius:3px;
+  #cooldownbar{position:absolute;right:26px;bottom:18px;width:240px;height:4px;border-radius:3px;
     background:rgba(255,255,255,.10);overflow:hidden;display:none}
   #cooldownbar .cdfill{height:100%;width:100%;background:var(--accent);border-radius:3px;box-shadow:0 0 8px rgba(92,224,255,.5)}
   #cooldownbar.empty .cdfill{background:#ff7a7a;box-shadow:0 0 8px rgba(255,120,120,.55)}
@@ -452,9 +452,12 @@ addEventListener('mousemove', e=>{ if(locked){ mouseDX += e.movementX; mouseDY +
 addEventListener('wheel', e=>{
   if(!cfg.wheelSwitch || !playing || !alive || !locked) return;
   if(weapon.state !== 'equipped' || switchAnim.active) return;
-  const n = (GAMECFG.WEAPONS||[1]).length; if(n < 2) return;
+  // molette = bascule entre les ARMES À FEU uniquement (le sabre reste sur sa touche dédiée)
+  const guns = (GAMECFG.WEAPONS||[]).map((w,i)=>({w,i})).filter(o=>o.w && !o.w.melee).map(o=>o.i);
+  if(guns.length < 2) return;
   const dir = e.deltaY > 0 ? 1 : -1;
-  switchWeapon((me.weaponIdx + dir + n) % n);
+  const cur = guns.indexOf(me.weaponIdx);
+  switchWeapon(cur < 0 ? guns[0] : guns[(cur + dir + guns.length) % guns.length]);
 }, { passive: true });
 
 let gpIndex = -1, gpPrev = [], gpActive = false, _gpLogged = false;
@@ -633,15 +636,20 @@ async function buildPostFX(){
   const G = GAMECFG.GRAPHICS || {};
   if(G.POSTFX === false || !renderer) return;
   try {
-    const [EC, RP, OP, GT, UB] = await Promise.all([
+    const [EC, RP, OP, GT, UB, SM] = await Promise.all([
       import('three/addons/postprocessing/EffectComposer.js'),
       import('three/addons/postprocessing/RenderPass.js'),
       import('three/addons/postprocessing/OutputPass.js'),
       import('three/addons/postprocessing/GTAOPass.js'),
       import('three/addons/postprocessing/UnrealBloomPass.js'),
+      import('three/addons/postprocessing/SMAAPass.js'),
     ]);
-    const c = new EC.EffectComposer(renderer);
-    c.setPixelRatio(Math.min(devicePixelRatio, 2));
+    // Cible multi-échantillonnée (MSAA natif) → l'antialiasing fonctionne MALGRÉ le post-traitement
+    const dpr = Math.min(devicePixelRatio, 2);
+    const rt = new THREE.WebGLRenderTarget(Math.floor(innerWidth*dpr), Math.floor(innerHeight*dpr),
+      { type: THREE.HalfFloatType, samples: (G.aa_samples ?? 4) });
+    const c = new EC.EffectComposer(renderer, rt);
+    c.setPixelRatio(dpr);
     c.setSize(innerWidth, innerHeight);
     c.addPass(new RP.RenderPass(scene, camera));
     if(G.AO !== false){                               // OCCLUSION AMBIANTE : ombres de contact
@@ -660,9 +668,12 @@ async function buildPostFX(){
       c.addPass(new UB.UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight),
         b.strength ?? 0.5, b.radius ?? 0.5, b.threshold ?? 0.82));
     }
+    if(G.AA !== false){                                // ANTI-ALIASING (SMAA) sur l'image post-traitée
+      try { c.addPass(new SM.SMAAPass(innerWidth*dpr, innerHeight*dpr)); } catch(e){}
+    }
     c.addPass(new OP.OutputPass());                    // tone mapping ACES + sRGB en fin de chaîne
     composer = c;
-    console.log('[NEON] post-FX activé : occlusion ambiante (GTAO) + bloom');
+    console.log('[NEON] post-FX activé : anti-aliasing (MSAA+SMAA) + occlusion ambiante (GTAO) + bloom');
   } catch(e){ composer = null; console.warn('[NEON] post-FX indisponible → rendu standard :', e); }
 }
 

@@ -26,10 +26,12 @@
       tex_brightness: 0.98,
       // --- Atmosphère ---
       fog_color: '#b8b1a4', fog_near: 50, fog_far: 150, // brume de profondeur
-      // --- POST-FX (vrai shader) : occlusion ambiante + bloom → volume, profondeur, néon qui rayonne ---
+      // --- POST-FX (vrai shader) : anti-aliasing + occlusion ambiante + bloom ---
       POSTFX: true,            // false = désactive tout le post-traitement (si souci de perf/rendu)
+      AA: true,                // anti-aliasing (MSAA natif + SMAA) — corrige les bords crénelés avec le post-FX
+      aa_samples: 4,           // niveau de MSAA (2 / 4 / 8) — ↑ = plus lisse, un peu plus lourd
       AO: true,                // occlusion ambiante (GTAO) : ombres de contact dans les coins/jointures
-      ao: { radius: 0.6, scale: 1.4, samples: 16 }, // ↑radius = AO plus large, ↑scale = plus marquée
+      ao: { radius: 0.7, scale: 1.7, samples: 16 }, // ↑radius = AO plus large, ↑scale = plus marquée/visible
       BLOOM: true,             // halo lumineux sur les sources vives (sabre, néon, soleil)
       bloom: { strength: 0.55, radius: 0.5, threshold: 0.8 }, // ↑strength = plus de glow ; threshold = seuil de brillance
     },
