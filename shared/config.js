@@ -30,10 +30,12 @@
       POSTFX: true,            // false = désactive tout le post-traitement (si souci de perf/rendu)
       AA: true,                // anti-aliasing (MSAA natif + SMAA) — corrige les bords crénelés avec le post-FX
       aa_samples: 4,           // niveau de MSAA (2 / 4 / 8) — ↑ = plus lisse, un peu plus lourd
-      AO: true,                // occlusion ambiante (GTAO) : ombres de contact dans les coins/jointures
-      // radius plus large = l'AO s'étend du pied des caisses jusqu'au SOL (pas juste entre caisses).
-      // radius = distance de rendu de l'AO ; scale = opacité/force de l'ombrage.
+      AO: false,               // GTAO (occlusion ambiante écran) DÉSACTIVÉE : instable (clignote avec la distance,
+                               // ne couvre pas toutes les faces). Remplacée par une AO BAKED stable (voir BAKED_AO).
       ao: { radius: 2.8, scale: 2.8, distanceExponent: 0.7, thickness: 1.4, samples: 18 },
+      // AO "cuite" (statique, indépendante de la caméra) : ombre de contact au sol sous chaque caisse/mur
+      // + assombrissement progressif du bas des faces verticales. Cohérente sous tous les angles.
+      BAKED_AO: { enabled: true, ground_opacity: 0.5, ground_margin: 0.8, face_darken: 0.34 },
       BLOOM: true,             // halo lumineux sur les sources vives (sabre, néon, soleil)
       bloom: { strength: 0.55, radius: 0.5, threshold: 0.8 }, // ↑strength = plus de glow ; threshold = seuil de brillance
     },
@@ -87,6 +89,8 @@
       pulse_amount: 0.28,    // amplitude de la pulsation
     },
     MAX_SPEED_SERVER: 17,
+    // Son de vitesse : boucle qui monte quand on atteint (presque) la vélocité max, et FONDU SORTANT si on ralentit.
+    VELOCITY_SFX: { enabled: true, speed: 13.5, volume: 0.6, fade_in: 0.12, fade_out: 0.55 },
     SPREAD: { HIP: 0.022, ADS: 0.002, SLIDE: 0.03 },
     FIRE_RATE: 0.056,
     RECOIL: {
@@ -555,6 +559,7 @@
       orb_pickup: '/audio/orb_pickup.mp3', crouch: '/audio/crouch.mp3',
       wingman_shot: '/audio/wingman_shot.mp3', wingman_reload: '/audio/wingman_reload.mp3',
       perfect_kill: '/audio/perfect_kill.mp3',   // jingle de félicitation au kill (notif PERFECT KILL / NICE SHOTS)
+      velocity: '/audio/velocity.mp3',           // boucle "vitesse" jouée à la vélocité max (fondu d'entrée/sortie)
     },
     SFX_VOLUME: 0.6,
     SHOT_PITCH_VAR: 0.18,

@@ -55,29 +55,29 @@
   #hitmarker.kill{transform:translate(-50%,-50%) rotate(45deg) scale(1.65)}
 
   /* ===== Carte VIE / BOUCLIER (bas gauche) ===== */
-  #vitals{position:absolute;left:26px;bottom:30px;width:240px;min-height:135px;padding:13px 18px 15px;
+  #vitals{position:absolute;left:26px;bottom:30px;width:240px;min-height:96px;padding:9px 18px 10px;
     display:flex;flex-direction:column;justify-content:center;
     background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius);
     backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));box-shadow:var(--shadow)}
   #vitals.hurt{animation:hudHurt .28s ease}
   @keyframes hudHurt{0%{transform:translateX(0) scale(var(--hud-scale,1))}25%{transform:translateX(-4px) scale(var(--hud-scale,1))}50%{transform:translateX(3px) scale(var(--hud-scale,1))}75%{transform:translateX(-2px) scale(var(--hud-scale,1))}100%{transform:translateX(0) scale(var(--hud-scale,1))}}
-  #vitals .vtop{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:11px}
-  #hpval{font-family:var(--mono);font-size:38px;font-weight:700;line-height:.85;color:var(--hp);letter-spacing:-1.5px}
+  #vitals .vtop{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:7px}
+  #hpval{font-family:var(--mono);font-size:32px;font-weight:700;line-height:.85;color:var(--hp);letter-spacing:-1.5px}
   #vitals.flash #hpval{color:var(--red)}
   #vitals .vside{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
   #plName{font-size:12px;font-weight:600;letter-spacing:.5px;color:var(--txt-dim);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #vitals .vlabel{font-family:var(--mono);font-size:9px;letter-spacing:3px;color:var(--txt-faint)}
   #healthbar{height:4px;border-radius:3px;background:rgba(255,255,255,.10);overflow:hidden}
   #healthfill{height:100%;width:100%;background:var(--hp);border-radius:3px;transition:width .25s cubic-bezier(.2,.8,.2,1)}
-  #shieldsegs{display:flex;gap:4px;margin-bottom:7px}
+  #shieldsegs{display:flex;gap:4px;margin-bottom:5px}
   #shieldsegs .seg{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.10);overflow:hidden}
   #shieldsegs .segfill{height:100%;width:100%;background:var(--shield);border-radius:2px;transition:width .2s ease}
 
   /* ===== Carte MUNITIONS / ARME (bas droite) ===== */
-  #ammo{position:absolute;right:26px;bottom:30px;width:240px;min-height:135px;display:flex;align-items:center;justify-content:space-between;gap:16px;
+  #ammo{position:absolute;right:26px;bottom:30px;width:240px;min-height:96px;display:flex;align-items:center;justify-content:space-between;gap:16px;
     background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius);
     backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));box-shadow:var(--shadow);
-    padding:13px 18px 15px}
+    padding:9px 18px 10px}
   /* pas de scale de la carte arme au tir — juste un léger pulse d'opacité sur le chiffre */
   #ammo.shoot .mag{animation:magPulse .12s ease}
   @keyframes magPulse{0%{opacity:1}50%{opacity:.5}100%{opacity:1}}
@@ -913,6 +913,37 @@ const mapMeshes = [];
 let floorMesh = null, platMesh = null;
 const wallMeshes = [], crateMeshes = [], rampMeshes = [];
 function mat(c, e, ei){ return new THREE.MeshStandardMaterial({color:c, roughness:.8, emissive:e||0x000000, emissiveIntensity:ei||0}); }
+// ===== AO "BAKED" (statique) — remplace la GTAO instable =====
+// 1) Assombrit le BAS des faces verticales d'un volume (couleurs de sommets) → AO de pied, cohérente sous tout angle.
+function applyVertexAO(geo, h, darken){
+  const pos = geo.attributes.position; if(!pos) return;
+  const n = pos.count, col = new Float32Array(n*3);
+  for(let i=0;i<n;i++){
+    const t = Math.max(0, Math.min(1, (pos.getY(i) + h/2) / h));  // 0 = bas, 1 = haut
+    const f = (1-darken) + darken*t;                              // bas plus sombre
+    col[i*3]=col[i*3+1]=col[i*3+2]=f;
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+}
+// 2) Ombre de contact douce au SOL sous chaque caisse/mur (quad noir dégradé, indépendant de la caméra).
+function addContactShadow(cx, cz, w, d){
+  const B = (GAMECFG.GRAPHICS||{}).BAKED_AO || {};
+  if(B.enabled === false) return;
+  const margin = B.ground_margin ?? 0.8, W = w + margin*2, D = d + margin*2;
+  const ppm = 9, cw = Math.max(16, Math.min(256, Math.round(W*ppm))), ch = Math.max(16, Math.min(256, Math.round(D*ppm)));
+  const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+  const c = cv.getContext('2d');
+  const bx = margin/W*cw, by = margin/D*ch;
+  try { c.filter = 'blur(' + Math.max(4, Math.min(bx, by)*0.85) + 'px)'; } catch(e){}
+  c.fillStyle = '#000';
+  _roundRect(c, bx, by, cw-2*bx, ch-2*by, Math.min(cw, ch)*0.18); c.fill();
+  const tex = new THREE.CanvasTexture(cv);
+  const q = new THREE.Mesh(new THREE.PlaneGeometry(W, D),
+    new THREE.MeshBasicMaterial({ map: tex, color: 0x000000, transparent: true, opacity: B.ground_opacity ?? 0.5,
+      depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, toneMapped: false }));
+  q.rotation.x = -Math.PI/2; q.position.set(cx, 0.02, cz); q.renderOrder = 1;
+  scene.add(q); mapMeshes.push(q);
+}
 function buildMap(){
   const G = GAMECFG.GRAPHICS || {};
   const floorMat = new THREE.MeshStandardMaterial({color:0xc7bba6, roughness: G.floor_roughness ?? .95, metalness: G.floor_metalness ?? 0});
@@ -921,15 +952,19 @@ function buildMap(){
   floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor); mapMeshes.push(floor); floorMesh = floor;
   floor.userData.surface = 'floor';
 
+  const BAO = (GAMECFG.GRAPHICS||{}).BAKED_AO || {};
   for(const b of MAP.blocks){
-    const m = new THREE.Mesh(new THREE.BoxGeometry(b.w,b.h,b.d),
-      new THREE.MeshStandardMaterial({color:b.c, roughness:.85}));
+    const boxGeo = new THREE.BoxGeometry(b.w,b.h,b.d);
+    const boxMat = new THREE.MeshStandardMaterial({color:b.c, roughness:.85});
+    if(BAO.enabled !== false){ applyVertexAO(boxGeo, b.h, BAO.face_darken ?? 0.34); boxMat.vertexColors = true; }
+    const m = new THREE.Mesh(boxGeo, boxMat);
     m.position.set(b.x, b.h/2, b.z); m.castShadow = m.receiveShadow = true; scene.add(m);
     mapMeshes.push(m);
     const isWall = (b.h >= 5);
     (isWall ? wallMeshes : crateMeshes).push(m);
     m.userData.surface = isWall ? 'wall' : 'crate';
     colliders.push({minx:b.x-b.w/2, maxx:b.x+b.w/2, minz:b.z-b.d/2, maxz:b.z+b.d/2, h:b.h});
+    addContactShadow(b.x, b.z, b.w, b.d);   // ombre de contact au sol (AO baked)
     if(b.glow==='top'){
       const strip = new THREE.Mesh(new THREE.BoxGeometry(b.w*0.98,.06,Math.min(b.d,.22)),
         new THREE.MeshStandardMaterial({color:b.gc, emissive:b.gc, emissiveIntensity:0.5}));
@@ -942,11 +977,14 @@ function buildMap(){
     }
   }
   const p = MAP.platform;
-  const plat = new THREE.Mesh(new THREE.BoxGeometry(p.w,p.h,p.d),
-    new THREE.MeshStandardMaterial({color:0xb0a48c, roughness:.85}));
+  const platGeo = new THREE.BoxGeometry(p.w,p.h,p.d);
+  const platMat = new THREE.MeshStandardMaterial({color:0xb0a48c, roughness:.85});
+  if(BAO.enabled !== false){ applyVertexAO(platGeo, p.h, BAO.face_darken ?? 0.34); platMat.vertexColors = true; }
+  const plat = new THREE.Mesh(platGeo, platMat);
   plat.position.set(p.x, p.h/2, p.z); plat.castShadow = plat.receiveShadow = true; scene.add(plat);
   mapMeshes.push(plat); platMesh = plat;
   plat.userData.surface = 'floor';
+  addContactShadow(p.x, p.z, p.w, p.d);   // ombre de contact de la plateforme
   // murets latéraux invisibles le long des rampes : empêchent de "monter par le côté"
   if(MAP.rampSideWalls) for(const w of MAP.rampSideWalls()){
     colliders.push({minx:w.minx, maxx:w.maxx, minz:w.minz, maxz:w.maxz, h:w.h, rampWall:true});
@@ -4647,6 +4685,44 @@ function updateSpeedEdge(dt){
   speedEdgeOpa += (target - speedEdgeOpa) * Math.min(1, dt*10); // entrée/sortie douce
   el.style.opacity = speedEdgeOpa.toFixed(3);
 }
+// ===== Son de VITESSE : boucle qui monte à la vélocité max, FONDU SORTANT si on ralentit =====
+const velSfx = { src:null, gain:null, _stopT:null };
+function setVelocityGain(target){
+  if(!audioCtx) return;
+  const VC = GAMECFG.VELOCITY_SFX || {};
+  const buf = audioBuffers['velocity'];
+  if(target > 0 && !velSfx.src && buf){          // démarre la boucle à la demande
+    try{
+      const s = audioCtx.createBufferSource(); s.buffer = buf; s.loop = true;
+      const g = audioCtx.createGain(); g.gain.value = 0;
+      s.connect(g).connect(audioCtx.destination); s.start();
+      velSfx.src = s; velSfx.gain = g;
+    }catch(e){ return; }
+  }
+  if(!velSfx.gain) return;
+  const now = audioCtx.currentTime, cur = velSfx.gain.gain.value;
+  const fade = target > cur ? (VC.fade_in ?? 0.12) : (VC.fade_out ?? 0.55);
+  velSfx.gain.gain.cancelScheduledValues(now);
+  velSfx.gain.gain.setValueAtTime(cur, now);
+  velSfx.gain.gain.setTargetAtTime(target, now, Math.max(0.02, fade/3)); // fondu exponentiel doux
+  if(target <= 0){                                // coupe la source une fois le fondu terminé
+    clearTimeout(velSfx._stopT);
+    velSfx._stopT = setTimeout(()=>{ if(velSfx.src){ try{ velSfx.src.stop(); }catch(e){} velSfx.src = null; velSfx.gain = null; } },
+      ((VC.fade_out ?? 0.55)*1000) + 250);
+  } else { clearTimeout(velSfx._stopT); velSfx._stopT = null; }
+}
+let _velOn = false;
+function updateVelocitySfx(){
+  const VC = GAMECFG.VELOCITY_SFX || {};
+  if(VC.enabled === false || !audioCtx){ return; }
+  let want = false;
+  if(playing && alive){
+    const spd = Math.hypot(me.vel.x, me.vel.z), hi = VC.speed ?? 13.5;
+    want = _velOn ? (spd >= hi*0.85) : (spd >= hi);   // hystérésis : évite le clignotement au seuil
+  }
+  _velOn = want;
+  setVelocityGain(want ? (VC.volume ?? 0.6) * sfxGain('velocity') : 0);
+}
 function doSuperglide(){
   const SG = GAMECFG.SUPERGLIDE;
   const f = new THREE.Vector3(-Math.sin(me.yaw), 0, -Math.cos(me.yaw));
@@ -6253,6 +6329,7 @@ function animate(){
   updateMomentumHUD();
   updateSpeedFx(dt);
   updateSpeedEdge(dt);
+  updateVelocitySfx();
   if(deathCam.active) updateDeathCam(dt, g);
   // Monde : via le composer (AO + bloom) si dispo, sinon rendu standard. Fallback si le composer plante.
   let worldDrawn = false;
