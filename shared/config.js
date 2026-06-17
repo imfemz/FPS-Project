@@ -35,6 +35,7 @@
     },
     DAMAGE: { BODY: 13, HEAD: 16 },
     ADS_SPEED: 22,   // vitesse de montée en visée (ADS) plus rapide (réglable en jeu : "Vitesse de visée")
+    MOMENTUM_FOV: 12, // élargissement FOV max (°) quand le momentum est au max (0 = off) — sensation de vitesse
     RED_DOT_SIZE: 0.0016,
     RUN_SHAKE: 1.5,
     // ===== Sway caméra "vivant" : oscillation DIAGONALE gauche↔droite quand on bouge =====
@@ -145,6 +146,7 @@
     SUPERGLIDE: {
       ENABLED: true, JUMP_ONLY: true, WINDOW: 0.25, GRACE: 0.14,
       SPEED: 26.0, UP: 6.2, FOV_KICK: 8, FOV_DECAY: 2.6,
+      show_dot: false,   // point bleu de timing superglide : masqué (gênait la visée en grimpe). true = réafficher
     },
     MANTLE_SHAKE: 0.15,
     CLIMB_SHAKE_MULT: 0.45,   // grimpe de mur : fraction du shake mantle (plus bas = plus doux)

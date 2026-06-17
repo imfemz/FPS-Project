@@ -66,9 +66,9 @@
   #vitals .vside{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
   #plName{font-size:12px;font-weight:600;letter-spacing:.5px;color:var(--txt-dim);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #vitals .vlabel{font-family:var(--mono);font-size:9px;letter-spacing:3px;color:var(--txt-faint)}
-  #healthbar{height:4px;border-radius:3px;background:rgba(255,255,255,.10);overflow:hidden;margin-bottom:7px}
+  #healthbar{height:4px;border-radius:3px;background:rgba(255,255,255,.10);overflow:hidden}
   #healthfill{height:100%;width:100%;background:var(--hp);border-radius:3px;transition:width .25s cubic-bezier(.2,.8,.2,1)}
-  #shieldsegs{display:flex;gap:4px}
+  #shieldsegs{display:flex;gap:4px;margin-bottom:7px}
   #shieldsegs .seg{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.10);overflow:hidden}
   #shieldsegs .segfill{height:100%;width:100%;background:var(--shield);border-radius:2px;transition:width .2s ease}
 
@@ -77,8 +77,9 @@
     background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius);
     backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));box-shadow:var(--shadow);
     padding:12px 18px}
-  #ammo.shoot{animation:ammoPulse .11s ease}
-  @keyframes ammoPulse{0%{transform:scale(1)}55%{transform:scale(.975)}100%{transform:scale(1)}}
+  /* pas de scale de la carte arme au tir — juste un léger pulse d'opacité sur le chiffre */
+  #ammo.shoot .mag{animation:magPulse .12s ease}
+  @keyframes magPulse{0%{opacity:1}50%{opacity:.5}100%{opacity:1}}
   #wpnbox{display:flex;flex-direction:column;align-items:flex-end;gap:6px;border-right:1px solid var(--brd);padding-right:16px}
   #wpnname{font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:2px;color:var(--txt-dim)}
   #wpnicon{height:24px;opacity:.92}
@@ -195,12 +196,12 @@
       <div id="hpval">100</div>
       <div class="vside"><div id="plName"></div><div class="vlabel">HP / SHIELD</div></div>
     </div>
-    <div id="healthbar"><div id="healthfill"></div></div>
     <div id="shieldsegs">
       <div class="seg"><div class="segfill"></div></div>
       <div class="seg"><div class="segfill"></div></div>
       <div class="seg"><div class="segfill"></div></div>
     </div>
+    <div id="healthbar"><div id="healthfill"></div></div>
   </div>
   <div id="ammo">
     <div id="wpnbox"><span id="wpnname">R-69</span><span id="wpnicon"></span></div>
@@ -247,7 +248,18 @@
   <div class="optrow"><span style="width:190px;text-align:right">Sensibilité manette</span><input type="range" id="sensgp" min="0.5" max="3" step="0.1"><span id="sensgpv"></span></div>
   <div class="optrow"><span style="width:190px;text-align:right">Aim assist (manette)</span><input type="checkbox" id="aimassist"></div>
   <div class="optrow"><span style="width:190px;text-align:right">Champ de vision (FOV)</span><input type="range" id="fov" min="50" max="100" step="1"><span id="fovv"></span></div>
-  <button class="btn" id="optback">RETOUR</button>
+  <div class="optrow"><span style="width:190px;text-align:right">Vitesse de visée (ADS)</span><input type="range" id="adsspeed" min="10" max="40" step="1"><span id="adsspeedv"></span></div>
+  <div class="optrow"><span style="width:190px;text-align:right">Molette = changer d'arme</span><input type="checkbox" id="wheelswitch"></div>
+  <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--txt-faint);margin:14px 0 4px">VISEUR</div>
+  <div class="optrow"><span style="width:190px;text-align:right">Taille</span><input type="range" id="chsize" min="2" max="30" step="1"><span id="chsizev"></span></div>
+  <div class="optrow"><span style="width:190px;text-align:right">Écart</span><input type="range" id="chgap" min="0" max="40" step="1"><span id="chgapv"></span></div>
+  <div class="optrow"><span style="width:190px;text-align:right">Épaisseur</span><input type="range" id="chthick" min="1" max="8" step="1"><span id="chthickv"></span></div>
+  <div class="optrow"><span style="width:190px;text-align:right">Couleur</span><input type="color" id="chcolor" style="width:44px;height:26px;background:none;border:1px solid var(--brd-strong);border-radius:6px;cursor:pointer"></div>
+  <div class="optrow"><span style="width:190px;text-align:right">Point central</span><input type="checkbox" id="chdot"></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px">
+    <button class="btn ghost" id="specmodebtn" style="display:none">👁 Mode spectateur</button>
+    <button class="btn" id="optback">Retour</button>
+  </div>
 </div>
 
 <div class="screen" id="lobby">
@@ -395,11 +407,16 @@ const DEFAULTS = {
         crouch:'ControlLeft', sprint:'ShiftLeft', reload:'KeyR', shoot:'Mouse0', ads:'Mouse2', holster:'KeyH', weapon1:'Digit1', weapon2:'Digit2', weapon3:'Digit3' },
   gp: { forward:-1, back:-1, left:-1, right:-1, jump:0, crouch:1, sprint:10, reload:2, shoot:7, ads:6, holster:3, weapon_stick:11, weapon3:-1 },
   sensKb: 1.0, sensGp: 1.0, aimAssist: true, crouchMode: 'hold', autoSprint: true, fov: 0,
+  wheelSwitch: false,            // molette souris = changer d'arme (activable en options)
+  adsSpeed: 22,                  // vitesse de montée en visée (ADS)
+  crosshair: { size: 13, gap: 17, thickness: 2, color: '#ffffff', dot: false }, // viseur perso
 };
 let cfg = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('nc_cfg')||'{}'));
 cfg.kb = Object.assign({}, DEFAULTS.kb, cfg.kb); cfg.gp = Object.assign({}, DEFAULTS.gp, cfg.gp);
+cfg.crosshair = Object.assign({}, DEFAULTS.crosshair, cfg.crosshair); // fusion (anciennes sauvegardes)
 if(!cfg.crouchMode) cfg.crouchMode = 'hold';
 if(cfg.autoSprint === undefined) cfg.autoSprint = true;
+if(cfg.adsSpeed === undefined) cfg.adsSpeed = 22;
 // MIGRATION : le stick droit (R3) gère seul armes+holster. On retire tout bind manette
 // en conflit (weapon1/weapon2/holster posés à la main sur le R3) qui bloquait l'arme.
 (function fixWeaponBinds(){
@@ -431,12 +448,27 @@ addEventListener('mousedown', e=>{ keysDown.add('Mouse'+e.button); if(listening)
 addEventListener('mouseup', e=>keysDown.delete('Mouse'+e.button));
 addEventListener('contextmenu', e=>e.preventDefault());
 addEventListener('mousemove', e=>{ if(locked){ mouseDX += e.movementX; mouseDY += e.movementY; } });
+// Molette = changer d'arme (si activé en options) — cycle toutes les armes (R69 / Wingman / Sabre)
+addEventListener('wheel', e=>{
+  if(!cfg.wheelSwitch || !playing || !alive || !locked) return;
+  if(weapon.state !== 'equipped' || switchAnim.active) return;
+  const n = (GAMECFG.WEAPONS||[1]).length; if(n < 2) return;
+  const dir = e.deltaY > 0 ? 1 : -1;
+  switchWeapon((me.weaponIdx + dir + n) % n);
+}, { passive: true });
 
 let gpIndex = -1, gpPrev = [], gpActive = false;
 addEventListener('gamepadconnected', e=>{ gpIndex = e.gamepad.index; });
+addEventListener('gamepaddisconnected', e=>{ if(e.gamepad.index === gpIndex){ gpIndex = -1; gpActive = false; } });
 function pollGamepad(){
   const gps = navigator.getGamepads ? navigator.getGamepads() : [];
-  const g = gpIndex>=0 ? gps[gpIndex] : null;
+  let g = gpIndex>=0 ? gps[gpIndex] : null;
+  // Robustesse : si l'event 'gamepadconnected' a été manqué (manette branchée avant le chargement,
+  // reconnexion, etc.), on récupère la 1re manette connectée. NB : le navigateur n'expose la manette
+  // qu'APRÈS un appui sur un bouton, onglet au premier plan.
+  if(!g){
+    for(let i=0;i<gps.length;i++){ if(gps[i] && gps[i].connected){ gpIndex = i; g = gps[i]; break; } }
+  }
   if(!g) return null;
   const any = g.buttons.some(b=>b.pressed) || g.axes.some(a=>Math.abs(a)>0.25);
   if(any) gpActive = true;
@@ -713,9 +745,23 @@ const WEAPON_SVG = '<svg viewBox="0 0 64 22" fill="none"><rect x="2" y="8" width
 let crosshairCfg = { size:22, gap:7, th:2.5, expand:10, espeed:10 };
 let crosshairExpand = 0;
 function buildCrosshair(){
-  const C = GAMECFG.CROSSHAIR || {};
-  crosshairCfg = { size: C.SIZE ?? 22, gap: C.GAP ?? 7, th: C.THICKNESS ?? 2.5,
-                   expand: C.EXPAND ?? 10, espeed: C.EXPAND_SPEED ?? 10 };
+  const C = GAMECFG.CROSSHAIR || {}, U = cfg.crosshair || {};
+  // les réglages JOUEUR (cfg.crosshair) priment sur les défauts de config
+  crosshairCfg = { size: U.size ?? C.SIZE ?? 13, gap: U.gap ?? C.GAP ?? 17, th: U.thickness ?? C.THICKNESS ?? 2,
+                   expand: C.EXPAND ?? 10, espeed: C.EXPAND_SPEED ?? 14,
+                   color: U.color || '#ffffff', dot: !!U.dot };
+  // couleur + point central
+  document.querySelectorAll('#crosshair .ch').forEach(s=>{ s.style.background = crosshairCfg.color; });
+  const dotEl = document.querySelector('#crosshair .ch-dot');
+  if(dotEl){
+    dotEl.style.background = crosshairCfg.color;
+    dotEl._userDot = crosshairCfg.dot;        // mémorise le choix joueur (le HUD peut le forcer en holster)
+    const ds = Math.max(2, crosshairCfg.th + 1);
+    dotEl._userSize = ds;
+    dotEl.style.width = ds+'px'; dotEl.style.height = ds+'px';
+    dotEl.style.marginLeft = (-ds/2)+'px'; dotEl.style.marginTop = (-ds/2)+'px';
+    if(crosshairCfg.dot) dotEl.style.display = 'block';
+  }
   layoutCrosshair(0);
 }
 function layoutCrosshair(extra){
@@ -2710,6 +2756,7 @@ function connect(){
         myClientId = m.id; maxHp = m.maxHp||100; maxShield = m.maxShield||75;
         MAX_PLAYERS = m.maxPlayers || MAX_PLAYERS; break;
       case 'full': toMenu('Serveur plein (16 connectés). Réessayez plus tard.'); break;
+      case 'spectatefull': showHUDToast('SALON PLEIN (6/6) — vous restez spectateur', 'warn', 2200); break;
       case 'joingame': onJoinGame(m); break;
       case 'roster': onRoster(m); break;
       case 'orb': spawnOrb(m.id, m.p); break;
@@ -3593,17 +3640,21 @@ function setScoreNames(left, right){
   const b = document.createElement('div'); b.textContent = right;
   mid.appendChild(a); mid.appendChild(v); mid.appendChild(b);
 }
-// Spectateur FFA : caméra libre, tous les joueurs sont rendus via le moteur d'entités.
+// Spectateur FFA : vue 1re PERSONNE à travers les yeux d'un joueur (switch entre joueurs).
 function startSpectate(){
   myId = -1; playing = false; alive = true;
-  spec.active = true; spec.follow = -1;
+  spec.active = true; spec.follow = -2;     // -2 = pas encore choisi → on prend le 1er joueur vivant
+  spec._lc = spec._rc = false; spec._returning = false;
   remote.exists = false; if(remote.soldier && remote.soldier.root) remote.soldier.root.visible = false;
   gun.visible = false; runArms.visible = false;
   document.getElementById('hud').style.display = 'block';
   document.getElementById('vitals').style.display = 'none';
   document.getElementById('ammo').style.display = 'none';
+  const cb = document.getElementById('cooldownbar'); if(cb) cb.style.display = 'none';
+  const mo = document.getElementById('momentum'); if(mo) mo.style.display = 'none';
   document.getElementById('crosshair').style.display = 'none';
-  const sh = document.getElementById('spechelp'); if(sh) sh.style.display = 'block';
+  const sh = document.getElementById('spechelp');
+  if(sh){ sh.style.display = 'block'; sh.innerHTML = 'SPECTATEUR · <b>Clic G</b> joueur suivant · <b>Clic D</b> précédent · <b>F</b> caméra libre · <b>R</b> revenir jouer'; }
   const si = document.getElementById('specinfo'); if(si) si.style.display = 'block';
   spec.pos.set(0, 18, 30); me.yaw = Math.PI; me.pitch = -0.5;
   lock();
@@ -3613,45 +3664,71 @@ function stopSpectate(){
   gun.visible = (weapon.state !== 'holstered');
   document.getElementById('vitals').style.display = '';
   document.getElementById('ammo').style.display = '';
+  const mo = document.getElementById('momentum'); if(mo) mo.style.display = '';
   document.getElementById('crosshair').style.display = '';
   const sh = document.getElementById('spechelp'); if(sh) sh.style.display = 'none';
   const si = document.getElementById('specinfo'); if(si) si.style.display = 'none';
 }
+function specAliveSeats(){
+  const out = [];
+  if(botMgr) for(const [seat,b] of botMgr){ if(b && !b.dead && b.pos) out.push(seat); }
+  return out.sort((a,b)=>a-b);
+}
+function specCycle(dir){
+  const a = specAliveSeats(); if(!a.length){ spec.follow = -1; return; }
+  let i = a.indexOf(spec.follow);
+  if(i < 0) spec.follow = a[0];
+  else spec.follow = a[(i + dir + a.length) % a.length];
+}
+function returnToPlay(){
+  if(spec._returning) return; spec._returning = true;
+  if(ws && ws.readyState === 1) ws.send(JSON.stringify({ t:'play' }));
+  setTimeout(()=>{ spec._returning = false; }, 900);
+}
 function specUpdate(dt, g){
-  const sens = 0.0021 * cfg.sensKb;
-  me.yaw += -mouseDX*sens; me.pitch += -mouseDY*sens;
-  mouseDX = 0; mouseDY = 0;
-  if(g){
-    const rx = dz(g.axes[2]||0), ry = dz(g.axes[3]||0);
-    me.yaw += -rx*2.2*cfg.sensGp*dt; me.pitch += -ry*2.2*cfg.sensGp*dt;
+  // ----- switch de joueur : clic gauche = suivant, clic droit = précédent, F = caméra libre -----
+  const lc = keysDown.has('Mouse0'), rc = keysDown.has('Mouse2');
+  if(lc && !spec._lc) specCycle(1);
+  if(rc && !spec._rc) specCycle(-1);
+  spec._lc = lc; spec._rc = rc;
+  if(keysDown.has('KeyF')) spec.follow = -1;
+  if(keysDown.has('KeyR')) returnToPlay();
+  for(let i=0;i<6;i++){ if(keysDown.has('Digit'+(i+1))){ const b=botMgr.get(i); if(b && !b.dead) spec.follow = i; } }
+  // 1er choix / cible morte → on bascule sur un joueur vivant
+  if(spec.follow === -2 || (spec.follow >= 0 && (!botMgr.get(spec.follow) || botMgr.get(spec.follow).dead))){
+    const a = specAliveSeats(); spec.follow = a.length ? a[0] : -1;
   }
-  me.pitch = Math.max(-1.5, Math.min(1.5, me.pitch));
-  if(keysDown.has('Digit1')) spec.follow = 0;
-  if(keysDown.has('Digit2')) spec.follow = 1;
-  if(keysDown.has('KeyF') || keysDown.has('Digit3')) spec.follow = -1;
-  if(spec.follow >= 0 && spec.soldiers[spec.follow]){
-    const t = spec.soldiers[spec.follow].root.position;
-    spec.pos.set(t.x + Math.sin(me.yaw)*4.5, t.y + 2.6, t.z + Math.cos(me.yaw)*4.5);
+  const fol = spec.follow >= 0 ? botMgr.get(spec.follow) : null;
+  const si = document.getElementById('specinfo');
+  if(fol && fol.pos){
+    // ===== VUE 1RE PERSONNE : œil + regard exact du joueur suivi =====
+    const eye = (fol.anim && fol.anim.c) ? CONFIG.EYE_CROUCH : CONFIG.EYE_STAND;
+    camera.position.set(fol.pos.x, fol.pos.y + eye, fol.pos.z);
+    camera.rotation.set(0,0,0); camera.rotateY(fol.yaw || 0); camera.rotateX(fol.pitch || 0);
+    spec.pos.copy(camera.position);
+    if(si) si.textContent = '👁 ' + (nameOfSeat(spec.follow) || ('JOUEUR ' + (spec.follow+1))).toUpperCase();
   } else {
+    // ===== caméra libre (aucun joueur vivant, ou touche F) =====
+    const sens = 0.0021 * cfg.sensKb;
+    me.yaw += -mouseDX*sens; me.pitch += -mouseDY*sens; mouseDX = 0; mouseDY = 0;
+    if(g){ const rx = dz(g.axes[2]||0), ry = dz(g.axes[3]||0); me.yaw += -rx*2.2*cfg.sensGp*dt; me.pitch += -ry*2.2*cfg.sensGp*dt; }
+    me.pitch = Math.max(-1.5, Math.min(1.5, me.pitch));
     const f = new THREE.Vector3(-Math.sin(me.yaw)*Math.cos(me.pitch), Math.sin(me.pitch), -Math.cos(me.yaw)*Math.cos(me.pitch));
     const r = new THREE.Vector3(-f.z, 0, f.x).normalize();
     const mv = new THREE.Vector3();
-    if(actionDown('forward')) mv.add(f);
-    if(actionDown('back')) mv.sub(f);
-    if(actionDown('right')) mv.add(r);
-    if(actionDown('left')) mv.sub(r);
-    if(g){ const lx = dz(g.axes[0]||0), ly = dz(g.axes[1]||0);
-      mv.add(f.clone().multiplyScalar(-ly)).add(r.clone().multiplyScalar(lx)); }
-    if(actionDown('jump', g)) mv.y += 1;
-    if(actionDown('crouch', g)) mv.y -= 1;
+    if(actionDown('forward')) mv.add(f); if(actionDown('back')) mv.sub(f);
+    if(actionDown('right')) mv.add(r); if(actionDown('left')) mv.sub(r);
+    if(g){ const lx = dz(g.axes[0]||0), ly = dz(g.axes[1]||0); mv.add(f.clone().multiplyScalar(-ly)).add(r.clone().multiplyScalar(lx)); }
+    if(actionDown('jump', g)) mv.y += 1; if(actionDown('crouch', g)) mv.y -= 1;
     const sp = actionDown('sprint', g) ? 22 : 12;
     if(mv.lengthSq() > 0) spec.pos.addScaledVector(mv.normalize(), sp*dt);
     spec.pos.x = Math.max(-MAP.HALF, Math.min(MAP.HALF, spec.pos.x));
     spec.pos.z = Math.max(-MAP.HALF, Math.min(MAP.HALF, spec.pos.z));
     spec.pos.y = Math.max(0.5, Math.min(45, spec.pos.y));
+    camera.position.copy(spec.pos);
+    camera.rotation.set(0,0,0); camera.rotateY(me.yaw); camera.rotateX(me.pitch);
+    if(si) si.textContent = 'SPECTATEUR · CAMÉRA LIBRE · R = revenir jouer';
   }
-  camera.position.copy(spec.pos);
-  camera.rotation.set(0,0,0); camera.rotateY(me.yaw); camera.rotateX(me.pitch);
 }
 function interpBuf(buf, out){
   const rt = netRenderTime();
@@ -3663,6 +3740,7 @@ function interpBuf(buf, out){
   const t = Math.max(0, Math.min((rt - a.at)/span, 1 + 120/span));
   out.pos.set(a.p[0]+(b.p[0]-a.p[0])*t, a.p[1]+(b.p[1]-a.p[1])*t, a.p[2]+(b.p[2]-a.p[2])*t);
   out.yaw = lerpAngle(a.yaw, b.yaw, t);
+  out.pitch = (a.pitch||0) + ((b.pitch||0)-(a.pitch||0))*t; // pour la vue 1re personne du spectateur
   out.anim = b.anim || {};
   return out;
 }
@@ -3966,6 +4044,28 @@ function buildOptions(){
   if(!cfg.fov) cfg.fov = GAMECFG.FOV.VIEW; // défaut = FOV config la 1re fois
   fv.value = cfg.fov; document.getElementById('fovv').textContent = cfg.fov;
   fv.oninput = ()=>{ cfg.fov=+fv.value; document.getElementById('fovv').textContent=cfg.fov; saveCfg(); };
+  // Vitesse de visée (ADS)
+  const ads = document.getElementById('adsspeed');
+  if(ads){ ads.value = cfg.adsSpeed; document.getElementById('adsspeedv').textContent = cfg.adsSpeed;
+    ads.oninput = ()=>{ cfg.adsSpeed=+ads.value; document.getElementById('adsspeedv').textContent=cfg.adsSpeed; saveCfg(); }; }
+  // Molette = changer d'arme
+  const ws = document.getElementById('wheelswitch');
+  if(ws){ ws.checked = !!cfg.wheelSwitch; ws.onchange = ()=>{ cfg.wheelSwitch = ws.checked; saveCfg(); }; }
+  // Viseur personnalisable (taille / écart / épaisseur / couleur / point)
+  const cc = cfg.crosshair;
+  const bindCh = (id, key, valId)=>{ const el=document.getElementById(id); if(!el) return;
+    el.value = cc[key]; if(valId) document.getElementById(valId).textContent = cc[key];
+    el.oninput = ()=>{ cc[key] = (el.type==='range') ? +el.value : el.value; if(valId) document.getElementById(valId).textContent = cc[key]; saveCfg(); buildCrosshair(); };
+  };
+  bindCh('chsize','size','chsizev'); bindCh('chgap','gap','chgapv'); bindCh('chthick','thickness','chthickv'); bindCh('chcolor','color',null);
+  const cd = document.getElementById('chdot');
+  if(cd){ cd.checked = !!cc.dot; cd.onchange = ()=>{ cc.dot = cd.checked; saveCfg(); buildCrosshair(); }; }
+  // Mode spectateur : visible seulement en jeu (assis). Libère la place et passe en vue 1re personne.
+  const smb = document.getElementById('specmodebtn');
+  if(smb){
+    smb.style.display = (myId >= 0 && playing) ? '' : 'none';
+    smb.onclick = ()=>{ if(ws && ws.readyState===1){ ws.send(JSON.stringify({ t:'spectate' })); } hide('options'); };
+  }
   refreshCrouchModeUI();
   document.getElementById('cmhold').onclick = ()=>{ cfg.crouchMode='hold'; me.crouchToggleState=false; saveCfg(); refreshCrouchModeUI(); };
   document.getElementById('cmtoggle').onclick = ()=>{ cfg.crouchMode='toggle'; saveCfg(); refreshCrouchModeUI(); };
@@ -4236,6 +4336,7 @@ function applyCustomAnim(dt){
 /* ---------- Grimpe (mantle) + superglide ---------- */
 let lastJumpPress = -1e9, lastCrouchPress = -1e9, mantleEndAt = -1e9, sgFiredAt = -1e9;
 let sgFovKick = 0; // différentiel de FOV pendant le superglide (degrés, décroît)
+let momentumFov = 0; // élargissement FOV lissé quand on atteint un gros momentum (sensation de vitesse)
 /* ---- Overlay "vitesse" (lignes d'action facon manga) ---- */
 const speedLines = [];
 let speedFxT = 0, speedFxDur = 1.8, speedFxCanvas = null, speedFxCtx = null;
@@ -4317,9 +4418,10 @@ function trySuperglide(){
   const now = performance.now();
   const dot = document.getElementById('sgdot');
   const inGrace = now - mantleEndAt <= SG.GRACE*1000;
+  const showDot = GAMECFG.SUPERGLIDE.show_dot === true; // OFF par défaut : le point bleu n'obstrue plus la visée
   if(!me.mantle.active){
-    dot.style.display = inGrace ? 'block' : 'none';
-    if(inGrace) dot.classList.add('ready');
+    dot.style.display = (inGrace && showDot) ? 'block' : 'none';
+    if(inGrace && showDot) dot.classList.add('ready');
   }
   if(!inGrace) return;
   const windowStart = mantleEndAt - SG.WINDOW*1000;
@@ -4354,8 +4456,9 @@ function updateMantle(dt, jumpEdge, crouchEdge){
   me.pos.z = m.from.z + (m.to.z - m.from.z)*fwd;
   // Rond bleu : visible pendant la grimpe, brillant dans la fenêtre de superglide
   const dot = document.getElementById('sgdot');
-  dot.style.display = 'block';
-  dot.classList.toggle('ready', m.t > CONFIG.MANTLE_T - GAMECFG.SUPERGLIDE.WINDOW);
+  const showDot = GAMECFG.SUPERGLIDE.show_dot === true; // point bleu masqué par défaut (gêne la visée en grimpe)
+  dot.style.display = showDot ? 'block' : 'none';
+  if(showDot) dot.classList.toggle('ready', m.t > CONFIG.MANTLE_T - GAMECFG.SUPERGLIDE.WINDOW);
   if(prog >= 1){
     m.active = false;
     me.onGround = true; me.wallBounced = false;
@@ -5259,11 +5362,21 @@ function playerUpdate(dt, g){
 
   /* --- ADS --- */
   const wantAds = actionDown('ads', g) && !me.reloading && weapon.state==='equipped' && !curWeapon().melee; // pas de visée avec le sabre
-  adsAmount += ((wantAds?1:0) - adsAmount)*Math.min(1, dt*CONFIG.ADS_SPEED);
+  // Vitesse de montée en visée — réglable en jeu (cfg.adsSpeed) : plus haut = l'arme arrive plus vite.
+  adsAmount += ((wantAds?1:0) - adsAmount)*Math.min(1, dt*(cfg.adsSpeed || CONFIG.ADS_SPEED));
   // FOV du MONDE = base → ADS, plus le coup de FOV du superglide qui retombe
   sgFovKick = Math.max(0, sgFovKick - dt * (GAMECFG.SUPERGLIDE.FOV_DECAY || 3) * 10);
   const baseFov = cfg.fov || GAMECFG.FOV.VIEW;
-  const viewFov = baseFov - adsAmount*(baseFov - (GAMECFG.FOV.ADS)) + sgFovKick;
+  // FOV momentané quand on atteint un GROS momentum (slide jump / bunny hop) — lissé, rapide, pas brutal
+  const MF = GAMECFG.MOMENTUM_FOV ?? 0;
+  let mfTarget = 0;
+  if(MF > 0 && playing && alive){
+    const norm = Math.hypot(me.vel.x, me.vel.z) / ((CONFIG.SPRINT_SPEED||9.6) * 1.6); // 1 ≈ momentum max
+    const k = Math.max(0, Math.min(1, (norm - 0.6) / 0.4));   // ne s'active qu'au HAUT momentum
+    mfTarget = MF * k * k * (1 - adsAmount*0.85);             // annulé en visée
+  }
+  momentumFov += (mfTarget - momentumFov) * Math.min(1, dt*7); // lissage rapide mais doux
+  const viewFov = baseFov - adsAmount*(baseFov - (GAMECFG.FOV.ADS)) + sgFovKick + momentumFov;
   camera.fov = viewFov;
   camera.updateProjectionMatrix();
   applyCustomAnim(dt);
@@ -5284,6 +5397,11 @@ function playerUpdate(dt, g){
       dotEl.style.display = 'block';
       dotEl.style.width = dotSize+'px'; dotEl.style.height = dotSize+'px';
       dotEl.style.marginLeft = (-dotSize/2)+'px'; dotEl.style.marginTop = (-dotSize/2)+'px';
+    } else if(!holstered && dotEl._userDot){
+      const ds = dotEl._userSize || 4;          // point central perso (réglé dans les options)
+      dotEl.style.display = 'block';
+      dotEl.style.width = ds+'px'; dotEl.style.height = ds+'px';
+      dotEl.style.marginLeft = (-ds/2)+'px'; dotEl.style.marginTop = (-ds/2)+'px';
     } else dotEl.style.display = 'none';
   }
   ch.style.opacity = holstered ? (dotSize>0 ? 0.9 : 0) : (1 - adsAmount);
@@ -5829,17 +5947,19 @@ function animate(){
   }
   // ----- Bot mode : interpolation + animation + pas de chaque bot -----
   if(botActive && botMgr.size){
-    const tmp = { pos: new THREE.Vector3(), yaw: 0, anim: {} };
-    for(const b of botMgr.values()){
+    const tmp = { pos: new THREE.Vector3(), yaw: 0, pitch: 0, anim: {} };
+    for(const [seat, b] of botMgr){
       if(!b.soldier){ // le rig n'était pas prêt à la création → on réessaie
         if(RIG_READY && RIG_TEMPLATE){ b.soldier = createSoldierRigged(b.accent||0xff7755); scene.add(b.soldier.root); }
         else continue;
       }
       if(!b.dead && !b.soldier.ragdolling){
-        if(interpBuf(b.buf, tmp)){ b.pos.copy(tmp.pos); b.yaw = tmp.yaw; b.anim = tmp.anim; }
+        if(interpBuf(b.buf, tmp)){ b.pos.copy(tmp.pos); b.yaw = tmp.yaw; b.pitch = tmp.pitch; b.anim = tmp.anim; }
         b.soldier.root.position.set(b.pos.x, b.pos.y, b.pos.z);
         b.soldier.root.rotation.set(0, b.yaw + Math.PI, 0);
         animateSoldier(b.soldier, b.anim, dt, performance.now()*0.001);
+        // spectateur 1re personne : on masque le corps du joueur dont on regarde les yeux
+        b.soldier.root.visible = !(spec.active && spec.follow === seat);
         // pas spatialisés
         b.stepT = (b.stepT ?? 0) - dt;
         if(b.anim && b.anim.m > 0.25 && b.stepT <= 0){

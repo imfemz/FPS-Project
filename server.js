@@ -179,9 +179,10 @@ function seatClient(c) {
   return s;
 }
 // Quand une place se libère, on y promeut le spectateur connecté depuis le plus longtemps.
-function promoteSpectator() {
+function promoteSpectator(exceptId) {
   if (freeSeat() < 0) return;
   for (const c of clients.values()) {
+    if (exceptId != null && c.id === exceptId) continue; // ne pas re-asseoir celui qui vient de passer spectateur
     if (c.seat === null) {
       const s = seatClient(c);
       if (s >= 0) { send(c, joinMsg(s)); return; }
@@ -336,6 +337,18 @@ wss.on('connection', (ws) => {
     if (m.t === 'play' && c.seat === null) {
       const seat = seatClient(c);
       if (seat >= 0) { send(c, joinMsg(seat)); broadcastRoster(); }
+      else send(c, { t: 'spectatefull' }); // aucune place libre → on reste spectateur
+      return;
+    }
+    // Un joueur peut PASSER spectateur volontairement (libère sa place).
+    if (m.t === 'spectate' && c.seat !== null) {
+      const s = c.seat;
+      seats[s] = null; players[s] = null; scores[s] = 0; c.seat = null;
+      broadcast({ t: 'playerleft', seat: s, name: c.name });
+      if (playerCount() === 0) { phase = 'idle'; orbs = []; }
+      send(c, joinMsg(-1));          // renvoie l'état en spectateur
+      promoteSpectator(c.id);         // une place s'est libérée → promeut un AUTRE spectateur (pas le partant)
+      broadcastRoster();
       return;
     }
 
