@@ -510,6 +510,11 @@ function actionDown(name, g){
 
 /* ---------- Scène ---------- */
 let scene, camera, renderer, clock;
+// Calque "overlays" (nuages, soleil, nombres de dégâts, barres de vie, particules de mort…).
+// L'occlusion ambiante (GTAO) ne doit PAS les voir : sinon ils deviennent des CARRÉS NOIRS
+// (GTAO les traite comme des surfaces opaques et les assombrit). La caméra principale les rend,
+// mais la caméra dédiée de l'AO (gtaoCam) ignore ce calque.
+const AO_SKIP_LAYER = 1;
 let locked = false, playing = false, alive = true;
 // État de la caméra de mort (3e personne → kill cam)
 const deathCam = {
@@ -582,6 +587,7 @@ function buildScene(){
   scene.background = new THREE.Color(0xb8b1a4);
   scene.fog = new THREE.Fog(new THREE.Color(G.fog_color || 0xcfe2f0), G.fog_near ?? 60, G.fog_far ?? 170);
   camera = new THREE.PerspectiveCamera(GAMECFG.FOV.VIEW, innerWidth/innerHeight, 0.05, 400);
+  camera.layers.enable(AO_SKIP_LAYER); // la caméra principale rend aussi les overlays (sprites/particules)
   gunCam = new THREE.PerspectiveCamera(GAMECFG.FOV.WEAPON, innerWidth/innerHeight, 0.01, 50);
   renderer = new THREE.WebGLRenderer({antialias:true});
   renderer.setSize(innerWidth, innerHeight);
@@ -647,7 +653,7 @@ function buildEnvironment(){
 // ===== POST-FX : occlusion ambiante (GTAO) + bloom → volume/profondeur (anti "plat") =====
 // Imports DYNAMIQUES : si le CDN échoue, on désactive juste le post-FX (le jeu tourne quand même).
 // Désactivable via GRAPHICS.POSTFX:false (ou AO:false / BLOOM:false) dans shared/config.js.
-let composer = null, gtaoPass = null;
+let composer = null, gtaoPass = null, gtaoCam = null;
 async function buildPostFX(){
   const G = GAMECFG.GRAPHICS || {};
   if(G.POSTFX === false || !renderer) return;
@@ -669,7 +675,12 @@ async function buildPostFX(){
     c.setSize(innerWidth, innerHeight);
     c.addPass(new RP.RenderPass(scene, camera));
     if(G.AO !== false){                               // OCCLUSION AMBIANTE : ombres de contact
-      gtaoPass = new GT.GTAOPass(scene, camera, innerWidth, innerHeight);
+      // Caméra DÉDIÉE à l'AO : copie la principale mais ignore le calque overlay (AO_SKIP_LAYER).
+      // Ainsi GTAO ne calcule l'occlusion QUE sur le décor/joueurs, jamais sur les sprites/particules
+      // (nuages, soleil, nombres de dégâts, barres de vie…) → plus de carrés noirs.
+      gtaoCam = camera.clone();
+      gtaoCam.layers.set(0);
+      gtaoPass = new GT.GTAOPass(scene, gtaoCam, innerWidth, innerHeight);
       try {
         const ao = G.ao || {};
         gtaoPass.updateGtaoMaterial && gtaoPass.updateGtaoMaterial({
@@ -718,14 +729,14 @@ function buildSky(){
     new THREE.MeshBasicMaterial({map:_skyTex, side:THREE.BackSide, fog:false, depthWrite:false}));
   scene.add(skyDome);
   const sun = new THREE.Sprite(new THREE.SpriteMaterial({map:makeRadialTexture('rgba(228,224,214,0.85)','rgba(228,224,214,0)'), transparent:true, fog:false, depthWrite:false, toneMapped:false}));
-  sun.scale.set(70,70,1); sun.position.set(146,218,90); scene.add(sun);
+  sun.scale.set(70,70,1); sun.position.set(146,218,90); sun.layers.set(AO_SKIP_LAYER); scene.add(sun);
   const cloudTex = makeCloudTexture();
   for(let i=0;i<8;i++){
     const cl = new THREE.Sprite(new THREE.SpriteMaterial({map:cloudTex, transparent:true, opacity:.55+Math.random()*.25, fog:false, depthWrite:false}));
     const a = Math.random()*Math.PI*2, r = 140+Math.random()*120;
     cl.position.set(Math.cos(a)*r, 60+Math.random()*70, Math.sin(a)*r);
     const s = 40+Math.random()*55; cl.scale.set(s, s*0.45, 1);
-    scene.add(cl);
+    cl.layers.set(AO_SKIP_LAYER); scene.add(cl);
   }
   // Skybox personnalisée appliquée sur le dôme via un shader :
   // - échantillonnage MIROIR horizontal → la couture verticale du panorama disparaît
@@ -1385,7 +1396,7 @@ function spawnDeathDissolve(sol){
   const mat = new THREE.PointsMaterial({ size: D.size ?? 0.075, color: new THREE.Color(D.color || 0xcfe0ff),
     transparent:true, opacity:1, depthWrite:false, blending:THREE.AdditiveBlending });
   mat.toneMapped = false;
-  const cloud = new THREE.Points(geo, mat); cloud.frustumCulled = false; scene.add(cloud);
+  const cloud = new THREE.Points(geo, mat); cloud.frustumCulled = false; cloud.layers.set(AO_SKIP_LAYER); scene.add(cloud);
   const vel = new Float32Array(n*3);
   for(let i=0;i<n;i++){ vel[i*3]=(Math.random()-.5)*0.8; vel[i*3+1]=0.2+Math.random()*0.6; vel[i*3+2]=(Math.random()-.5)*0.8; }
   deathClouds.push({ cloud, geo, mat, vel, life: D.life ?? 1.7, max: D.life ?? 1.7 });
@@ -1559,6 +1570,7 @@ function addDamage(key, dmg, head, worldPos, shield){
   if(!cnt || now - cnt.lastAt > winMs){ // nouvelle rafale → nouveau compteur
     if(cnt){ scene.remove(cnt.sprite); if(cnt.sprite.material.map) cnt.sprite.material.map.dispose(); }
     cnt = dmgCounters[key] = { sprite: new THREE.Sprite(new THREE.SpriteMaterial({transparent:true, depthTest:false})), value: 0, lastAt: now, head:false, shield:false, rise:0 };
+    cnt.sprite.layers.set(AO_SKIP_LAYER);
     scene.add(cnt.sprite);
   }
   cnt.value += dmg; cnt.lastAt = now; cnt.head = !!head; cnt.shield = !!shield; cnt.rise = 0;
@@ -1709,6 +1721,7 @@ function showHealthBar(key, hp, sh, crouch){
   let e = healthBars[key];
   if(!e){
     e = healthBars[key] = { sprite: new THREE.Sprite(new THREE.SpriteMaterial({transparent:true, depthTest:false})), aspect: HB.aspect || 7 };
+    e.sprite.layers.set(AO_SKIP_LAYER);
     scene.add(e.sprite);
   }
   e.lastAt = now; e.crouch = !!crouch; e.death = null;
@@ -4005,7 +4018,15 @@ function onBotRespawn(m){
    Réutilise les handlers existants onBotStart / onBotHit / onBotKill / onBotRespawn.
    ========================================================================== */
 let localBotMode = false, localBotKills = 0;
-const LBOT = { count: 4, speed: 1.7, respawn: 1500 };
+const LBOT = { count: 5, speed: 4.2, respawn: 1500, engage_dist: 12 };
+const _botTmp = new THREE.Vector3();
+// IA simple mais vivante : chaque bot erre vers une destination, se rapproche du joueur,
+// et strafe quand il est proche. b.anim.m anime les jambes (marche/course).
+function initLocalBotAI(b){
+  const lim = (MAP.HALF || 30) - 3;
+  b.mv = { tx:(Math.random()*2-1)*lim, tz:(Math.random()*2-1)*lim,
+           retarget: 1.2 + Math.random()*2.2, strafeDir: Math.random()<.5?1:-1, strafeT: 0.6+Math.random() };
+}
 function lbotSpawnPoint(){ const a = Math.random()*Math.PI*2, r = 9 + Math.random()*7; return [Math.cos(a)*r, 0, Math.sin(a)*r]; }
 function startLocalBotMode(){
   // Mode solo : on coupe le réseau proprement (pas de message "connexion perdue")
@@ -4015,7 +4036,7 @@ function startLocalBotMode(){
   for(let i=0;i<LBOT.count;i++) bots.push({ id: i+1, p: lbotSpawnPoint(), yaw: Math.random()*Math.PI*2 });
   onBotStart({ humanSeat: 0, spawns: MAP.spawns, bots, countdown: 3 });   // crée le décor + le décompte
   for(const bb of bots){ const b = botMgr.get(bb.id); if(b){ b.hp = maxHp; b.sh = maxShield; b._shPrev = maxShield;
-    b.mv = { dir: Math.random()<.5?1:-1, t:0, dur: 1.2 + Math.random()*1.4 }; } }
+    initLocalBotAI(b); } }
   // HUD : score d'entraînement (cache le tableau FFA)
   const lb = document.getElementById('leaderboard'); if(lb) lb.style.display = 'none';
   const sc = document.getElementById('score'); if(sc) sc.style.display = 'flex';
@@ -4025,17 +4046,41 @@ function updateLocalBots(dt){
   const lim = (MAP.HALF || 30) - 2;
   for(const [id,b] of botMgr){
     if(b.dead || !b.pos) continue;
-    if(!b.mv) b.mv = { dir: 1, t: 0, dur: 1.5 };
-    b.mv.t += dt;
-    if(b.mv.t >= b.mv.dur){ b.mv.dir *= -1; b.mv.t = 0; b.mv.dur = 1.2 + Math.random()*1.4; }
-    const dx = me.pos.x - b.pos.x, dz = me.pos.z - b.pos.z;
-    b.yaw = Math.atan2(dx, dz);                       // face le joueur
-    const rx = Math.cos(b.yaw), rz = -Math.sin(b.yaw); // strafe perpendiculaire (cible mouvante)
-    const nx = b.pos.x + rx * LBOT.speed * b.mv.dir * dt;
-    const nz = b.pos.z + rz * LBOT.speed * b.mv.dir * dt;
-    if(Math.abs(nx) > lim || Math.abs(nz) > lim) b.mv.dir *= -1;
-    else { b.pos.x = nx; b.pos.z = nz; }
-    b.pos.y = 0; b.buf.length = 0;                    // position locale = vérité (pas d'interp réseau)
+    if(!b.mv) initLocalBotAI(b);
+    const mv = b.mv;
+    const dxp = me.pos.x - b.pos.x, dzp = me.pos.z - b.pos.z;
+    const distP = Math.hypot(dxp, dzp) || 0.0001;
+    mv.retarget -= dt; mv.strafeT -= dt;
+    if(mv.strafeT <= 0){ mv.strafeDir *= -1; mv.strafeT = 0.7 + Math.random()*1.1; }
+    if(mv.retarget <= 0){                              // nouvelle destination d'errance (parfois vers le joueur)
+      mv.retarget = 1.6 + Math.random()*2.6;
+      if(Math.random() < 0.5){ mv.tx = me.pos.x + (Math.random()*2-1)*7; mv.tz = me.pos.z + (Math.random()*2-1)*7; }
+      else { mv.tx = (Math.random()*2-1)*lim; mv.tz = (Math.random()*2-1)*lim; }
+    }
+    let vx, vz, run;
+    if(distP < LBOT.engage_dist){                      // proche : strafe autour du joueur + gestion de distance
+      const px = dxp/distP, pz = dzp/distP, sx = -pz, sz = px;
+      vx = sx*mv.strafeDir; vz = sz*mv.strafeDir;
+      if(distP > LBOT.engage_dist*0.75){ vx += px*0.7; vz += pz*0.7; }       // se rapproche
+      else if(distP < LBOT.engage_dist*0.4){ vx -= px*0.7; vz -= pz*0.7; }   // recule si trop près
+      b.yaw = Math.atan2(dxp, dzp);                    // reste face au joueur
+      run = false;
+    } else {                                           // loin : marche/court vers la destination d'errance
+      const dxt = mv.tx - b.pos.x, dzt = mv.tz - b.pos.z, dt2 = Math.hypot(dxt,dzt) || 0.0001;
+      vx = dxt/dt2; vz = dzt/dt2;
+      if(dt2 < 1.5) mv.retarget = 0;                   // arrivé → re-cible
+      b.yaw = Math.atan2(vx, vz);                      // face la direction de marche
+      run = true;
+    }
+    const vlen = Math.hypot(vx,vz) || 1; vx/=vlen; vz/=vlen;
+    let nx = b.pos.x + vx*LBOT.speed*dt, nz = b.pos.z + vz*LBOT.speed*dt;
+    nx = Math.max(-lim, Math.min(lim, nx)); nz = Math.max(-lim, Math.min(lim, nz));
+    const realMove = Math.hypot(nx-b.pos.x, nz-b.pos.z);
+    if(realMove < 0.0008) mv.retarget = Math.min(mv.retarget, 0.15);   // bloqué (bord) → re-cible vite
+    b.pos.x = nx; b.pos.z = nz; b.pos.y = 0; b.buf.length = 0;          // position locale = vérité (pas d'interp réseau)
+    b.anim = b.anim || {};                             // anime les jambes : course en errance, marche en combat
+    b.anim.m = realMove > 0.0008 ? (run ? 0.85 : 0.5) : 0;
+    b.anim.a = 0; b.anim.sl = 0; b.anim.c = 0;
   }
 }
 function applyLocalBotDamage(id, b, dmg, head, melee){
@@ -4052,7 +4097,7 @@ function applyLocalBotDamage(id, b, dmg, head, melee){
     setTimeout(()=>{
       if(!localBotMode) return; const bb = botMgr.get(id); if(!bb) return;
       bb.hp = maxHp; bb.sh = maxShield; bb._shPrev = maxShield;
-      bb.mv = { dir: Math.random()<.5?1:-1, t:0, dur: 1.2 + Math.random()*1.4 };
+      initLocalBotAI(bb);
       onBotRespawn({ id, p: lbotSpawnPoint(), yaw: Math.random()*Math.PI*2 });
     }, LBOT.respawn);
   }
@@ -6211,6 +6256,11 @@ function animate(){
   if(deathCam.active) updateDeathCam(dt, g);
   // Monde : via le composer (AO + bloom) si dispo, sinon rendu standard. Fallback si le composer plante.
   let worldDrawn = false;
+  if(gtaoCam){ // l'AO suit la caméra (position + projection, FOV momentum/ADS compris)
+    gtaoCam.position.copy(camera.position); gtaoCam.quaternion.copy(camera.quaternion);
+    gtaoCam.fov = camera.fov; gtaoCam.aspect = camera.aspect; gtaoCam.near = camera.near; gtaoCam.far = camera.far;
+    gtaoCam.updateProjectionMatrix(); gtaoCam.updateMatrixWorld(true);
+  }
   if(composer && (GAMECFG.GRAPHICS||{}).POSTFX !== false){
     try { composer.render(); worldDrawn = true; }
     catch(e){ console.warn('[NEON] post-FX render erreur → rendu standard', e); composer = null; }
