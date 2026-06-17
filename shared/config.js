@@ -18,7 +18,7 @@
       // --- Reflets d'environnement ---
       env_intensity: 0.45,      // force des reflets sur murs/caisses/rampes
       floor_roughness: 0.92,   // sol : plus BAS = plus lisse = plus réfléchissant (effet mouillé). 0.95 = mat
-      floor_metalness: 0.0,   // léger côté spéculaire humide
+      floor_metalness: 0.50,   // léger côté spéculaire humide
       floor_env: 0.35,          // intensité des reflets spécifiquement sur le sol
       gun_env: 0.8,            // reflets d'environnement sur l'arme
       // Tamise les surfaces texturées (1 = pleine luminosité, plus bas = plus sombre). Évite le sol
@@ -32,10 +32,10 @@
       aa_samples: 4,           // niveau de MSAA (2 / 4 / 8) — ↑ = plus lisse, un peu plus lourd
       AO: false,               // GTAO (occlusion ambiante écran) DÉSACTIVÉE : instable (clignote avec la distance,
                                // ne couvre pas toutes les faces). Remplacée par une AO BAKED stable (voir BAKED_AO).
-      ao: { radius: 2.8, scale: 2.8, distanceExponent: 0.7, thickness: 1.4, samples: 18 },
+      ao: { radius: 5.8, scale: 2.8, distanceExponent: 0.7, thickness: 1.4, samples: 18 },
       // AO "cuite" (statique, indépendante de la caméra) : ombre de contact au sol sous chaque caisse/mur
       // + assombrissement progressif du bas des faces verticales. Cohérente sous tous les angles.
-      BAKED_AO: { enabled: true, ground_opacity: 0.5, ground_margin: 0.8, face_darken: 0.34 },
+      BAKED_AO: { enabled: true, ground_opacity: 0.72, ground_margin: 1.4, face_darken: 0.5 },
       BLOOM: true,             // halo lumineux sur les sources vives (sabre, néon, soleil)
       bloom: { strength: 0.55, radius: 0.5, threshold: 0.8 }, // ↑strength = plus de glow ; threshold = seuil de brillance
     },
@@ -84,9 +84,9 @@
       enabled: true,
       min_speed: 9,          // m/s : début de l'effet (au-dessus de la course normale ~8)
       max_speed: 15,         // m/s : intensité maxi
-      max_opacity: 0.85,     // opacité maxi du halo bleu
+      max_opacity: 0.95,     // opacité maxi du halo bleu
       pulse_freq: 9,         // vitesse de la pulsation (vibration)
-      pulse_amount: 0.28,    // amplitude de la pulsation
+      pulse_amount: 0.38,    // amplitude de la pulsation
     },
     MAX_SPEED_SERVER: 17,
     // Son de vitesse : boucle qui monte quand on atteint (presque) la vélocité max, et FONDU SORTANT si on ralentit.
@@ -152,11 +152,11 @@
 
       // Protection du centre ADS : 1 = le point rouge/canon reste verrouillé au centre pendant le roll.
       CENTER_PROTECT: 0.0,
-      CENTER_ADS_START: 0.55,
+      CENTER_ADS_START: 1.55,
     },
     SUPERGLIDE: {
       ENABLED: true, JUMP_ONLY: true, WINDOW: 0.25, GRACE: 0.14,
-      SPEED: 26.0, UP: 6.2, FOV_KICK: 8, FOV_DECAY: 2.6,
+      SPEED: 26.0, UP: 6.2, FOV_KICK: 10, FOV_DECAY: 2.6,
       show_dot: false,   // point bleu de timing superglide : masqué (gênait la visée en grimpe). true = réafficher
     },
     MANTLE_SHAKE: 0.15,
@@ -190,20 +190,20 @@
         name: 'WINGMAN',
         model: '/models/wingman_hand.glb',
         icon: '/textures/hud/wingman.png',
-        mag: 9, fire_rate: 0.385, reload_t: 1.5,
-        damage_body: 45, damage_head: 78,
-        spread_hip: 0.018, spread_ads: 0.0008,
+        mag: 9, fire_rate: 0.485, reload_t: 1.5,
+        damage_body: 70, damage_head: 175,
+        spread_hip: 0.008, spread_ads: 0.0008,
         recoil_mult: 1.4,
-        recoil_vertical: 4.2,
+        recoil_vertical: 0.7,
         recoil_speed: 0.9,
-        kick_back: 2.0,
-        vkick: { gun: -0.18, cam: 0.020, up_speed: 20, down_speed: 9 },
+        kick_back: 0.8,
+        vkick: { gun: -0.40, cam: 0.010, up_speed: 1, down_speed: 8 },
         // recul rotationnel directionnel : l'arme part en haut-droite puis revient fluide au centre
         // pitch = montée (haut), yaw = départ vers la droite, roll = légère inclinaison
-        rkick: { pitch: 0.09, yaw: -0.56, roll: -0.4, max: 0.6, rise_speed: 20, return_speed: 6 },
+        rkick: { pitch: 0.09, yaw: -0.05, roll: -0.1, max: 0.6, rise_speed: 1, return_speed: 8 },
         // Secousse caméra LOURDE par balle (façon shake de changement d'arme, mais grave) :
         // montre que le Wingman tape fort. amount = ampleur, freq basse = "thump", down_bias = poids vers le bas.
-        fire_shake: { amount: 0.024, freq: 15, attack: 0.015, decay_t: 0.17, down_bias: 0.7 },
+        fire_shake: { amount: 0.024, freq: 25, attack: 0.015, decay_t: 0.14, down_bias: 1.0 },
         sfx_shot: 'wingman_shot', sfx_reload: 'wingman_reload',
         scale: 1, position: [0, 0.1, 0], rotation_y_deg: 0, sight: null,
         muzzle: [0, 0.04, -0.6],
@@ -239,13 +239,13 @@
         dedupe_suffix: '.001',
         blade_meshes: ['lightsaber', 'saber'],           // meshes de LAME à faire briller
         blade_exclude: ['cap', 'foregrip', 'hilt', 'handle', 'grip'], // manche : ne brille pas
-        scale: 1, position: [0.15, 0.02, -0.25], sight: null,
+        scale: 1, position: [-0.02, -0.12, -0.45], sight: null,
         // La lame du modèle pointe le long de l'axe Y local → on l'oriente vers l'avant via
         // rotation_deg [x,y,z] (degrés). AJUSTE CES 3 VALEURS pour bien caler le sabre en main.
-        rotation_deg: [-78, 220, 0],
+        rotation_deg: [-78, 320, 0],
         // pose en main (hanche) : x+ =droite, y+ =haut, z+ =vers soi | rot x+ =pointe bas, y+ =droite, z+ =roll
         // sabre remonté (était -0.24) pour qu'il soit bien visible en main.
-        hip: { pos: [0.16, -0.08, -0.28], rot: [0.18, -0.22, 0.12] },
+        hip: { pos: [0.16, -0.18, -0.28], rot: [0.18, -0.22, 0.12] },
         ads: { rot: [0, 0, 0], dist: 0.22, align: [0, 0] },
       },
     ],
@@ -253,23 +253,29 @@
     // Dégâts AUTORITÉ SERVEUR (server.js lit ces valeurs). Le reste (anim, shake, lame) est client.
     MELEE: {
       damage: 70,            // dégâts par coup
-      range: 3.2,            // portée du coup (m)
+      range: 3.8,            // portée du coup (m)
       // --- Cooldown : nombre de coups avant de devoir attendre la recharge (barre bleue HUD) ---
-      max_hits: 5,           // coups disponibles à pleine charge
-      recharge_time: 3.4,    // secondes pour remonter de 0 à plein
+      max_hits: 2,           // coups disponibles à pleine charge
+      recharge_time: 2.4,    // secondes pour remonter de 0 à plein
       cone_deg: 75,          // ouverture du cône d'attaque devant soi (°)
       interval_ms: 240,      // cadence mini entre 2 coups (anti-spam, côté serveur)
+      // --- MAGNET (aimant) : sabre sorti + ennemi proche → la visée se colle doucement dessus (hit facile) ---
+      magnet: true,
+      magnet_range: 5.5,     // distance (m) à laquelle l'aimant s'active
+      magnet_cone_deg: 80,   // l'ennemi doit être dans ce cône devant soi
+      magnet_strength: 0.7,  // force (0..1) de l'attraction de visée
+      magnet_rate: 10,       // vitesse de rattrapage de la visée vers la cible
       // --- Rendu de la lame ---
       blade_color: 0x36e3ff, // couleur de la lame (cyan néon, assorti au thème)
       blade_emissive: 3.2,   // intensité d'émission de la lame
       blade_light: 2.4,      // intensité de la lumière dynamique projetée par la lame
       blade_light_dist: 4,   // portée de cette lumière (m)
-      blade_pulse: 0.14,     // amplitude de la pulsation de la lame (vivante)
+      blade_pulse: 0.74,     // amplitude de la pulsation de la lame (vivante)
       // --- Traînée lumineuse (ruban additif derrière la lame pendant le swing) ---
       trail_len: 0.95,       // longueur de la traînée le long de la lame (m, depuis la garde)
       trail_base: -0.12,     // position de la base de la traînée (m, côté garde)
       // --- Camera shake "nerveux" + hit-stop à l'impact ---
-      shake_hit: 1.0,        // amplitude de secousse quand le coup TOUCHE
+      shake_hit: 2.0,        // amplitude de secousse quand le coup TOUCHE
       shake_whiff: 0.30,     // amplitude quand le coup RATE (juste le souffle)
       shake_amp: 0.05,       // amplitude max de la vibration caméra (rad)
       shake_freq: 42,        // fréquence de la vibration (haut = nerveux/sec)
@@ -277,12 +283,12 @@
       kick_pitch: 0.05,      // à-coup vertical net de la caméra à l'impact (rad)
       kick_yaw: 0.028,       // à-coup horizontal
       kick_decay: 9,         // retour de l'à-coup au centre
-      hitstop_hit: 0.075,    // durée du gel de l'arme quand ça touche (s)
-      hitstop_finisher: 0.11,// gel plus long sur le coup final
+      hitstop_hit: 0.175,    // durée du gel de l'arme quand ça touche (s)
+      hitstop_finisher: 0.70,// gel plus long sur le coup final
       // --- Pose "course KATANA" : quand on sprinte avec le sabre, il se lève et s'incline ---
       // vers le bas/avant comme un samouraï qui court. Pose ADDITIVE (rad / m). 0 = désactivé.
       // pos_y bas/négatif = ne monte PAS hors champ ; tip_down+roll = tenu en diagonale (katana de course).
-      katana_run: { pos_y: -0.03, pos_x: 0.05, pos_z: 0.05, tip_down: 0.5, roll: 0.42, yaw: -0.16, speed: 8 },
+      katana_run: { pos_y: -0.03, pos_x: 0.15, pos_z: 0.05, tip_down: 0.5, roll: 1.42, yaw: -0.16, speed: 8 },
       // --- Combo : 3 coups procéduraux enchaînés ---
       // Pose ADDITIVE appliquée à l'arme : rot [x,y,z] rad (x+ =pointe bas, y+ =droite, z+ =roll
       // horaire), pos [x,y,z] m (x+ =droite, y+ =haut, z+ =vers soi).
@@ -386,11 +392,11 @@
       ENABLED: true,
       blend_in: 14,         // vitesse de fondu À l'entrée du reload (prise de contrôle)
       blend_out: 9,         // vitesse de fondu À la sortie (retour vers idle/walk/sprint/ads)
-      kick_amount: 0.04,    // kick à l'insertion du chargeur (m)
+      kick_amount: 1.14,    // kick à l'insertion du chargeur (m)
       kick_sfx: null,       // son JOUÉ sur le kick d'insertion (null = aucun). NE PAS mettre 'reload' :
                             // chaque arme joue déjà SON son de reload via sfx_reload au début du reload.
                             // Mets un nom de son court (ex: un clic) seulement si tu veux un effet en plus.
-      shake_amount: 0.02,   // micro-shake au chamber (rad)
+      shake_amount: 0.12,   // micro-shake au chamber (rad)
       overshoot: 0.10,      // léger dépassement au retour idle (ressort)
       noise_amount: 0.004,  // micro-noise sur la pose pour casser le côté parfait (rad/m)
       sprint_damp: 0.35,    // pendant le reload, la pose de course est réduite à ce facteur (anti hors-cadre)
@@ -413,9 +419,9 @@
       ],
     },
     CROSSHAIR: { SIZE: 13, GAP: 17, THICKNESS: 2, EXPAND: 10, EXPAND_SPEED: 18, HOLSTER_DOT: 4 },
-    BULLET_DROP: 4,
-    BULLET_SPEED: 320,
-    JUMP_SHAKE: 0.025,
+    BULLET_DROP: 1,
+    BULLET_SPEED: 520,
+    JUMP_SHAKE: 0.125,
     // ===== Effet au WALL BOUNCE =====
     // L'arme se penche vite à GAUCHE au contact du mur, puis revient doucement à sa position.
     WALLBOUNCE_KICK: {
@@ -427,9 +433,9 @@
       return: 0.55,   // temps de RETOUR à zéro (s) — grand = "revient doucement".
     },
     // Léger shake de la caméra joueur au wall bounce. Amplitude en rad (≈ 0.01 = discret). 0 = off.
-    WALLBOUNCE_SHAKE: 0.028,   // amplitude du shake au wall bounce (enveloppe attack/decay, façon switch)
+    WALLBOUNCE_SHAKE: 0.128,   // amplitude du shake au wall bounce (enveloppe attack/decay, façon switch)
     SWAY_SMOOTH: 2,
-    SWAY_AMOUNT: 2,
+    SWAY_AMOUNT: 5,
     IDLE_SWAY: { AMOUNT: 0.10, SPEED: 0.005 },
     // ===== Vie procédurale du viewmodel (respiration + micro-mouvements de main) =====
     // Donne l'impression que l'arme est tenue par des mains humaines, sans trembler.
@@ -562,7 +568,8 @@
       velocity: '/audio/velocity.mp3',           // boucle "vitesse" jouée à la vélocité max (fondu d'entrée/sortie)
       saber_equip: '/audio/saber_equip.mp3',     // sortie du sabre laser
       saber_holster: '/audio/saber_holster.mp3', // rangement du sabre laser
-      saber1: '/audio/saber1.mp3', saber2: '/audio/saber2.mp3', saber3: '/audio/saber3.mp3', // coups de sabre (aléatoire)
+      saber1: '/audio/saber1.mp3', saber2: '/audio/saber2.mp3', saber3: '/audio/saber3.mp3', // coups de sabre dans le vide (aléatoire)
+      saber_hit1: '/audio/saber_hit1.mp3', saber_hit2: '/audio/saber_hit2.mp3', // IMPACT du sabre sur un ennemi (aléatoire)
     },
     SFX_VOLUME: 0.6,
     SHOT_PITCH_VAR: 0.18,
@@ -733,7 +740,7 @@
       glow_shield:  '#1f9dff', // halo bleu autour du chiffre quand on touche le bouclier (image 1)
       glow_health:  '#e62121', // halo orangé autour du chiffre quand on touche les PV (image 2)
       glow_head:    '#ff3030', // halo rouge sur headshot
-      glow_strength: 18,       // intensité du halo (px de flou). 0 = pas de glow
+      glow_strength: 10,       // intensité du halo (px de flou). 0 = pas de glow
       stack_window: 1.0,       // s : tant qu'on retape la cible dans cette fenêtre, les dégâts s'empilent
     },
     // ===== Barre d'info SHIELD / PV au-dessus de l'ennemi (image 3) =====
@@ -747,7 +754,7 @@
       show_seconds: 2.6,       // reste affichée X s après le dernier dégât
       fade_seconds: 0.4,       // durée du fondu de disparition
       segments: 3,             // segments de bouclier (75 PV de bouclier → 3×25)
-      shield_color: '#dfeaf2', // bouclier restant (blanc cassé, façon Apex)
+      shield_color: '#3d98ec', // bouclier restant (blanc cassé, façon Apex)
       health_color: '#ff5a5a', // PV restants
       empty_color:  'rgba(255,255,255,0.10)', // portion vide
       back_color:   'rgba(8,12,18,0.72)',     // fond de la plaque

@@ -935,9 +935,11 @@ function addContactShadow(cx, cz, w, d){
   const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
   const c = cv.getContext('2d');
   const bx = margin/W*cw, by = margin/D*ch;
-  try { c.filter = 'blur(' + Math.max(4, Math.min(bx, by)*0.85) + 'px)'; } catch(e){}
+  // le noir DÉBORDE dans la marge (inset < marge) → l'ombre de contact reste sombre au pied de la caisse
+  const inX = bx*0.5, inY = by*0.5;
+  try { c.filter = 'blur(' + Math.max(3, Math.min(bx, by)*0.5) + 'px)'; } catch(e){}
   c.fillStyle = '#000';
-  _roundRect(c, bx, by, cw-2*bx, ch-2*by, Math.min(cw, ch)*0.18); c.fill();
+  _roundRect(c, inX, inY, cw-2*inX, ch-2*inY, Math.min(cw, ch)*0.16); c.fill();
   const tex = new THREE.CanvasTexture(cv);
   const q = new THREE.Mesh(new THREE.PlaneGeometry(W, D),
     new THREE.MeshBasicMaterial({ map: tex, color: 0x000000, transparent: true, opacity: B.ground_opacity ?? 0.5,
@@ -1260,9 +1262,9 @@ function updateImpactEffects(dt){
 const mapRay = new THREE.Raycaster();
 // Intersection analytique rayon→capsule, alignée sur la hitbox du serveur (shared/config.js MODELS.hitbox).
 // Renvoie la distance t (dir supposé normalisé) ou Infinity si le rayon manque la capsule.
-function rayCapsuleT(o, d, tpos, lowered){
+function rayCapsuleT(o, d, tpos, lowered, radMul){
   const M = GAMECFG.MODELS || {}, HB = M.hitbox || {}, sc = M.character_scale || 1;
-  const R = (HB.radius != null ? HB.radius : 0.32) * sc;
+  const R = (HB.radius != null ? HB.radius : 0.32) * sc * (radMul || 1);
   const bottom = (HB.bottom != null ? HB.bottom : 0.10) * sc;
   const topStand = (HB.top != null ? HB.top : 1.80) * sc;
   const topCrouch = (HB.top_crouch != null ? HB.top_crouch : 1.15) * sc;
@@ -2549,6 +2551,33 @@ function meleeAttack(){
 }
 
 // Prédiction CLIENT du toucher (pour le shake/hit-stop immédiat). Le serveur reste autoritaire.
+// MAGNET sabre : quand le sabre est sorti et qu'un ennemi est proche dans le cône, la visée
+// se colle DOUCEMENT dessus → on le touche bien plus facilement. Marche souris ET manette.
+function applySaberMagnet(dt){
+  const S = GAMECFG.MELEE || {};
+  if(S.magnet === false || !isSaber() || !alive || !playing) return;
+  const range = S.magnet_range ?? 5.5, coneCos = Math.cos(((S.magnet_cone_deg ?? 80)*Math.PI/180)/2);
+  // état AUTORITAIRE du joueur (indépendant de la caméra rendue : sway/recul n'interfèrent pas)
+  const ox = me.pos.x, oy = me.pos.y + (me.eye || 1.62), oz = me.pos.z;
+  const cp = Math.cos(me.pitch), fx = -Math.sin(me.yaw)*cp, fy = Math.sin(me.pitch), fz = -Math.cos(me.yaw)*cp;
+  let best = null, bestProx = -1;
+  const consider = (p, crouch)=>{
+    const dx=p.x-ox, dy=(p.y+(crouch?0.95:1.1))-oy, dz=p.z-oz, d=Math.hypot(dx,dy,dz);
+    if(d > range || d < 0.001) return;
+    const dot = (dx*fx+dy*fy+dz*fz)/d;
+    if(dot < coneCos) return;
+    const prox = (dot - coneCos)/(1 - coneCos) * (1 - d/range);   // plus proche/centré = plus fort
+    if(prox > bestProx){ bestProx = prox; best = {x:dx/d, y:dy/d, z:dz/d}; }
+  };
+  if(botActive && botMgr) for(const b of botMgr.values()){ if(b && !b.dead && b.pos) consider(b.pos, !!(b.anim && b.anim.c)); }
+  if(remote && remote.exists && !remote.dead && remote.pos) consider(remote.pos, !!(remote.anim && remote.anim.c));
+  if(!best) return;
+  const wantYaw = Math.atan2(-best.x, -best.z);
+  const wantPitch = Math.asin(Math.max(-1, Math.min(1, best.y)));
+  const k = Math.min(0.6, dt * (S.magnet_rate ?? 10) * (S.magnet_strength ?? 0.7) * Math.max(0.15, bestProx));
+  me.yaw = lerpAngle(me.yaw, wantYaw, k);
+  me.pitch += (wantPitch - me.pitch) * k;
+}
 function meleePredictHit(){
   const S = GAMECFG.MELEE || {};
   const range = S.range ?? 3.2;
@@ -2723,6 +2752,10 @@ function saberWhoosh(){
   sfx(920, 240, 0.12, 0.035, 'triangle');
 }
 function saberHitSound(finisher){
+  // IMPACT du sabre sur un ennemi : un son au hasard (saber_hit1/2). Sinon, synthèse de secours.
+  const variants = ['saber_hit1','saber_hit2'];
+  const pick = variants[(Math.random()*variants.length)|0];
+  if(audioBuffers[pick]){ playSfx(pick); return; }
   sfx(1700, 380, 0.10, 0.10, 'sawtooth');
   setTimeout(()=>sfx(520, 120, 0.12, 0.08, 'square'), 12);
   if(finisher) setTimeout(()=>sfx(260, 70, 0.18, 0.07, 'triangle'), 24);
@@ -4066,7 +4099,8 @@ function onBotRespawn(m){
    Réutilise les handlers existants onBotStart / onBotHit / onBotKill / onBotRespawn.
    ========================================================================== */
 let localBotMode = false, localBotKills = 0;
-const LBOT = { count: 5, speed: 4.2, respawn: 1500, engage_dist: 12 };
+const LBOT = { count: 5, speed: 2.5, respawn: 1500, engage_dist: 12,
+  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4 };  // séparation = distance mini entre bots ; radius = collision joueur ; hit_pad = hitbox généreuse
 const _botTmp = new THREE.Vector3();
 // IA simple mais vivante : chaque bot erre vers une destination, se rapproche du joueur,
 // et strafe quand il est proche. b.anim.m anime les jambes (marche/course).
@@ -4075,13 +4109,18 @@ function initLocalBotAI(b){
   b.mv = { tx:(Math.random()*2-1)*lim, tz:(Math.random()*2-1)*lim,
            retarget: 1.2 + Math.random()*2.2, strafeDir: Math.random()<.5?1:-1, strafeT: 0.6+Math.random() };
 }
-function lbotSpawnPoint(){ const a = Math.random()*Math.PI*2, r = 9 + Math.random()*7; return [Math.cos(a)*r, 0, Math.sin(a)*r]; }
+function lbotSpawnPoint(i, n){ // répartis sur un grand cercle (angles réguliers) → bien espacés au départ
+  const lim = (MAP.HALF || 30) - 4;
+  const a = ((i != null && n) ? (i / n) * Math.PI*2 : Math.random()*Math.PI*2) + (Math.random()-0.5)*0.5;
+  const r = Math.min(lim, 14 + Math.random()*8);
+  return [Math.cos(a)*r, 0, Math.sin(a)*r];
+}
 function startLocalBotMode(){
   // Mode solo : on coupe le réseau proprement (pas de message "connexion perdue")
   if(ws){ try{ ws.onclose = null; ws.close(); }catch(e){} ws = null; }
   spec.active = false; localBotMode = true; localBotKills = 0;
   const bots = [];
-  for(let i=0;i<LBOT.count;i++) bots.push({ id: i+1, p: lbotSpawnPoint(), yaw: Math.random()*Math.PI*2 });
+  for(let i=0;i<LBOT.count;i++) bots.push({ id: i+1, p: lbotSpawnPoint(i, LBOT.count), yaw: Math.random()*Math.PI*2 });
   onBotStart({ humanSeat: 0, spawns: MAP.spawns, bots, countdown: 3 });   // crée le décor + le décompte
   for(const bb of bots){ const b = botMgr.get(bb.id); if(b){ b.hp = maxHp; b.sh = maxShield; b._shPrev = maxShield;
     initLocalBotAI(b); } }
@@ -4120,14 +4159,23 @@ function updateLocalBots(dt){
       b.yaw = Math.atan2(vx, vz);                      // face la direction de marche
       run = true;
     }
+    // SÉPARATION : s'écarte des autres bots trop proches → ils restent espacés entre eux
+    const sepR = LBOT.separation ?? 4;
+    for(const [oid, ob] of botMgr){
+      if(oid === id || ob.dead || !ob.pos) continue;
+      const ex = b.pos.x-ob.pos.x, ez = b.pos.z-ob.pos.z, ed = Math.hypot(ex,ez);
+      if(ed > 0.0001 && ed < sepR){ const s = (LBOT.sep_force ?? 2) * (1 - ed/sepR); vx += (ex/ed)*s; vz += (ez/ed)*s; }
+    }
     const vlen = Math.hypot(vx,vz) || 1; vx/=vlen; vz/=vlen;
-    let nx = b.pos.x + vx*LBOT.speed*dt, nz = b.pos.z + vz*LBOT.speed*dt;
-    nx = Math.max(-lim, Math.min(lim, nx)); nz = Math.max(-lim, Math.min(lim, nz));
+    // COLLISION : collide() pousse hors des caisses/murs/plateforme (contournement) + borne la map
+    _botTmp.set(b.pos.x + vx*LBOT.speed*dt, 0, b.pos.z + vz*LBOT.speed*dt);
+    collide(_botTmp, LBOT.radius ?? 0.5, 0);
+    const nx = _botTmp.x, nz = _botTmp.z;
     const realMove = Math.hypot(nx-b.pos.x, nz-b.pos.z);
-    if(realMove < 0.0008) mv.retarget = Math.min(mv.retarget, 0.15);   // bloqué (bord) → re-cible vite
+    if(realMove < 0.01) mv.retarget = Math.min(mv.retarget, 0.2);      // bloqué (mur) → re-cible vite pour contourner
     b.pos.x = nx; b.pos.z = nz; b.pos.y = 0; b.buf.length = 0;          // position locale = vérité (pas d'interp réseau)
     b.anim = b.anim || {};                             // anime les jambes : course en errance, marche en combat
-    b.anim.m = realMove > 0.0008 ? (run ? 0.85 : 0.5) : 0;
+    b.anim.m = realMove > 0.002 ? (run ? 0.85 : 0.5) : 0;
     b.anim.a = 0; b.anim.sl = 0; b.anim.c = 0;
   }
 }
@@ -4157,7 +4205,7 @@ function localBotShoot(o, dir, end){
   let best = null, bestT = Infinity;
   for(const [id,b] of botMgr){
     if(b.dead || !b.pos) continue;
-    const t = rayCapsuleT(o, dir, b.pos, !!(b.anim && b.anim.c));
+    const t = rayCapsuleT(o, dir, b.pos, !!(b.anim && b.anim.c), LBOT.hit_pad ?? 1.4); // hitbox plus généreuse sur les bots
     if(t < bestT && t < wallDist){ bestT = t; best = { id, b }; }
   }
   if(!best) return;
@@ -5675,6 +5723,16 @@ function playerUpdate(dt, g){
   me.vel.y -= CONFIG.GRAVITY*dt;
   me.pos.x += me.vel.x*dt; me.pos.z += me.vel.z*dt; me.pos.y += me.vel.y*dt;
   collide(me.pos, .5, me.pos.y);
+  // Le joueur ne traverse PAS les bots : on le repousse hors de leur cylindre.
+  if(localBotMode && botMgr){
+    const pr = 0.5, br = LBOT.radius ?? 0.5, minD = pr + br;
+    for(const b of botMgr.values()){
+      if(b.dead || !b.pos) continue;
+      const dx = me.pos.x-b.pos.x, dz = me.pos.z-b.pos.z, dd = Math.hypot(dx,dz);
+      if(dd > 0.0001 && dd < minD){ const push = minD-dd; me.pos.x += dx/dd*push; me.pos.z += dz/dd*push; }
+    }
+    collide(me.pos, .5, me.pos.y);   // re-borne après poussée (jamais dans un mur)
+  }
   const ground = localGroundAt(me.pos.x, me.pos.z, me.pos.y);
   if(me.pos.y <= ground){
     me.pos.y = ground;
@@ -6235,6 +6293,7 @@ function animate(){
   const dt = Math.min(clock.getDelta(), .05);
   const g = pollGamepad();
   if(playing && alive) playerUpdate(dt, g);
+  if(playing && alive) applySaberMagnet(dt);   // aimant de visée quand le sabre est sorti près d'un ennemi
   if(localBotMode) updateLocalBots(dt);   // IA des bots d'entraînement (mouvement)
   // mes propres pas, réactifs à la vitesse (cadence + volume + pitch)
   if(playing && alive && me.onGround && !me.slide.active && !me.mantle.active){
