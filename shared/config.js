@@ -91,7 +91,7 @@
     MAX_SPEED_SERVER: 17,
     // Son de vitesse : boucle qui monte quand on atteint (presque) la vélocité max, et FONDU SORTANT si on ralentit.
     VELOCITY_SFX: { enabled: true, speed: 13.5, volume: 0.6, fade_in: 0.12, fade_out: 0.55 },
-    SPREAD: { HIP: 0.022, ADS: 0.002, SLIDE: 0.03 },
+    SPREAD: { HIP: 0.010, ADS: 0.002, SLIDE: 0.014 }, // hip/slide resserres : la balle part bien dans le viseur (fini "pile dessus sans toucher")
     FIRE_RATE: 0.056,
     RECOIL: {
       VERTICAL: 0.0028, HORIZONTAL: 0.0005, PATTERN_DRIFT: 0.50,
@@ -171,7 +171,7 @@
         icon: '/textures/hud/weapon.png',
         mag: 30, fire_rate: 0.056, reload_t: 1.9,
         damage_body: 15, damage_head: 20,
-        spread_hip: 0.022, spread_ads: 0.002,
+        spread_hip: 0.010, spread_ads: 0.002,
         recoil_mult: 1.0,
         recoil_vertical: 1.0,
         recoil_speed: 1.0,
