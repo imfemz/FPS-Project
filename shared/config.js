@@ -521,7 +521,7 @@
       tp_orbit: 0.35,       // vitesse de rotation orbitale de la caméra (rad/s)
       fade_time: 0.4,       // durée du fondu entre les phases (s)
       // Kill cam : replay des dernières secondes DU POINT DE VUE DU TUEUR (façon CoD)
-      killcam: true,        // false = pas de kill cam, juste la 3e personne
+      killcam: false,       // DÉSACTIVÉE (buggait) : juste la vue 3e personne courte puis respawn
       killcam_duration: 3.0,// durée du replay rejoué (s) — les X dernières secondes avant la mort
       killcam_eye: 1.6,     // hauteur des yeux du tueur pour la caméra (m)
       record_hz: 60,        // fréquence d'échantillonnage du buffer (Hz) — capture chaque frame

@@ -117,6 +117,10 @@
   #ping{position:absolute;top:22px;right:26px;font-family:var(--mono);font-size:11px;color:var(--txt-faint);letter-spacing:1px}
   #gamepadicon{position:absolute;top:42px;right:26px;font-family:var(--mono);font-size:10px;color:var(--txt-dim);display:none;letter-spacing:1px}
   #damage{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(255,40,60,.5) 100%);opacity:0;transition:opacity .25s}
+  /* Indicateur directionnel de dégât : arc rouge pointant vers le tireur, tourne autour du centre écran */
+  #dmgdir{position:fixed;left:50%;top:50%;width:0;height:0;z-index:6;pointer-events:none;opacity:0;transition:opacity .35s ease;transform:translate(-50%,-50%) rotate(0deg)}
+  #dmgdir svg{position:absolute;left:-150px;top:-150px;width:300px;height:300px;overflow:visible}
+  #dmgdir .ddarc{fill:none;stroke:#ff2b2b;stroke-width:9;stroke-linecap:round;filter:drop-shadow(0 0 7px rgba(255,40,40,.9))}
   /* ===== MOMENTUM (bas centre) : equalizer de dots qui s'allument avec la vitesse ===== */
   #momentum{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:7px;opacity:.35;transition:opacity .3s}
   #momentum .mdots{display:flex;gap:5px;align-items:center}
@@ -236,6 +240,7 @@
   <div id="gamepadicon">🎮 MANETTE</div>
 </div>
 <div id="damage"></div>
+<div id="dmgdir"><svg viewBox="-150 -150 300 300"><path class="ddarc" d="M -46 -116 A 124.8 124.8 0 0 1 46 -116"/></svg></div>
 <div id="countdown"></div>
 
 <div class="screen show" id="menu">
@@ -3079,12 +3084,13 @@ function updateAudioListener(){
   }catch(e){}
 }
 // Joue un son À UNE POSITION du monde : panoramique stéréo + atténuation distance
-function playSfxAt(name, pos, vol){
+function playSfxAt(name, pos, vol, opts){
   if(!audioCtx){ playSfx(name); return; }
+  opts = opts || {};
   try{
     const pan = audioCtx.createPanner();
     pan.panningModel = 'equalpower'; pan.distanceModel = 'linear';
-    pan.refDistance = 5; pan.maxDistance = 75; pan.rolloffFactor = 1;
+    pan.refDistance = opts.refDistance ?? 5; pan.maxDistance = opts.maxDistance ?? 75; pan.rolloffFactor = opts.rolloff ?? 1;
     if(pan.positionX){ pan.positionX.value=pos.x; pan.positionY.value=pos.y; pan.positionZ.value=pos.z; }
     else pan.setPosition(pos.x, pos.y, pos.z);
     pan.connect(audioCtx.destination);
@@ -3691,7 +3697,8 @@ function onRemoteShot(m){
   const o = new THREE.Vector3(...m.o), d = new THREE.Vector3(...m.d).normalize();
   const end = traceBulletOnMap(o, d);
   spawnTracer(o, end, 0x8fd8ff);
-  playSfxAt('shot', o, 0.9); // le tir adverse s'entend, du bon côté
+  // tir adverse plus AUDIBLE, même de loin : volume up + portée plus large (refDistance/maxDistance) + falloff doux
+  playSfxAt('shot', o, 1.5, { refDistance: 14, maxDistance: 150, rolloff: 0.7 });
   // flash au canon de l'entité qui tire (siège m.seat)
   const b = (m.seat !== undefined) ? botMgr.get(m.seat) : null;
   if(b && b.soldier && b.soldier.flash){
@@ -3729,6 +3736,9 @@ function onHit(m){
     me.hp = m.hp; me.sh = m.sh; updateHPShieldUI(); triggerDamageFeedback();
     const dEl = document.getElementById('damage');
     dEl.style.opacity=1; setTimeout(()=>dEl.style.opacity=0,230);
+    // indicateur directionnel rouge vers le tireur (m.by)
+    const atk = botMgr.get(m.by);
+    showDamageDirection((atk && atk.pos) ? atk.pos : (remote.exists && !remote.dead ? remote.pos : null));
   } else if(m.by !== myId){
     // un AUTRE joueur en touche un autre (ou vue spectateur) → on rafraîchit la barre + réaction
     const b = botMgr.get(m.target);
@@ -4259,6 +4269,21 @@ function triggerDamageFeedback(){
   v.classList.remove('hurt','flash'); void v.offsetWidth; // relance l'anim
   v.classList.add('hurt','flash');
   clearTimeout(v._dmgT); v._dmgT = setTimeout(()=>v.classList.remove('flash'), 140);
+}
+// Indicateur DIRECTIONNEL de dégât : arc rouge pointant vers le tireur (repère du joueur).
+let _dmgDirTimer = null;
+function showDamageDirection(pos){
+  const el = document.getElementById('dmgdir'); if(!el || !pos) return;
+  const dx = pos.x - me.pos.x, dz = pos.z - me.pos.z;
+  if(Math.abs(dx) < 1e-4 && Math.abs(dz) < 1e-4) return;
+  const sy = Math.sin(me.yaw), cy = Math.cos(me.yaw);
+  const fComp = dx*(-sy) + dz*(-cy);            // composante "devant" (+)
+  const rComp = dx*( cy) + dz*(-sy);            // composante "droite" (+)
+  const ang = Math.atan2(rComp, fComp) * 180/Math.PI;  // 0 = devant, +90 = droite, ±180 = derrière
+  el.style.transform = 'translate(-50%,-50%) rotate(' + ang.toFixed(1) + 'deg)';
+  el.style.opacity = '1';
+  clearTimeout(_dmgDirTimer);
+  _dmgDirTimer = setTimeout(()=>{ el.style.opacity = '0'; }, 750);
 }
 function updateAmmoUI(){
   const holstered = weapon.state !== 'equipped';
@@ -5622,9 +5647,16 @@ function playerUpdate(dt, g){
 
   /* --- Crouch hold/toggle + entrée de slide --- */
   if(crouchEdge){
-    if(cfg.crouchMode==='toggle') me.crouchToggleState = !me.crouchToggleState;
+    let wantCrouch = true; // hold : appuyer = s'accroupir
+    if(cfg.crouchMode==='toggle'){
+      me.crouchToggleState = !me.crouchToggleState;
+      wantCrouch = me.crouchToggleState;
+      // TOGGLE : ré-appuyer pendant un slide => on se relève TOUT DE SUITE (fin du slide immédiate)
+      if(!wantCrouch && me.slide.active) endSlide();
+    }
     const hSpeed = Math.hypot(me.vel.x, me.vel.z);
-    if(!me.slide.active && me.onGround && me.slide.cooldown<=0 && hSpeed >= CONFIG.SLIDE_MIN_ENTRY_SPEED){
+    // démarrer un slide UNIQUEMENT si on veut s'accroupir (sinon un appui "se relever" rouvrirait un slide)
+    if(wantCrouch && !me.slide.active && me.onGround && me.slide.cooldown<=0 && hSpeed >= CONFIG.SLIDE_MIN_ENTRY_SPEED){
       startSlide();
       if(cfg.crouchMode==='toggle') me.crouchToggleState = true;
     }
