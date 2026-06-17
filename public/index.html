@@ -3827,6 +3827,9 @@ function doMyRespawn(m){
 }
 function onEnd(m){
   if(m.scores){ lastScores = m.scores; updateScoreboard(); }
+  deathCam.pendingRespawn = null;          // fin de partie : pas de respawn
+  if(deathCam.active) endDeathCam();        // nettoie une éventuelle séquence de mort (bannière/corps/HUD)
+  dcBanner('');                             // plus de bandeau ÉLIMINÉ résiduel
   playing = false; document.exitPointerLock && document.exitPointerLock();
   hideAll(); show('endscreen');
   const winN = nameOfSeat(m.winner);
@@ -4357,6 +4360,13 @@ function toMenu(msg){
   if(msg) alert(msg);
 }
 const gameEl = document.getElementById('game');
+// Un écran d'UI (menu/options/salon/pause/mort/fin) est-il ouvert ? → on bloque tir + re-lock
+// (sinon cliquer dans un menu déclenche un coup de feu / re-verrouille la souris par-dessus l'overlay).
+function uiBlocking(){
+  return ['menu','options','lobby','pause','deathscreen','endscreen'].some(id=>{
+    const e = document.getElementById(id); return e && e.classList.contains('show');
+  });
+}
 function lock(){
   try{
     if(!(document.hasFocus && document.hasFocus()) || !gameEl.requestPointerLock) return;
@@ -5480,7 +5490,10 @@ function playerUpdate(dt, g){
     const AA = GAMECFG.AIM_ASSIST || {};
     const aaOn = (cfg.aimAssist !== false) && (AA.ENABLED !== false); // défaut ON (sauf si explicitement coupé)
     const aaStrength = (AA.STRENGTH ?? 0.3);                 // force globale (= valeur Apex)
-    const aaBubble   = ((AA.BUBBLE_DEG ?? 8) * Math.PI/180); // rayon de la "bulle" en rad
+    // HIPFIRE : bulle PLUS LARGE (l'assist s'accroche même en visant grossièrement) → aim assist présent
+    // en hip aussi ; en ADS la bulle revient à sa taille normale (plus précise). adsAmount 0=hip, 1=ADS.
+    const aaHipBubble = 1 + (AA.HIP_BUBBLE_EXTRA ?? 0.6) * (1 - Math.min(1, adsAmount));
+    const aaBubble   = ((AA.BUBBLE_DEG ?? 8) * Math.PI/180) * aaHipBubble; // rayon de la "bulle" en rad
     const aaBotBubble = aaBubble * (AA.BOT_BUBBLE_MULT ?? 1); // bulle ÉLARGIE sur les bots
     // Cible : l'adversaire 1v1, OU (en bot mode) le bot vivant le plus aligné au réticule.
     let aaTarget = null, aaCrouch = false, aaAng = aaBubble, aaIsBot = false, aaSelBubble = aaBubble;
@@ -5504,7 +5517,10 @@ function playerUpdate(dt, g){
       }
     }
     // force effective : renforcée sur les bots (slowdown + rotation plus marqués)
-    const aaEffStrength = aaStrength * (aaIsBot ? (AA.BOT_STRENGTH_MULT ?? 1) : 1);
+    // L'aim assist agit AUSSI en hipfire, mais PLUS FAIBLE qu'en ADS (échelle hip→ads selon adsAmount).
+    const aaHipMul = (AA.HIP_MULT != null ? AA.HIP_MULT : 0.6);
+    const aaAdsScale = aaHipMul + (1 - aaHipMul) * Math.min(1, adsAmount);   // hip = HIP_MULT, ADS = 1
+    const aaEffStrength = aaStrength * (aaIsBot ? (AA.BOT_STRENGTH_MULT ?? 1) : 1) * aaAdsScale;
     // Poids continu 0..1 : 1 = réticule pile sur la cible, 0 = au bord de la bulle.
     // smoothstep => la force MONTE EN DOUCEUR du bord vers le centre (plus d'entrée "qui claque").
     let aaInstant = 0;
@@ -5880,7 +5896,7 @@ function playerUpdate(dt, g){
       me.mag = curWeapon().mag || CONFIG.MAG_SIZE; me.mags[me.weaponIdx] = me.mag;
       document.getElementById('reloadmsg').style.display='none'; updateAmmoUI();
     }
-  } else if(weapon.state==='equipped' && actionDown('shoot', g) && (locked || gpActive) && me.fireT<=0){
+  } else if(weapon.state==='equipped' && actionDown('shoot', g) && (locked || gpActive) && me.fireT<=0 && !uiBlocking()){
     if(curWeapon().melee) meleeAttack();        // sabre : clic/R2 = coup
     else if(me.mag>0) shoot(); else startReload();
   }
@@ -5963,7 +5979,7 @@ function updateDeathCam(dt, g){
       endDeathCam(); dcFade(false); doMyRespawn(pr);
     } else {
       // pas encore de respawn serveur → on coupe la séquence et on attend sur l'écran de mort
-      endDeathCam(); show('deathscreen'); dcFade(false);
+      endDeathCam(); if(!alive) show('deathscreen'); dcFade(false);
     }
     return;
   }
@@ -5998,7 +6014,9 @@ function updateDeathCam(dt, g){
         setTimeout(()=>dcFade(false), 60); // on lève le fondu une fois la killcam prête
       } else {
         endDeathCam();
-        show('deathscreen');
+        // endDeathCam peut avoir appliqué un respawn en attente (alive=true) → NE PAS ré-afficher
+        // l'écran ÉLIMINÉ par-dessus le jeu (sinon overlay coincé alors qu'on peut bouger).
+        if(!alive) show('deathscreen');
         dcFade(false);
       }
     }
@@ -6500,7 +6518,7 @@ function animate(){
     renderer.autoClear = true;
   }
 }
-gameEl.addEventListener('click', ()=>{ ensureAudioCtx(); if(((playing && alive) || spec.active) && !locked) lock(); });
+gameEl.addEventListener('click', ()=>{ ensureAudioCtx(); if(((playing && alive) || spec.active) && !locked && !uiBlocking()) lock(); });
 addEventListener('resize', ()=>{
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);

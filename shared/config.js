@@ -39,7 +39,7 @@
       BLOOM: true,             // halo lumineux sur les sources vives (sabre, néon, soleil)
       bloom: { strength: 0.55, radius: 0.5, threshold: 0.8 }, // ↑strength = plus de glow ; threshold = seuil de brillance
     },
-    DAMAGE: { BODY: 13, HEAD: 16 },
+    DAMAGE: { BODY: 15, HEAD: 20 },
     ADS_SPEED: 22,   // vitesse de montée en visée (ADS) plus rapide (réglable en jeu : "Vitesse de visée")
     MOMENTUM_FOV: 12, // élargissement FOV max (°) quand le momentum est au max (0 = off) — sensation de vitesse
     // À la mort, le corps se dissout en PARTICULES qui tombent au sol et fade out (false = ancien fondu).
@@ -170,7 +170,7 @@
         model: '/models/R69_hands.glb',
         icon: '/textures/hud/weapon.png',
         mag: 30, fire_rate: 0.056, reload_t: 1.9,
-        damage_body: 13, damage_head: 16,
+        damage_body: 15, damage_head: 20,
         spread_hip: 0.022, spread_ads: 0.002,
         recoil_mult: 1.0,
         recoil_vertical: 1.0,
@@ -190,7 +190,7 @@
         name: 'WINGMAN',
         model: '/models/wingman_hand.glb',
         icon: '/textures/hud/wingman.png',
-        mag: 9, fire_rate: 0.485, reload_t: 1.04,
+        mag: 5, fire_rate: 0.485, reload_t: 1.04,
         damage_body: 70, damage_head: 175,
         spread_hip: 0.008, spread_ads: 0.0008,
         recoil_mult: 1.4,
@@ -506,6 +506,11 @@
       // pour que l'assist se sente autant que sur un vrai adversaire. ×bulle et ×force.
       BOT_BUBBLE_MULT: 1.7,
       BOT_STRENGTH_MULT: 1.6,
+      // Aim assist en HIPFIRE = cette fraction de la force ADS (0.6 = 60%). 1 = identique à l'ADS.
+      HIP_MULT: 0.6,
+      // En hipfire la bulle est agrandie de ce facteur (0.6 = +60%) pour que l'assist s'accroche même
+      // quand on vise grossièrement (sans ADS). 0 = même bulle qu'en ADS.
+      HIP_BUBBLE_EXTRA: 0.6,
       // Douceur de l'entrée/sortie de la bulle (constante de temps, s). C'EST le réglage qui enlève
       // le côté "brutal" : plus grand = transition plus molle. 0 = entrée instantanée (à éviter).
       SMOOTH: 0.08,
