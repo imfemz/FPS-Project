@@ -44,7 +44,7 @@
     MOMENTUM_FOV: 12, // élargissement FOV max (°) quand le momentum est au max (0 = off) — sensation de vitesse
     // À la mort, le corps se dissout en PARTICULES qui tombent au sol et fade out (false = ancien fondu).
     DEATH_DISSOLVE: true,
-    DEATH_DISSOLVE_CFG: { color: 0xcfe0ff, size: 0.075, life: 1.7, per_mesh: 90, max_points: 600 },
+    DEATH_DISSOLVE_CFG: { color: 0xdce8ff, size: 0.10, life: 1.8, per_mesh: 240, max_points: 2000, spread: 0.45, rise: 0.45 },
     RED_DOT_SIZE: 0.0016,
     RUN_SHAKE: 1.5,
     // ===== Sway caméra "vivant" : oscillation DIAGONALE gauche↔droite quand on bouge =====
