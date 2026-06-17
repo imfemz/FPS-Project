@@ -129,6 +129,19 @@
   .toast.show{opacity:1;transform:translateY(0)}
   .toast.warn{color:#ffd27a;border-color:rgba(255,210,122,.3)}
   .toast.bad{color:var(--red);border-color:rgba(255,90,90,.35)}
+  /* ===== Bannière de KILL (orange, centre un peu à gauche, animée 2 s) ===== */
+  #killbanner{position:absolute;left:42%;top:40%;transform:translate(-50%,-50%);z-index:7;pointer-events:none;
+    font-family:var(--font);font-weight:900;font-style:italic;font-size:clamp(30px,4.4vw,58px);letter-spacing:-1px;
+    color:#ff8a2c;text-shadow:0 2px 22px rgba(255,120,30,.55),0 0 2px rgba(0,0,0,.4);opacity:0;white-space:nowrap}
+  #killbanner.show{animation:killpop 2s cubic-bezier(.18,.9,.2,1) forwards}
+  @keyframes killpop{
+    0%{opacity:0;transform:translate(-50%,-50%) scale(.55) rotate(-5deg)}
+    10%{opacity:1;transform:translate(-50%,-50%) scale(1.14) rotate(-3deg)}
+    18%{transform:translate(-50%,-50%) scale(.98) rotate(-3deg)}
+    24%{transform:translate(-50%,-50%) scale(1.02) rotate(-3deg)}
+    30%,76%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(-3deg)}
+    100%{opacity:0;transform:translate(-50%,-56%) scale(1.04) rotate(-3deg)}
+  }
 
   /* ===== ÉCRANS (menu / lobby / options) — minimaliste premium ===== */
   .screen{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
@@ -210,6 +223,7 @@
   <div id="cooldownbar"><div class="cdfill"></div></div>
   <div id="momentum"><div class="mdots"></div><div class="mlabel">MOMENTUM</div></div>
   <div id="toasts"></div>
+  <div id="killbanner"></div>
   <div id="reloadmsg">RECHARGEMENT</div>
   <div id="score" style="display:none"><div class="scorebox" id="pscore">0</div><div id="scoremid"></div><div class="scorebox" id="escore">0</div></div>
   <div id="leaderboard"></div>
@@ -372,6 +386,7 @@ const CONFIG = {
   CLIMB_ENABLED: true,
   CLIMB_SPEED: 4.5,             // vitesse de montée (m/s) — >= 4.5 pour ne pas déclencher le mantle
   CLIMB_MAX_HEIGHT: 3.4,        // hauteur max grimpée d'un coup → AU-DELÀ le perso retombe (on grimpe plus haut)
+  CLIMB_DELAY: 0.16,            // temps de poussée vers le mur avant de s'accrocher (laisse le wall bounce au saut)
   CLIMB_COOLDOWN: 0.6,          // délai avant de pouvoir re-grimper (anti collage infini)
   CLIMB_DETACH_PUSH: 3.2,       // poussée hors du mur au wall-jump / décrochage
   SUPERGLIDE_WINDOW: 0.25,      // fenêtre saut+crouch en FIN de grimpe (visible via le rond bleu)
@@ -1082,18 +1097,20 @@ function updateClimb(dt, jumpEdge, wishDir, f){
     me.vel.z = (me.vel.z - n.z*normComp) - n.z*1.0;
     return;
   }
-  // ----- Démarrage : en l'air, face à un mur, en poussant vers lui (à n'importe quelle vitesse) -----
-  if(me.onGround || me.slide.active || me.mantle.active || me.climb.cool > 0) return;
-  if(me.vel.y < -4) return;                          // pas en pleine chute
-  if(!wishDir) return;
-  // Le WALL BOUNCE garde la priorité au SAUT : si on saute, on ne s'accroche pas (le wall bounce
-  // se déclenche). Sinon (on POUSSE vers le mur sans sauter), on grimpe — même à pleine vitesse.
-  if(jumpEdge) return;
-  const n = findWallNormal(me.pos, me.pos.y);
-  if(!n) return;
-  if(fwd.dot(n) >= -0.4) return;                     // doit faire face au mur
-  if(wishDir.dot(n) >= -0.2) return;                 // doit pousser vers le mur
-  me.climb.active = true; me.climb.t = 0; me.climb.startY = me.pos.y; me.climb.normal.copy(n);
+  // ----- Démarrage : en l'air, face à un mur, en POUSSANT vers lui -----
+  if(me.onGround || me.slide.active || me.mantle.active || me.climb.cool > 0){ me.climb.intentT = 0; return; }
+  if(me.vel.y < -4){ me.climb.intentT = 0; return; }  // pas en pleine chute
+  if(jumpEdge){ me.climb.intentT = 0; return; }       // SAUT = priorité WALL BOUNCE (la grimpe ne s'accroche pas)
+  const n = (wishDir) ? findWallNormal(me.pos, me.pos.y) : null;
+  const facing = n && fwd.dot(n) < -0.4;              // on regarde le mur
+  const pushing = n && wishDir.dot(n) < -0.2;         // on pousse vers le mur
+  if(!facing || !pushing){ me.climb.intentT = 0; return; }
+  // DÉLAI D'INTENTION : on ne s'accroche qu'après avoir maintenu la poussée un court instant.
+  // → un appui SAUT rapide au contact du mur déclenche le WALL BOUNCE (garde l'élan) ;
+  //   maintenir vers le mur (sans sauter) fait grimper. Réglable via CONFIG.CLIMB_DELAY.
+  me.climb.intentT += dt;
+  if(me.climb.intentT < (CONFIG.CLIMB_DELAY ?? 0.16)) return;
+  me.climb.active = true; me.climb.t = 0; me.climb.intentT = 0; me.climb.startY = me.pos.y; me.climb.normal.copy(n);
   playSfx('mantle');
 }
 
@@ -2699,7 +2716,7 @@ const me = {
   crouchHeld: false, crouchToggleState: false, onGround: true,
   slide: { active: false, t: 0, dir: new THREE.Vector3(), speed: 0, cooldown: 0 },
   mantle: { active: false, t: 0, from: new THREE.Vector3(), to: new THREE.Vector3(), sgJump: false, sgCrouch: false },
-  climb: { active: false, t: 0, startY: 0, cool: 0, normal: new THREE.Vector3() },
+  climb: { active: false, t: 0, startY: 0, cool: 0, intentT: 0, normal: new THREE.Vector3() },
   wallBounced: false, lastShotAt: 0,
 };
 const weapon = { state: 'equipped', t: 0 };
@@ -3489,10 +3506,12 @@ let reloadSfxSource = null, _prevReloadingSfx = false;
 function stopReloadSfx(){
   if(reloadSfxSource){ try{ reloadSfxSource.stop(); }catch(e){} reloadSfxSource = null; }
 }
+let reloadedSinceKill = false; // a-t-on rechargé depuis le dernier kill/spawn ? (bannière PERFECT KILL)
 function startReload(){
   const W = curWeapon();
   if(W.melee) return; // le sabre ne se recharge pas
   if(me.reloading || me.mag>=(W.mag||CONFIG.MAG_SIZE) || !alive || weapon.state!=='equipped') return;
+  reloadedSinceKill = true;            // pour la bannière de kill (PERFECT KILL = sans recharger)
   me.reloading = true; me.reloadT = 0; reloadAnimT = 0;
   // reset des déclencheurs one-shot de l'animation de reload (kick/shake)
   reloadKick = 0; reloadShake = 0;
@@ -3559,7 +3578,11 @@ function onKillMsg(m){
   if(m.scores){ lastScores = m.scores; updateScoreboard(); }
   const byN = nameOfSeat(m.by), vN = nameOfSeat(m.victim);
   const tag = m.head ? ' (tête)' : '';
-  if(m.by === myId) showHUDToast(m.head ? 'ÉLIMINATION · TÊTE' : 'ÉLIMINATION', '', 1300); // feedback premium discret
+  if(m.by === myId && m.victim !== myId){
+    // bannière orange animée : PERFECT KILL si kill sans recharger, sinon NICE SHOTS
+    showKillBanner(reloadedSinceKill ? 'NICE SHOTS !' : 'PERFECT KILL !');
+    reloadedSinceKill = false;
+  }
   if(m.by === myId)        killFeed('VOUS ☠ ' + vN + tag);
   else if(m.victim === myId) killFeed(byN + ' ☠ VOUS' + tag);
   else                     killFeed(byN + ' ☠ ' + vN + tag);
@@ -3616,6 +3639,7 @@ function doMyRespawn(m){
   me.slide.active = false; me.slide.cooldown = 0; me.crouchToggleState = false;
   me.mantle.active = false; me.wallBounced = false;
   me.climb.active = false; me.climb.cool = 0; me.climb.normal.set(0,0,0); // pas de grimpe résiduelle au respawn
+  reloadedSinceKill = false; // nouvelle vie → 1er kill sans recharger = PERFECT KILL
   resetMelee(); // pas de coup de sabre résiduel après la mort/respawn
   weapon.state = 'equipped'; weapon.t = 0; gun.visible = true; runArms.visible = false;
   document.getElementById('reloadmsg').style.display='none';
@@ -3792,6 +3816,7 @@ function onJoinGame(m){
   me.slide.active = false; me.slide.cooldown = 0; me.crouchToggleState = false;
   me.mantle.active = false; me.wallBounced = false;
   me.climb.active = false; me.climb.cool = 0; me.climb.normal.set(0,0,0); // pas de grimpe résiduelle au respawn
+  reloadedSinceKill = false; // nouvelle vie → 1er kill sans recharger = PERFECT KILL
   resetMelee();
   weapon.state = 'equipped'; weapon.t = 0; gun.visible = true; runArms.visible = false;
   remote.exists = false; if(remote.soldier && remote.soldier.root) remote.soldier.root.visible = false;
@@ -3844,6 +3869,7 @@ function onBotStart(m){
   me.slide.active = false; me.crouchToggleState = false;
   me.mantle.active = false; me.wallBounced = false;
   me.climb.active = false; me.climb.cool = 0; me.climb.normal.set(0,0,0); // pas de grimpe résiduelle au respawn
+  reloadedSinceKill = false; // nouvelle vie → 1er kill sans recharger = PERFECT KILL
   weapon.state = 'equipped'; weapon.t = 0;
   alive = true;
   // pas d'adversaire 1v1 : on masque le remote
@@ -3946,6 +3972,13 @@ function updateAmmoUI(){
 function triggerAmmoPulse(){
   const a = document.getElementById('ammo'); if(!a) return;
   a.classList.remove('shoot'); void a.offsetWidth; a.classList.add('shoot');
+}
+// ===== Bannière de KILL : texte orange animé 2 s + jingle =====
+function showKillBanner(text){
+  const el = document.getElementById('killbanner'); if(!el) return;
+  el.textContent = text;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); // relance l'anim
+  playSfx('perfect_kill');
 }
 // ===== TAGS de statut (toasts) — premium, discrets, auto-disparition =====
 function showHUDToast(text, type, dur){

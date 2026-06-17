@@ -31,7 +31,8 @@
       AA: true,                // anti-aliasing (MSAA natif + SMAA) — corrige les bords crénelés avec le post-FX
       aa_samples: 4,           // niveau de MSAA (2 / 4 / 8) — ↑ = plus lisse, un peu plus lourd
       AO: true,                // occlusion ambiante (GTAO) : ombres de contact dans les coins/jointures
-      ao: { radius: 0.7, scale: 1.7, samples: 16 }, // ↑radius = AO plus large, ↑scale = plus marquée/visible
+      // radius plus large = l'AO s'étend du pied des caisses jusqu'au SOL (pas juste entre caisses).
+      ao: { radius: 1.6, scale: 1.8, distanceExponent: 0.8, thickness: 1.2, samples: 18 },
       BLOOM: true,             // halo lumineux sur les sources vives (sabre, néon, soleil)
       bloom: { strength: 0.55, radius: 0.5, threshold: 0.8 }, // ↑strength = plus de glow ; threshold = seuil de brillance
     },
@@ -181,7 +182,7 @@
         name: 'WINGMAN',
         model: '/models/wingman_hand.glb',
         icon: '/textures/hud/wingman.png',
-        mag: 9, fire_rate: 0.385, reload_t: 1.4,
+        mag: 9, fire_rate: 0.385, reload_t: 1.5,
         damage_body: 45, damage_head: 78,
         spread_hip: 0.018, spread_ads: 0.0008,
         recoil_mult: 1.4,
@@ -549,6 +550,7 @@
       footstep: '/audio/footstep.mp3', death: '/audio/death.mp3',
       orb_pickup: '/audio/orb_pickup.mp3', crouch: '/audio/crouch.mp3',
       wingman_shot: '/audio/wingman_shot.mp3', wingman_reload: '/audio/wingman_reload.mp3',
+      perfect_kill: '/audio/perfect_kill.mp3',   // jingle de félicitation au kill (notif PERFECT KILL / NICE SHOTS)
     },
     SFX_VOLUME: 0.6,
     SHOT_PITCH_VAR: 0.18,
