@@ -134,6 +134,7 @@
   #killbanner{position:absolute;left:42%;top:40%;transform:translate(-50%,-50%);z-index:7;pointer-events:none;
     font-family:var(--font);font-weight:900;font-style:italic;font-size:clamp(30px,4.4vw,58px);letter-spacing:-1px;
     color:#ff8a2c;text-shadow:0 2px 22px rgba(255,120,30,.55),0 0 2px rgba(0,0,0,.4);opacity:0;white-space:nowrap}
+  #killbanner.headshot{color:#ff3535;text-shadow:0 2px 22px rgba(255,40,40,.6),0 0 2px rgba(0,0,0,.45)}
   #killbanner.show{animation:killpop 2s cubic-bezier(.18,.9,.2,1) forwards}
   @keyframes killpop{
     0%{opacity:0;transform:translate(-50%,-50%) scale(.55) rotate(-5deg)}
@@ -935,11 +936,11 @@ function addContactShadow(cx, cz, w, d){
   const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
   const c = cv.getContext('2d');
   const bx = margin/W*cw, by = margin/D*ch;
-  // le noir DÉBORDE dans la marge (inset < marge) → l'ombre de contact reste sombre au pied de la caisse
-  const inX = bx*0.5, inY = by*0.5;
-  try { c.filter = 'blur(' + Math.max(3, Math.min(bx, by)*0.5) + 'px)'; } catch(e){}
+  // solide = empreinte exacte, et GROS flou → l'ombre se fond PROGRESSIVEMENT sur toute la marge
+  // (plus de coupure nette : le dégradé s'étend loin et s'éteint en douceur).
+  try { c.filter = 'blur(' + Math.max(4, Math.min(bx, by)*0.95) + 'px)'; } catch(e){}
   c.fillStyle = '#000';
-  _roundRect(c, inX, inY, cw-2*inX, ch-2*inY, Math.min(cw, ch)*0.16); c.fill();
+  _roundRect(c, bx, by, cw-2*bx, ch-2*by, Math.min(cw, ch)*0.16); c.fill();
   const tex = new THREE.CanvasTexture(cv);
   const q = new THREE.Mesh(new THREE.PlaneGeometry(W, D),
     new THREE.MeshBasicMaterial({ map: tex, color: 0x000000, transparent: true, opacity: B.ground_opacity ?? 0.5,
@@ -1577,10 +1578,10 @@ function makeDmgTexture(value, head, shield){
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const cx = 128, cy = 64, txt = String(value);
   const fill = head ? (D.color_head || '#ff5a5a') : (shield ? (D.color_shield || '#7fd4ff') : (D.color_health || '#ffe9c0'));
-  const glow = head ? (D.glow_head || '#ff3030') : (shield ? (D.glow_shield || '#1f9dff') : (D.glow_health || '#ff7a3c'));
+  const glow = head ? (D.glow_head || '#ff3030') : (D.glow_shield || '#1f9dff');
   const gs = (D.glow_strength != null ? D.glow_strength : 18);
-  // Halo coloré (image 1 = bleu sur le bouclier, image 2 = orangé sur les PV) : plusieurs passes de shadow.
-  if(gs > 0){
+  // GLOW seulement sur les dégâts COLORÉS : rouge (tête) et bleu (bouclier). Pas de halo blanc sur les PV.
+  if(gs > 0 && (head || shield)){
     ctx.fillStyle = fill; ctx.shadowColor = glow; ctx.shadowBlur = gs;
     for(let i=0;i<3;i++) ctx.fillText(txt, cx, cy);
   }
@@ -3670,7 +3671,7 @@ function startReload(){
   reloadedSinceKill = true;            // pour la bannière de kill (PERFECT KILL = sans recharger)
   me.reloading = true; me.reloadT = 0; reloadAnimT = 0;
   // reset des déclencheurs one-shot de l'animation de reload (kick/shake)
-  reloadKick = 0; reloadShake = 0;
+  reloadKick = 0; reloadShake = 0; reloadChamberShook = false;
   const RA = GAMECFG.RELOAD_ANIM;
   if(RA && RA.phases) for(const p of RA.phases){ p._kicked = false; p._shook = false; }
   document.getElementById('reloadmsg').style.display='block';
@@ -3735,8 +3736,8 @@ function onKillMsg(m){
   const byN = nameOfSeat(m.by), vN = nameOfSeat(m.victim);
   const tag = m.head ? ' (tête)' : '';
   if(m.by === myId && m.victim !== myId){
-    // bannière orange animée : PERFECT KILL si kill sans recharger, sinon NICE SHOTS
-    showKillBanner(reloadedSinceKill ? 'NICE SHOTS !' : 'PERFECT KILL !');
+    // bannière : HEADSHOT (rouge) si kill à la tête, sinon PERFECT KILL / NICE SHOTS (orange)
+    showKillBanner(reloadedSinceKill ? 'NICE SHOTS !' : 'PERFECT KILL !', !!m.head);
     reloadedSinceKill = false;
   }
   if(m.by === myId)        killFeed('VOUS ☠ ' + vN + tag);
@@ -4187,7 +4188,7 @@ function applyLocalBotDamage(id, b, dmg, head, melee){
   onBotHit({ id, dmg, head: !!head, hp: Math.max(0,b.hp), sh: Math.max(0,b.sh), melee: !!melee });
   if(b.hp <= 0){
     onBotKill({ id, head: !!head });
-    showKillBanner(reloadedSinceKill ? 'NICE SHOTS !' : 'PERFECT KILL !');
+    showKillBanner(reloadedSinceKill ? 'NICE SHOTS !' : 'PERFECT KILL !', !!head);
     reloadedSinceKill = false;
     localBotKills++; const ps = document.getElementById('pscore'); if(ps) ps.textContent = localBotKills;
     setTimeout(()=>{
@@ -4266,9 +4267,10 @@ function triggerAmmoPulse(){
   a.classList.remove('shoot'); void a.offsetWidth; a.classList.add('shoot');
 }
 // ===== Bannière de KILL : texte orange animé 2 s + jingle =====
-function showKillBanner(text){
+function showKillBanner(text, headshot){
   const el = document.getElementById('killbanner'); if(!el) return;
-  el.textContent = text;
+  el.textContent = headshot ? 'HEADSHOT !' : text;     // headshot → texte ROUGE dédié
+  el.classList.toggle('headshot', !!headshot);
   el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); // relance l'anim
   playSfx('perfect_kill');
 }
@@ -4481,7 +4483,7 @@ function updateSlide(dt, crouchPressed, inputDir){
 
 /* ---------- Animation de reload par phases (snappy, humaine) ---------- */
 // État procédural du reload (kick/shake)
-let reloadKick = 0, reloadShake = 0;
+let reloadKick = 0, reloadShake = 0, reloadChamberShook = false;
 function _ease(name, t){
   if(name === 'easeOut') return 1 - Math.pow(1 - t, 3);          // rapide puis ralentit (snappy)
   if(name === 'easeInOut') return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
@@ -4530,6 +4532,10 @@ function reloadPose(dt){
   // déclenche kick à l'entrée de la phase "mag in", shake à l'entrée du "chamber"
   if(cur.kick && !cur._kicked && local > 0.6){ reloadKick = RA.kick_amount ?? 0.05; cur._kicked = true; if(RA.kick_sfx) playSfx(RA.kick_sfx); }
   if(cur.shake && !cur._shook && local > 0.2){ reloadShake = RA.shake_amount ?? 0.025; cur._shook = true; }
+  // MICRO-SHAKE "chamber reset" au 1/3 du reload (indépendant des phases, timing garanti)
+  const _prog = total > 0 ? Math.max(0, Math.min(1, reloadAnimT / total)) : 0;
+  if(_prog >= (RA.chamber_shake_at ?? 0.34) && !reloadChamberShook){ reloadShake = Math.max(reloadShake, RA.chamber_shake ?? 0.06); reloadChamberShook = true; }
+  if(_prog < 0.05) reloadChamberShook = false;
   // reset des flags one-shot quand on quitte la phase (pour le prochain reload)
   if(local < 0.05){ cur._kicked = false; cur._shook = false; }
   // décroissance du kick et du shake
@@ -5429,16 +5435,17 @@ function playerUpdate(dt, g){
     const aaOn = cfg.aimAssist && (AA.ENABLED !== false);
     const aaStrength = (AA.STRENGTH ?? 0.3);                 // force globale (= valeur Apex)
     const aaBubble   = ((AA.BUBBLE_DEG ?? 8) * Math.PI/180); // rayon de la "bulle" en rad
+    const aaBotBubble = aaBubble * (AA.BOT_BUBBLE_MULT ?? 1); // bulle ÉLARGIE sur les bots
     // Cible : l'adversaire 1v1, OU (en bot mode) le bot vivant le plus aligné au réticule.
-    let aaTarget = null, aaCrouch = false, aaAng = aaBubble;
+    let aaTarget = null, aaCrouch = false, aaAng = aaBubble, aaIsBot = false, aaSelBubble = aaBubble;
     if(aaOn){
       const fwd0 = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-      let bestAng = aaBubble; // le seuil de sélection = la taille de la bulle (cohérent : au bord, assist=0)
+      let bestAng = Infinity; // chaque cible a son propre seuil de bulle → on garde la plus alignée
       if(remote.exists && !remote.dead){
         const tgt = remote.pos.clone(); tgt.y += remote.anim.c ? 0.95 : 1.3;
         const to = tgt.clone().sub(camera.position); const d = to.length(); to.normalize();
         const ang = fwd0.angleTo(to);
-        if(ang < bestAng && d < 45){ bestAng = ang; aaTarget = tgt; aaCrouch = !!remote.anim.c; aaAng = ang; }
+        if(ang < aaBubble && ang < bestAng && d < 45){ bestAng = ang; aaTarget = tgt; aaCrouch = !!remote.anim.c; aaAng = ang; aaIsBot = false; aaSelBubble = aaBubble; }
       }
       if(botActive){
         for(const b of botMgr.values()){
@@ -5446,15 +5453,17 @@ function playerUpdate(dt, g){
           const tgt = b.pos.clone(); tgt.y += (b.anim && b.anim.c) ? 0.95 : 1.3;
           const to = tgt.clone().sub(camera.position); const d = to.length(); to.normalize();
           const ang = fwd0.angleTo(to);
-          if(ang < bestAng && d < 45){ bestAng = ang; aaTarget = tgt; aaCrouch = !!(b.anim && b.anim.c); aaAng = ang; }
+          if(ang < aaBotBubble && ang < bestAng && d < 45){ bestAng = ang; aaTarget = tgt; aaCrouch = !!(b.anim && b.anim.c); aaAng = ang; aaIsBot = true; aaSelBubble = aaBotBubble; }
         }
       }
     }
+    // force effective : renforcée sur les bots (slowdown + rotation plus marqués)
+    const aaEffStrength = aaStrength * (aaIsBot ? (AA.BOT_STRENGTH_MULT ?? 1) : 1);
     // Poids continu 0..1 : 1 = réticule pile sur la cible, 0 = au bord de la bulle.
     // smoothstep => la force MONTE EN DOUCEUR du bord vers le centre (plus d'entrée "qui claque").
     let aaInstant = 0;
     if(aaTarget){
-      const prox = Math.max(0, Math.min(1, 1 - aaAng / aaBubble));
+      const prox = Math.max(0, Math.min(1, 1 - aaAng / aaSelBubble));
       aaInstant = prox*prox*(3 - 2*prox);
     }
     // Lissage TEMPOREL de l'activation : amortit l'entrée/sortie de bulle (tue le côté brutal).
@@ -5464,8 +5473,8 @@ function playerUpdate(dt, g){
     if(aaWeight > 0.0005){
       // SLOWDOWN progressif : la caméra ralentit d'autant plus que le réticule est proche du centre.
       // Au centre, vitesse = (1 - STRENGTH*SLOWDOWN) ; ex 0.3 => 70% de la vitesse (vs 50% avant).
-      const slow = aaStrength * (AA.SLOWDOWN ?? 1.0) * aaWeight;
-      aimAssistFactor = 1 - Math.min(0.85, slow);
+      const slow = aaEffStrength * (AA.SLOWDOWN ?? 1.0) * aaWeight;
+      aimAssistFactor = 1 - Math.min(0.9, slow);
       // ROTATION douce : tire le réticule vers la cible, SEULEMENT quand on bouge le stick droit
       // (comme Apex — pas en simple strafe). Échelle = STRENGTH*ROTATION*poids => fond aux bords.
       const aaRot = (AA.ROTATION ?? 0);
@@ -5473,7 +5482,7 @@ function playerUpdate(dt, g){
         const toT = aaTarget.clone().sub(camera.position); toT.normalize();
         const wantYaw = Math.atan2(-toT.x, -toT.z);
         const wantPitch = Math.asin(Math.max(-1,Math.min(1,toT.y)));
-        const rotK = Math.min(0.5, dt * (AA.ROTATION_RATE ?? 7) * aaStrength * aaRot * aaWeight);
+        const rotK = Math.min(0.5, dt * (AA.ROTATION_RATE ?? 7) * aaEffStrength * aaRot * aaWeight);
         me.yaw = lerpAngle(me.yaw, wantYaw, rotK);
         me.pitch += (wantPitch - me.pitch) * rotK;
       }

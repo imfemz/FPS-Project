@@ -35,7 +35,7 @@
       ao: { radius: 5.8, scale: 2.8, distanceExponent: 0.7, thickness: 1.4, samples: 18 },
       // AO "cuite" (statique, indépendante de la caméra) : ombre de contact au sol sous chaque caisse/mur
       // + assombrissement progressif du bas des faces verticales. Cohérente sous tous les angles.
-      BAKED_AO: { enabled: true, ground_opacity: 0.72, ground_margin: 1.4, face_darken: 0.5 },
+      BAKED_AO: { enabled: true, ground_opacity: 0.42, ground_margin: 2.8, face_darken: 0.38 },
       BLOOM: true,             // halo lumineux sur les sources vives (sabre, néon, soleil)
       bloom: { strength: 0.55, radius: 0.5, threshold: 0.8 }, // ↑strength = plus de glow ; threshold = seuil de brillance
     },
@@ -190,7 +190,7 @@
         name: 'WINGMAN',
         model: '/models/wingman_hand.glb',
         icon: '/textures/hud/wingman.png',
-        mag: 9, fire_rate: 0.485, reload_t: 1.5,
+        mag: 9, fire_rate: 0.485, reload_t: 1.04,
         damage_body: 70, damage_head: 175,
         spread_hip: 0.008, spread_ads: 0.0008,
         recoil_mult: 1.4,
@@ -391,13 +391,16 @@
     RELOAD_ANIM: {
       ENABLED: true,
       blend_in: 14,         // vitesse de fondu À l'entrée du reload (prise de contrôle)
-      blend_out: 9,         // vitesse de fondu À la sortie (retour vers idle/walk/sprint/ads)
+      blend_out: 5,         // vitesse de fondu À la sortie (PLUS BAS = retour à l'idle plus doux, anti-coupure)
+      // Micro-shake "chamber reset" déclenché à cette fraction du reload (0.34 = au 1/3).
+      chamber_shake_at: 0.34,
+      chamber_shake: 0.06,  // amplitude du micro-shake chamber reset (rad) — discret
       kick_amount: 1.14,    // kick à l'insertion du chargeur (m)
       kick_sfx: null,       // son JOUÉ sur le kick d'insertion (null = aucun). NE PAS mettre 'reload' :
                             // chaque arme joue déjà SON son de reload via sfx_reload au début du reload.
                             // Mets un nom de son court (ex: un clic) seulement si tu veux un effet en plus.
       shake_amount: 0.12,   // micro-shake au chamber (rad)
-      overshoot: 0.10,      // léger dépassement au retour idle (ressort)
+      overshoot: 0.05,      // léger dépassement au retour idle (ressort) — réduit pour un retour plus doux
       noise_amount: 0.004,  // micro-noise sur la pose pour casser le côté parfait (rad/m)
       sprint_damp: 0.35,    // pendant le reload, la pose de course est réduite à ce facteur (anti hors-cadre)
       // Animation façon Apex : l'arme descend ET s'incline FORT vers la gauche (roll),
@@ -414,8 +417,8 @@
         { t: 0.12, pos: [0, -0.07, 0.00], rot: [0.20, -0.12, -0.66], ease: 'easeOut', kick: true },
         // 5) chamber : redressement SEC et léger (pas à la verticale !), on arme le mécanisme
         { t: 0.18, pos: [0, -0.02, -0.01], rot: [-0.06, 0.04, -0.30], ease: 'easeOut', shake: true },
-        // 6) retour idle fluide (avec léger overshoot géré dans le code)
-        { t: 0.22, pos: [0, 0, 0], rot: [0, 0, 0], ease: 'easeInOut' },
+        // 6) retour idle fluide et PROGRESSIF (phase allongée → plus de coupure nette vers l'idle)
+        { t: 0.40, pos: [0, 0, 0], rot: [0, 0, 0], ease: 'easeInOut' },
       ],
     },
     CROSSHAIR: { SIZE: 13, GAP: 17, THICKNESS: 2, EXPAND: 10, EXPAND_SPEED: 18, HOLSTER_DOT: 4 },
@@ -499,6 +502,10 @@
       // Taille de la bulle autour de l'ennemi, en DEGRÉS. Le réticule doit entrer dedans pour que
       // l'assist s'active. Plus grand = s'accroche de plus loin. (Avant : ~8° en dur.)
       BUBBLE_DEG: 8,
+      // Renforcement sur les BOTS (mode entraînement) : ils sont locaux, on peut être plus généreux
+      // pour que l'assist se sente autant que sur un vrai adversaire. ×bulle et ×force.
+      BOT_BUBBLE_MULT: 1.7,
+      BOT_STRENGTH_MULT: 1.6,
       // Douceur de l'entrée/sortie de la bulle (constante de temps, s). C'EST le réglage qui enlève
       // le côté "brutal" : plus grand = transition plus molle. 0 = entrée instantanée (à éviter).
       SMOOTH: 0.08,
