@@ -244,8 +244,9 @@
   Mouvement rapide : slide, slide jump, wall bounce, grimpe, superglide.</p>
   <input class="pseudoinput" id="pseudo" maxlength="16" placeholder="Votre pseudo"><br>
   <button class="btn" id="playbtn">Rejoindre</button>
+  <button class="btn ghost" id="botbtnmenu">Mode entraînement (bots)</button>
   <button class="btn ghost" id="optbtn">Options</button>
-  <p style="margin-top:14px;font-size:12px;color:var(--txt-faint);max-width:420px">Au-delà de 6 joueurs vous êtes spectateur, et entrez automatiquement dès qu'une place se libère.</p>
+  <p style="margin-top:14px;font-size:12px;color:var(--txt-faint);max-width:420px">Au-delà de 6 joueurs vous êtes spectateur, et entrez automatiquement dès qu'une place se libère.<br>Le <b style="color:var(--txt-dim)">Mode entraînement</b> se joue hors-ligne contre des bots.</p>
 </div>
 
 <div class="screen" id="options">
@@ -4282,6 +4283,14 @@ document.getElementById('playbtn').onclick = ()=>{
 document.getElementById('lobbyback').onclick = ()=>toMenu();
 document.getElementById('seatbtn').onclick = ()=>{ if(ws && ws.readyState===1) ws.send(JSON.stringify({t:'seat', want:true})); };
 document.getElementById('botbtn').onclick = ()=>{ startLocalBotMode(); };
+// Mode entraînement depuis le MENU principal (hors-ligne, sans rejoindre la mêlée)
+document.getElementById('botbtnmenu').onclick = ()=>{
+  ensureAudioCtx(); startAmbient();
+  const inp = document.getElementById('pseudo');
+  myName = (inp.value || '').trim().slice(0,16) || ('Joueur' + Math.floor(100 + Math.random()*900));
+  inp.value = myName; localStorage.setItem('nc_pseudo', myName);
+  startLocalBotMode();
+};
 document.getElementById('specbtn').onclick = ()=>{ if(ws && ws.readyState===1) ws.send(JSON.stringify({t:'seat', want:false})); };
 let optionsFrom = 'menu';
 document.getElementById('optbtn').onclick = ()=>{ hideAll(); buildOptions(); show('options'); optionsFrom='menu'; };
