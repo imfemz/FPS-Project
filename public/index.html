@@ -4122,8 +4122,8 @@ function onBotRespawn(m){
    Réutilise les handlers existants onBotStart / onBotHit / onBotKill / onBotRespawn.
    ========================================================================== */
 let localBotMode = false, localBotKills = 0;
-const LBOT = { count: 5, speed: 2.5, respawn: 1500, engage_dist: 12,
-  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.2 };  // séparation = distance mini entre bots ; radius = collision joueur ; hit_pad = hitbox un peu plus genereuse (la base est deja elargie)
+const LBOT = { count: 5, speed: 1.9, respawn: 1500, engage_dist: 12,
+  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4 };  // séparation = distance mini entre bots ; radius = collision joueur ; hit_pad = hitbox bien généreuse pour bien toucher
 const _botTmp = new THREE.Vector3();
 // IA simple mais vivante : chaque bot erre vers une destination, se rapproche du joueur,
 // et strafe quand il est proche. b.anim.m anime les jambes (marche/course).
@@ -4161,7 +4161,7 @@ function updateLocalBots(dt){
     const dxp = me.pos.x - b.pos.x, dzp = me.pos.z - b.pos.z;
     const distP = Math.hypot(dxp, dzp) || 0.0001;
     mv.retarget -= dt; mv.strafeT -= dt;
-    if(mv.strafeT <= 0){ mv.strafeDir *= -1; mv.strafeT = 0.7 + Math.random()*1.1; }
+    if(mv.strafeT <= 0){ mv.strafeDir *= -1; mv.strafeT = 1.5 + Math.random()*1.6; } // strafe plus lisse (moins de juke) = trackable
     if(mv.retarget <= 0){                              // nouvelle destination d'errance (parfois vers le joueur)
       mv.retarget = 1.6 + Math.random()*2.6;
       if(Math.random() < 0.5){ mv.tx = me.pos.x + (Math.random()*2-1)*7; mv.tz = me.pos.z + (Math.random()*2-1)*7; }
