@@ -41,7 +41,7 @@
   #hud{position:fixed;inset:0;pointer-events:none;display:none}
   #crosshair{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:80px;height:80px}
   #crosshair span{position:absolute;background:rgba(255,255,255,.82);box-shadow:0 0 2px rgba(0,0,0,.7);left:50%;top:50%;border-radius:1px}
-  #crosshair .ch-dot{border-radius:50%;display:none}
+  #crosshair .ch-dot{border-radius:50%;display:none;box-shadow:0 0 0 1px rgba(0,0,0,.65),0 0 4px rgba(0,0,0,.5)}
   #crosshair .l{left:0}#crosshair .r{right:0}#crosshair .t{top:0}#crosshair .b{bottom:0}
   #hitmarker{position:absolute;left:50%;top:50%;width:34px;height:34px;opacity:0;transition:opacity .1s,transform .07s;transform:translate(-50%,-50%) rotate(45deg)}
   #hitmarker span{position:absolute;background:#fff;border-radius:1.5px;box-shadow:0 0 3px rgba(0,0,0,.9)}
@@ -5875,8 +5875,10 @@ function playerUpdate(dt, g){
       dotEl.style.display = 'block';
       dotEl.style.width = dotSize+'px'; dotEl.style.height = dotSize+'px';
       dotEl.style.marginLeft = (-dotSize/2)+'px'; dotEl.style.marginTop = (-dotSize/2)+'px';
-    } else if(!holstered && dotEl._userDot){
-      const ds = dotEl._userSize || 4;          // point central perso (réglé dans les options)
+    } else if(!holstered){
+      // POINT DE VISÉE PRÉCIS toujours affiché = exactement là où part la balle (centre écran).
+      // Vise avec CE point (pas le guidon de l'arme, qui peut être légèrement décalé). Taille perso si réglée.
+      const ds = dotEl._userDot ? (dotEl._userSize || 4) : 3;
       dotEl.style.display = 'block';
       dotEl.style.width = ds+'px'; dotEl.style.height = ds+'px';
       dotEl.style.marginLeft = (-ds/2)+'px'; dotEl.style.marginTop = (-ds/2)+'px';
