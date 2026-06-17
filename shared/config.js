@@ -94,16 +94,16 @@
     SPREAD: { HIP: 0.010, ADS: 0.002, SLIDE: 0.014 }, // hip/slide resserres : la balle part bien dans le viseur (fini "pile dessus sans toucher")
     FIRE_RATE: 0.056,
     RECOIL: {
-      VERTICAL: 0.0028, HORIZONTAL: 0.0005, PATTERN_DRIFT: 0.50,
+      VERTICAL: 0.0018, HORIZONTAL: 0.0005, PATTERN_DRIFT: 0.50,
       FIRST_SHOT_MULT: 2.78, ADS_MULT: 0.62, RECOVERY_DELAY: 0.13,
       RECOVERY_SPEED: 0.35, RECOVERY_AMOUNT: 1.75, SMOOTH_THRESHOLD: 0.90,
       SMOOTH_MAX: 0.65, KICK_VM: 0.78, VM_BACK: 0.13, VM_MAX: 0.01,
       VM_ROT: 0.024, VM_PUNCH_SPEED: 10, VM_RETURN_SPEED: 20,
       // Ramp-up du spray R99 : plus tu maintiens le tir, plus le recul devient nerveux, avec un plafond.
-      SPRAY_RAMP: 0.018, SPRAY_MAX: 2.32,
+      SPRAY_RAMP: 0.018, SPRAY_MAX: 1.32,
       // Micro-vibration par balle : casse la ligne zigzag trop propre et donne un spray R99 plus vivant.
-      MICRO_JITTER_X: 0.0024, MICRO_JITTER_Y: 0.0116,
-      MICRO_JITTER_FREQ: 10.7, MICRO_JITTER_RANDOM: 0.50,
+      MICRO_JITTER_X: 0.0024, MICRO_JITTER_Y: 0.0006,
+      MICRO_JITTER_FREQ: 6.7, MICRO_JITTER_RANDOM: 0.10,
     },
     // ===== Contrôle du shake caméra au tir =====
     // RECOIL_* agit sur le vrai mouvement caméra/viseur causé par le recul.
@@ -122,8 +122,7 @@
 
       // Micro-shake visuel pur : ne remplace pas le recul, il ajoute une vibration courte.
       VISUAL_ENABLED: true,
-      VISUAL_AMOUNT: 0.01
-        8,
+      VISUAL_AMOUNT: 0.008,
       VISUAL_FREQ: 0.5,
       VISUAL_DECAY: 2,
       VISUAL_MAX: 1.0,
@@ -157,7 +156,7 @@
     },
     SUPERGLIDE: {
       ENABLED: true, JUMP_ONLY: true, WINDOW: 0.25, GRACE: 0.14,
-      SPEED: 26.0, UP: 6.2, FOV_KICK: 10, FOV_DECAY: 2.6,
+      SPEED: 15.0, UP: 6.2, FOV_KICK: 10, FOV_DECAY: 2.6,
       show_dot: false,   // point bleu de timing superglide : masqué (gênait la visée en grimpe). true = réafficher
     },
     MANTLE_SHAKE: 0.15,
@@ -193,11 +192,11 @@
         icon: '/textures/hud/wingman.png',
         mag: 5, fire_rate: 0.445, reload_t: 1.04,
         damage_body: 70, damage_head: 175,
-        spread_hip: 0.008, spread_ads: 0.0008,
+        spread_hip: 0.008, spread_ads: 0.0003,
         recoil_mult: 1.4,
         recoil_vertical: 0.7,
         recoil_speed: 0.9,
-        kick_back: 0.8,
+        kick_back: 0.1,
         vkick: { gun: -0.40, cam: 0.010, up_speed: 1, down_speed: 8 },
         // recul rotationnel directionnel : l'arme part en haut-droite puis revient fluide au centre
         // pitch = montée (haut), yaw = départ vers la droite, roll = légère inclinaison

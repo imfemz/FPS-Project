@@ -25,10 +25,10 @@
   // Miroir Nord→Sud (z → -z). Géométrie identique ; l'identité d'équipe vient des spawns, pas des couleurs.
   const mir = (b) => { add(b); add(Object.assign({}, b, { z: -b.z })); return b; };
 
-  // ---------- ENCEINTE ----------
-  mir({ x: 0, z: HALF, w: HALF * 2, h: 6, d: 1.2, type: 'concrete' });   // murs Nord + Sud
-  add({ x: HALF, z: 0, w: 1.2, h: 6, d: HALF * 2, type: 'concrete' });   // mur Est
-  add({ x: -HALF, z: 0, w: 1.2, h: 6, d: HALF * 2, type: 'concrete' });  // mur Ouest
+  // ---------- ENCEINTE (murs externes hauts : h=12) ----------
+  mir({ x: 0, z: HALF, w: HALF * 2, h: 12, d: 1.2, type: 'concrete' });   // murs Nord + Sud
+  add({ x: HALF, z: 0, w: 1.2, h: 12, d: HALF * 2, type: 'concrete' });   // mur Est
+  add({ x: -HALF, z: 0, w: 1.2, h: 12, d: HALF * 2, type: 'concrete' });  // mur Ouest
   // Tours d'angle (perchoirs + wall-bounce)
   mir({ x: 42, z: 42, w: 5, h: 8, d: 5, type: 'concrete' });
   mir({ x: -42, z: 42, w: 5, h: 8, d: 5, type: 'concrete' });
