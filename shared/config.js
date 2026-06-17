@@ -11,9 +11,9 @@
       exposure: 0.8,           // luminosité globale (tone mapping). BAISSE si ça crame, MONTE si trop sombre
       // --- Lumière ---
       sun_intensity: 1.05,      // soleil (directionnelle chaude). Donne le contraste et les ombres
-      sun_color: '#ece6da',    // couleur du soleil (chaud, golden hour)
-      sky_light: 0.75,          // lumière du ciel (hemisphere) qui remplit les ombres
-      ground_bounce: '#8a8278',// couleur du rebond de lumière du sol
+      sun_color: '#d6dde8',    // couleur du soleil (lumière froide, ambiance industrielle)
+      sky_light: 0.78,          // lumière du ciel (hemisphere) qui remplit les ombres
+      ground_bounce: '#5d646e',// couleur du rebond de lumière du sol (béton froid)
       ambient: 0.13,           // ambiante minimale (évite les noirs bouchés). 0 = ombres plus profondes
       // --- Reflets d'environnement ---
       env_intensity: 0.45,      // force des reflets sur murs/caisses/rampes
@@ -25,7 +25,7 @@
       // texturé qui part en blanc cramé. Descends vers 0.7 si c'est encore trop clair.
       tex_brightness: 0.98,
       // --- Atmosphère ---
-      fog_color: '#b8b1a4', fog_near: 50, fog_far: 150, // brume de profondeur
+      fog_color: '#878f99', fog_near: 65, fog_far: 200, // brume froide ; far poussé (map 90×90)
       // --- POST-FX (vrai shader) : anti-aliasing + occlusion ambiante + bloom ---
       POSTFX: true,            // false = désactive tout le post-traitement (si souci de perf/rendu)
       AA: true,                // anti-aliasing (MSAA natif + SMAA) — corrige les bords crénelés avec le post-FX
@@ -122,7 +122,8 @@
 
       // Micro-shake visuel pur : ne remplace pas le recul, il ajoute une vibration courte.
       VISUAL_ENABLED: true,
-      VISUAL_AMOUNT: 0.008,
+      VISUAL_AMOUNT: 0.01
+        8,
       VISUAL_FREQ: 0.5,
       VISUAL_DECAY: 2,
       VISUAL_MAX: 1.0,
@@ -151,7 +152,7 @@
       ADS_MULT: 0.35,
 
       // Protection du centre ADS : 1 = le point rouge/canon reste verrouillé au centre pendant le roll.
-      CENTER_PROTECT: 0.0,
+      CENTER_PROTECT: 1.0,
       CENTER_ADS_START: 1.55,
     },
     SUPERGLIDE: {
@@ -169,14 +170,14 @@
         name: 'R-69',
         model: '/models/R69_hands.glb',
         icon: '/textures/hud/weapon.png',
-        mag: 30, fire_rate: 0.056, reload_t: 1.9,
+        mag: 30, fire_rate: 0.038, reload_t: 1.9,
         damage_body: 15, damage_head: 20,
         spread_hip: 0.010, spread_ads: 0.002,
         recoil_mult: 1.0,
         recoil_vertical: 1.0,
         recoil_speed: 1.0,
         kick_back: 1.0,
-        fire_vibe: { amount: 0.0005, freq: 13, x_amount: 0.001, x_freq: 8 },
+        fire_vibe: { amount: 0.0005, freq: 13, x_amount: 0.001, x_freq: 18 },
         sfx_shot: 'shot', sfx_reload: 'reload',
         scale: 1, position: [0, 0.1, 0], rotation_y_deg: 0, sight: null,
         muzzle: [0, 0.20, -0.45],
@@ -190,7 +191,7 @@
         name: 'WINGMAN',
         model: '/models/wingman_hand.glb',
         icon: '/textures/hud/wingman.png',
-        mag: 5, fire_rate: 0.485, reload_t: 1.04,
+        mag: 5, fire_rate: 0.445, reload_t: 1.04,
         damage_body: 70, damage_head: 175,
         spread_hip: 0.008, spread_ads: 0.0008,
         recoil_mult: 1.4,
@@ -353,12 +354,12 @@
       slide:  { pos: [0, 0, 0],         rot: [0, 0, 0],            blendSpeed: 9 },  // slide reprend l'orientation crouch (CROUCH_POSE)
       ads:    { pos: [0, 0, 0],          rot: [0, 0, 0],            blendSpeed: 16, swayMult: 0.25 },
       // ADS : réduction du sway HORIZONTAL (gauche/droite) — plus bas = arme plus stable en visée.
-      ads_sway_h: 0.25,         // multiplie le sway horizontal résiduel en ADS (0 = bloqué, 1 = inchangé)
-      ads_sway_v: 0.25,         // multiplie le sway VERTICAL résiduel en ADS (saut/atterrissage stables)
+      ads_sway_h: 0.05,         // multiplie le sway horizontal résiduel en ADS (0 = bloqué, 1 = inchangé)
+      ads_sway_v: 0.35,         // multiplie le sway VERTICAL résiduel en ADS (saut/atterrissage stables)
       // En ADS, l'airborne (saut), le rebond et la bascule de saut se résorbent VITE → viseur centré.
-      ads_air_recenter: 0.90,   // fraction de l'airborne/rebond annulée en ADS plein (0.97 = quasi tout)
+      ads_air_recenter: 0.95,   // fraction de l'airborne/rebond annulée en ADS plein (0.97 = quasi tout)
       // inertie : retard de l'arme par rapport au regard (visée qui "traîne" un peu)
-      inertia: { amount: 0.020, return: 9, max: 0.05 },
+      inertia: { amount: 0.090, return: 9, max: 0.05 },
       // pose airborne (saut / bunny hop) : arme stable + léger flottement, PAS de cycle de course.
       // Réglée pour : pose plus basse (comme img 3 mais moins haute), flottement léger mais visible,
       // retour lent et doux à l'atterrissage (~0.35s).
@@ -367,7 +368,7 @@
         rot: [0.03, 0.015, 0.02],   // légère inclinaison stable
         bounceAmount: 0.010,    // rebond vertical léger mais visible (était 0.018)
         bounceSpeed: 5.5,       // un peu plus lent = flottement plus doux
-        velocityInfluence: 0.008, // inertie verticale réduite (évite que l'arme monte trop)
+        velocityInfluence: 0.018, // inertie verticale réduite (évite que l'arme monte trop)
         swayAmount: 0.006,      // sway latéral subtil
         blendSpeedIn: 11,       // entrée en airborne (assez réactive)
         blendSpeedOut: 3.2,     // SORTIE lente et douce (~0.35s) → plus de snap au retour
@@ -421,7 +422,7 @@
         { t: 0.40, pos: [0, 0, 0], rot: [0, 0, 0], ease: 'easeInOut' },
       ],
     },
-    CROSSHAIR: { SIZE: 13, GAP: 17, THICKNESS: 2, EXPAND: 10, EXPAND_SPEED: 18, HOLSTER_DOT: 4 },
+    CROSSHAIR: { SIZE: 13, GAP: 17, THICKNESS: 1, EXPAND: 10, EXPAND_SPEED: 18, HOLSTER_DOT: 4 },
     BULLET_DROP: 1,
     BULLET_SPEED: 520,
     JUMP_SHAKE: 0.125,
@@ -492,13 +493,13 @@
       ENABLED: true,
       // Force globale = le "target compensation" d'Apex (PC 0.4, console 0.6). Toi tu veux 0.3.
       // C'est LE curseur principal. Monte si tu veux plus collant, descends pour plus de raw aim.
-      STRENGTH: 0.5,
+      STRENGTH: 1,
       // Profondeur du ralentissement au centre, en fraction de STRENGTH. 1.0 = au plus près la
       // caméra tombe à (1 - STRENGTH) de sa vitesse (ex 0.3 => 70%). 0 = pas de slowdown du tout.
-      SLOWDOWN: 1.0,
+      SLOWDOWN: 0.3,
       // Plafond ABSOLU du ralentissement (0.55 = caméra jamais en dessous de 45% de sa vitesse près
       // d'une cible) → garde la visée RÉACTIVE. Monte vers 0.8 pour plus collant, baisse pour plus brut.
-      SLOWDOWN_MAX: 0.55,
+      SLOWDOWN_MAX: 0.45,
       // Force du magnétisme rotationnel, en fraction de STRENGTH. 0 = slowdown pur (zéro rotation).
       // Garde-le bas pour rester "PC" : la rotation est ce qui se sent le plus "auto-aim".
       ROTATION: 0.5,

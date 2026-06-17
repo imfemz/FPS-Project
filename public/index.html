@@ -594,7 +594,7 @@ function recSnapshot(seconds){
 function buildScene(){
   scene = new THREE.Scene();
   const G = GAMECFG.GRAPHICS || {};
-  scene.background = new THREE.Color(0xb8b1a4);
+  scene.background = new THREE.Color(0x9099a3);
   scene.fog = new THREE.Fog(new THREE.Color(G.fog_color || 0xcfe2f0), G.fog_near ?? 60, G.fog_far ?? 170);
   camera = new THREE.PerspectiveCamera(GAMECFG.FOV.VIEW, innerWidth/innerHeight, 0.05, 400);
   camera.layers.enable(AO_SKIP_LAYER); // la caméra principale rend aussi les overlays (sprites/particules)
@@ -923,6 +923,30 @@ const mapMeshes = [];
 let floorMesh = null, platMesh = null;
 const wallMeshes = [], crateMeshes = [], rampMeshes = [];
 function mat(c, e, ei){ return new THREE.MeshStandardMaterial({color:c, roughness:.8, emissive:e||0x000000, emissiveIntensity:ei||0}); }
+// ===== Matériaux de la map par TYPE (DA industrielle : béton / acier / conteneur / caillebotis) =====
+const MAP_MAT = {
+  concrete: { color: 0x6c7178, roughness: 0.96, metalness: 0.05 },
+  metal:    { color: 0x79828d, roughness: 0.55, metalness: 0.38 },
+  container:{ color: 0x8a5a48, roughness: 0.60, metalness: 0.18 },
+  grate:    { color: 0x3a3e45, roughness: 0.50, metalness: 0.55 },
+};
+function mapMaterial(b){
+  const d = MAP_MAT[b.type] || MAP_MAT.concrete;
+  return new THREE.MeshStandardMaterial({ color:(b.c != null ? b.c : d.color), roughness:d.roughness, metalness:d.metalness });
+}
+// Garde-corps émissifs le long des passerelles (purement visuel, non collisionnant)
+function addRailings(b){
+  const top = (b.y0||0) + b.h;
+  const railMat = new THREE.MeshStandardMaterial({color:0x2a2d33, roughness:.5, metalness:.6, emissive:(b.gc||0x59d8ff), emissiveIntensity:0.22});
+  const along = b.d >= b.w;          // true = passerelle orientée en z
+  const L = (along ? b.d : b.w) * 0.99, off = along ? b.w/2 : b.d/2;
+  for(const s of [-1,1]) for(const hy of [0.55, 0.30]){
+    const geo = along ? new THREE.BoxGeometry(0.05,0.05,L) : new THREE.BoxGeometry(L,0.05,0.05);
+    const r = new THREE.Mesh(geo, railMat);
+    if(along) r.position.set(b.x + s*off, top + hy, b.z); else r.position.set(b.x, top + hy, b.z + s*off);
+    scene.add(r); mapMeshes.push(r);
+  }
+}
 // ===== AO "BAKED" (statique) — remplace la GTAO instable =====
 // 1) Assombrit le BAS des faces verticales d'un volume (couleurs de sommets) → AO de pied, cohérente sous tout angle.
 function applyVertexAO(geo, h, darken){
@@ -958,7 +982,7 @@ function addContactShadow(cx, cz, w, d){
 }
 function buildMap(){
   const G = GAMECFG.GRAPHICS || {};
-  const floorMat = new THREE.MeshStandardMaterial({color:0xc7bba6, roughness: G.floor_roughness ?? .95, metalness: G.floor_metalness ?? 0});
+  const floorMat = new THREE.MeshStandardMaterial({color:0x5c6068, roughness: G.floor_roughness ?? .95, metalness: G.floor_metalness ?? 0});
   floorMat.envMapIntensity = G.floor_env ?? 1;
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(MAP.HALF*2+2, MAP.HALF*2+2), floorMat);
   floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor); mapMeshes.push(floor); floorMesh = floor;
@@ -966,31 +990,36 @@ function buildMap(){
 
   const BAO = (GAMECFG.GRAPHICS||{}).BAKED_AO || {};
   for(const b of MAP.blocks){
+    const y0 = b.y0 || 0;
     const boxGeo = new THREE.BoxGeometry(b.w,b.h,b.d);
-    const boxMat = new THREE.MeshStandardMaterial({color:b.c, roughness:.85});
+    const boxMat = mapMaterial(b);
     if(BAO.enabled !== false){ applyVertexAO(boxGeo, b.h, BAO.face_darken ?? 0.34); boxMat.vertexColors = true; }
     const m = new THREE.Mesh(boxGeo, boxMat);
-    m.position.set(b.x, b.h/2, b.z); m.castShadow = m.receiveShadow = true; scene.add(m);
+    m.position.set(b.x, y0 + b.h/2, b.z); m.castShadow = m.receiveShadow = true; scene.add(m);
     mapMeshes.push(m);
     const isWall = (b.h >= 5);
     (isWall ? wallMeshes : crateMeshes).push(m);
     m.userData.surface = isWall ? 'wall' : 'crate';
-    colliders.push({minx:b.x-b.w/2, maxx:b.x+b.w/2, minz:b.z-b.d/2, maxz:b.z+b.d/2, h:b.h});
-    addContactShadow(b.x, b.z, b.w, b.d);   // ombre de contact au sol (AO baked)
-    if(b.glow==='top'){
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(b.w*0.98,.06,Math.min(b.d,.22)),
-        new THREE.MeshStandardMaterial({color:b.gc, emissive:b.gc, emissiveIntensity:0.5}));
-      strip.position.set(b.x, b.h+.035, b.z); scene.add(strip);
-      const l = new THREE.PointLight(b.gc, .45, 12); l.position.set(b.x, b.h+.6, b.z); scene.add(l);
+    // collider AABB : h = SOMMET du volume (y0+h), y0 = base (0 = ancré au sol, >0 = flottant → on passe dessous)
+    colliders.push({minx:b.x-b.w/2, maxx:b.x+b.w/2, minz:b.z-b.d/2, maxz:b.z+b.d/2, h:y0+b.h, y0:y0});
+    if(y0 < 0.05) addContactShadow(b.x, b.z, b.w, b.d);   // pas d'ombre au sol pour les volumes flottants
+    if(b.rail) addRailings(b);
+    if(b.glow==='top' || b.glow==='edge'){
+      const gc = b.gc != null ? b.gc : 0x59d8ff;
+      const sd = (b.d >= b.w) ? b.d*0.98 : Math.min(b.d, .2);
+      const sw = (b.d >= b.w) ? Math.min(b.w, .2) : b.w*0.98;
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(sw,.06,sd),
+        new THREE.MeshStandardMaterial({color:gc, emissive:gc, emissiveIntensity:0.55}));
+      strip.position.set(b.x, y0 + b.h + .035, b.z); scene.add(strip); mapMeshes.push(strip);
+      if(b.light){ const l = new THREE.PointLight(gc, .45, 12); l.position.set(b.x, y0+b.h+.6, b.z); scene.add(l); }
     }
-    if(b.glow==='side'){
-      // plus de panneau émissif surexposé : juste une lueur ponctuelle discrète
-      const l = new THREE.PointLight(b.gc, .35, 10); l.position.set(b.x, b.h*0.62, b.z); scene.add(l);
+    if(b.glow==='side' && b.light){
+      const l = new THREE.PointLight(b.gc != null ? b.gc : 0x59d8ff, .35, 10); l.position.set(b.x, y0 + b.h*0.62, b.z); scene.add(l);
     }
   }
   const p = MAP.platform;
   const platGeo = new THREE.BoxGeometry(p.w,p.h,p.d);
-  const platMat = new THREE.MeshStandardMaterial({color:0xb0a48c, roughness:.85});
+  const platMat = new THREE.MeshStandardMaterial({color:0x6a7079, roughness:.55, metalness:.38});
   if(BAO.enabled !== false){ applyVertexAO(platGeo, p.h, BAO.face_darken ?? 0.34); platMat.vertexColors = true; }
   const plat = new THREE.Mesh(platGeo, platMat);
   plat.position.set(p.x, p.h/2, p.z); plat.castShadow = plat.receiveShadow = true; scene.add(plat);
@@ -1022,19 +1051,19 @@ function buildMap(){
     geo.setAttribute('position', new THREE.Float32BufferAttribute(P,3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(UV,2));
     geo.computeVertexNormals();
-    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({color:0xbcae94, roughness:.9}));
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({color:0x666b72, roughness:.55, metalness:.4}));
     m.position.set(r.x, 0, r.z);
     if(sgn === 1) m.rotation.y = Math.PI; // rampe qui monte vers +z
     m.castShadow = m.receiveShadow = true; scene.add(m);
     mapMeshes.push(m); rampMeshes.push(m);
     m.userData.surface = 'ramp';
     const strip = new THREE.Mesh(new THREE.BoxGeometry(r.w*0.95,.06,.18),
-      new THREE.MeshStandardMaterial({color:0xffaa33, emissive:0xffaa33, emissiveIntensity:0.8}));
+      new THREE.MeshStandardMaterial({color:0xffb000, emissive:0xffb000, emissiveIntensity:0.8}));
     strip.position.set(r.x, r.h+.04, r.z + (sgn===-1?-hd:hd)*0.92); scene.add(strip);
   }
   const signs = [
-    {x:-12, y:3.6, z:-MAP.HALF+0.6, c:0x5ce0ff}, {x:14, y:3.6, z:-MAP.HALF+0.6, c:0xffaa33},
-    {x:-14, y:3.6, z:MAP.HALF-0.6, c:0xff5a5a}, {x:10, y:3.6, z:MAP.HALF-0.6, c:0x5ce0ff},
+    {x:-26, y:4.2, z:-MAP.HALF+0.7, c:0x59d8ff}, {x:26, y:4.2, z:-MAP.HALF+0.7, c:0xffb000},
+    {x:-26, y:4.2, z:MAP.HALF-0.7, c:0xffb000}, {x:26, y:4.2, z:MAP.HALF-0.7, c:0x59d8ff},
   ];
   for(const s of signs){
     const pan = new THREE.Mesh(new THREE.PlaneGeometry(3.2,1.3),
@@ -1051,7 +1080,8 @@ function buildMap(){
       m.material.envMapIntensity = _ge;
     }
   }
-  applyCustomTextures(); // textures personnalisées de public/textures/ (si présentes)
+  // DA industrielle : look low-poly piloté par les matériaux (béton/acier/conteneur/caillebotis).
+  // applyCustomTextures() est volontairement désactivé (les textures désert écraseraient les couleurs).
 }
 function collide(pos, radius, feetY){
   pos.x = Math.max(-MAP.HALF+0.6, Math.min(MAP.HALF-0.6, pos.x));
@@ -1062,6 +1092,7 @@ function collide(pos, radius, feetY){
   const groundHere = MAP.groundHeightAt(pos.x, pos.z);
   for(const b of test){
     if(b.h < feetY + 0.3) continue;
+    if((b.y0||0) > feetY + 1.9) continue;   // volume FLOTTANT au-dessus de la tête → on passe dessous (passerelle)
     // muret de rampe : ne bloque QUE si on est nettement plus bas que la pente ici
     // (donc on arrive par le côté) — sinon on laisse monter/descendre librement
     if(b.rampWall && feetY > groundHere - 0.2) continue;
@@ -1092,6 +1123,7 @@ function findWallNormal(pos, feetY){
   if(feetY < p.h - 0.35) test.push({minx:p.x-p.w/2,maxx:p.x+p.w/2,minz:p.z-p.d/2,maxz:p.z+p.d/2,h:p.h});
   for(const b of test){
     if(b.h < feetY + 1.2) continue;
+    if((b.y0||0) > feetY + 1.5) continue;   // passerelle au-dessus → ce n'est pas un mur ici
     const cx = Math.max(b.minx, Math.min(pos.x, b.maxx));
     const cz = Math.max(b.minz, Math.min(pos.z, b.maxz));
     const ddx = pos.x-cx, ddz = pos.z-cz, d = Math.hypot(ddx,ddz);
@@ -4173,13 +4205,13 @@ function updateLocalBots(dt){
       vx = sx*mv.strafeDir; vz = sz*mv.strafeDir;
       if(distP > LBOT.engage_dist*0.75){ vx += px*0.7; vz += pz*0.7; }       // se rapproche
       else if(distP < LBOT.engage_dist*0.4){ vx -= px*0.7; vz -= pz*0.7; }   // recule si trop près
-      b.yaw = Math.atan2(dxp, dzp);                    // reste face au joueur
+      b.yaw = Math.atan2(-dxp, -dzp);                  // FACE le joueur (convention réseau : rotation = yaw+π)
       run = false;
     } else {                                           // loin : marche/court vers la destination d'errance
       const dxt = mv.tx - b.pos.x, dzt = mv.tz - b.pos.z, dt2 = Math.hypot(dxt,dzt) || 0.0001;
       vx = dxt/dt2; vz = dzt/dt2;
       if(dt2 < 1.5) mv.retarget = 0;                   // arrivé → re-cible
-      b.yaw = Math.atan2(vx, vz);                      // face la direction de marche
+      b.yaw = Math.atan2(-vx, -vz);                    // FACE la direction de marche (convention réseau)
       run = true;
     }
     // SÉPARATION : s'écarte des autres bots trop proches → ils restent espacés entre eux
@@ -4193,6 +4225,17 @@ function updateLocalBots(dt){
     // COLLISION : collide() pousse hors des caisses/murs/plateforme (contournement) + borne la map
     _botTmp.set(b.pos.x + vx*LBOT.speed*dt, 0, b.pos.z + vz*LBOT.speed*dt);
     collide(_botTmp, LBOT.radius ?? 0.5, 0);
+    // collide() ne gère PAS la rampe (géométrie inclinée) → les bots CONTOURNENT son emprise au sol
+    const brad = LBOT.radius ?? 0.5;
+    for(const r of (MAP.ramps || [])){
+      const minx=r.x-r.w/2, maxx=r.x+r.w/2, minz=r.z-r.d/2, maxz=r.z+r.d/2;
+      const cx=Math.max(minx,Math.min(_botTmp.x,maxx)), cz=Math.max(minz,Math.min(_botTmp.z,maxz));
+      const ddx=_botTmp.x-cx, ddz=_botTmp.z-cz, d2=ddx*ddx+ddz*ddz;
+      if(d2 < brad*brad){
+        if(d2 > 1e-6){ const d=Math.sqrt(d2); _botTmp.x += ddx/d*(brad-d); _botTmp.z += ddz/d*(brad-d); }
+        else { _botTmp.x = (_botTmp.x < r.x ? minx-brad : maxx+brad); } // pile au centre → sort par le côté
+      }
+    }
     const nx = _botTmp.x, nz = _botTmp.z;
     const realMove = Math.hypot(nx-b.pos.x, nz-b.pos.z);
     if(realMove < 0.01) mv.retarget = Math.min(mv.retarget, 0.2);      // bloqué (mur) → re-cible vite pour contourner
@@ -6571,6 +6614,26 @@ animate();
     }
   }, 100);
 })();
+window.__face = {
+  // place un bot 5 m devant le joueur, applique l'IA (yaw face joueur) + le rendu, et oriente la caméra dessus
+  test(){
+    let b=null; for(const x of botMgr.values()){ if(x&&x.soldier&&!x.dead){ b=x; break; } } if(!b) return 'no bot';
+    me.pos.set(0,1.6,0); me.yaw=Math.PI; me.pitch=-0.04;        // joueur regarde +z
+    b.pos.set(0,0,6);                                            // bot devant (à +z)
+    updateLocalBots(0.016);                                      // applique l'IA (b.yaw face joueur)
+    b.soldier.root.position.set(b.pos.x,b.pos.y,b.pos.z);
+    b.soldier.root.rotation.set(0, b.yaw + Math.PI, 0);          // même rendu qu'en jeu
+    b.soldier.root.updateMatrixWorld(true);
+    return { bYaw:+b.yaw.toFixed(2), rotY:+(b.yaw+Math.PI).toFixed(2) };
+  },
+  rampClip(){ // teste si un bot peut entrer dans l'emprise d'une rampe
+    let b=null; for(const x of botMgr.values()){ if(x&&x.soldier&&!x.dead){ b=x; break; } } if(!b) return 'no bot';
+    const r=MAP.ramps[0]; b.pos.set(r.x, 0, r.z); // on le téléporte AU CENTRE de la rampe
+    for(let i=0;i<60;i++) updateLocalBots(0.016);  // l'IA doit le repousser dehors
+    const inside = (Math.abs(b.pos.x-r.x)<r.w/2 && Math.abs(b.pos.z-r.z)<r.d/2);
+    return { rampCenter:[r.x,r.z], botPos:[+b.pos.x.toFixed(1),+b.pos.z.toFixed(1)], stillInsideRamp: inside };
+  }
+};
 </script>
 </body>
 </html>

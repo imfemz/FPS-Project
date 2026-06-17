@@ -207,8 +207,8 @@ function rayAABB(o, d, b) {
 }
 const AABBS = [
   ...MAP.blocks.map((b) => ({
-    min: [b.x - b.w / 2, 0, b.z - b.d / 2],
-    max: [b.x + b.w / 2, b.h, b.z + b.d / 2],
+    min: [b.x - b.w / 2, b.y0 || 0, b.z - b.d / 2],
+    max: [b.x + b.w / 2, (b.y0 || 0) + b.h, b.z + b.d / 2],
   })),
   {
     min: [MAP.platform.x - MAP.platform.w / 2, 0, MAP.platform.z - MAP.platform.d / 2],

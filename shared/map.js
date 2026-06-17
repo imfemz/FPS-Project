@@ -1,56 +1,103 @@
-/* Carte partagée serveur/client — style low-poly nocturne (sable + néons chauds) */
+/* Carte partagée serveur/client — COMPLEXE INDUSTRIEL (acier + béton, néons froids)
+   - 90×90 (HALF=45), MIROIR Nord/Sud : les deux bases sont identiques (équitable 1v1).
+   - Forte verticalité : toits MARCHABLES (h5) + PASSERELLES (on marche dessus ET on court dessous, via y0).
+   - Structures HAUTES (h≥5) pour enchaîner wall-bounce / wall-climb.
+   - Petites CAISSES (h≈0.9–1.2) pour le bunny hop.
+   - COULOIRS latéraux le long de l'enceinte pour le combat rapproché (CQB).
+
+   Schéma d'un bloc (AABB) :
+     { x, z, w, h, d,           position centre + dimensions
+       y0?,                     bas du volume (défaut 0). y0>0 = volume FLOTTANT (passerelle/parapet) : on passe dessous.
+       type?,                   'concrete' | 'metal' | 'container' | 'grate'  (pilote le matériau)
+       c?,                      couleur override (sinon couleur par défaut du type)
+       glow?, gc?, light?,      liseré émissif ('top'|'edge'|'side'), couleur néon, +PointLight si light:true
+       rail? }                  garde-corps émissifs (passerelles)
+*/
 (function (root) {
-  const HALF = 34;
+  const HALF = 45;
 
-  // Blocs AABB : {x,z,w,h,d, c:couleur, glow:'top'|'side'|null, gc:couleur néon}
-  const blocks = [
-    // Murs d'enceinte
-    { x: 0, z: -HALF, w: HALF * 2, h: 5, d: 1, c: 0xb9ab93 },
-    { x: 0, z: HALF, w: HALF * 2, h: 5, d: 1, c: 0xb9ab93 },
-    { x: -HALF, z: 0, w: 1, h: 5, d: HALF * 2, c: 0xb9ab93 },
-    { x: HALF, z: 0, w: 1, h: 5, d: HALF * 2, c: 0xb9ab93 },
-    // Murets bas avec liseré néon orange (comme les refs)
-    { x: -14, z: -7, w: 11, h: 1.5, d: 1, c: 0xa89a82, glow: 'top', gc: 0xffaa33 },
-    { x: 14, z: 7, w: 11, h: 1.5, d: 1, c: 0xa89a82, glow: 'top', gc: 0xffaa33 },
-    { x: -7, z: 14, w: 1, h: 1.5, d: 11, c: 0xa89a82, glow: 'top', gc: 0xffaa33 },
-    { x: 7, z: -14, w: 1, h: 1.5, d: 11, c: 0xa89a82, glow: 'top', gc: 0xffaa33 },
-    // Piliers lumineux
-    { x: -9, z: -16, w: 1.5, h: 4.2, d: 1.5, c: 0x7d7264, glow: 'side', gc: 0xffc36b },
-    { x: 9, z: 16, w: 1.5, h: 4.2, d: 1.5, c: 0x7d7264, glow: 'side', gc: 0xffc36b },
-    { x: 16, z: -9, w: 1.5, h: 4.2, d: 1.5, c: 0x7d7264, glow: 'side', gc: 0xffc36b },
-    { x: -16, z: 9, w: 1.5, h: 4.2, d: 1.5, c: 0x7d7264, glow: 'side', gc: 0xffc36b },
-    // Caisses de couverture
-    { x: -20, z: -20, w: 3, h: 2.1, d: 3, c: 0x9c8f78 },
-    { x: 20, z: 20, w: 3, h: 2.1, d: 3, c: 0x9c8f78 },
-    { x: -22, z: 12, w: 2, h: 1.3, d: 2, c: 0x8f836e },
-    { x: 22, z: -12, w: 2, h: 1.3, d: 2, c: 0x8f836e },
-    { x: 12, z: 22, w: 2, h: 1.3, d: 2, c: 0x8f836e },
-    { x: -12, z: -22, w: 2, h: 1.3, d: 2, c: 0x8f836e },
-    // Cabine de garde + gros blocs d'angle
-    { x: -24, z: 24, w: 6, h: 4, d: 5, c: 0xa3957d },
-    { x: 24, z: -24, w: 6, h: 4, d: 5, c: 0xa3957d },
-    { x: 27, z: 27, w: 4, h: 2.6, d: 4, c: 0x95876f },
-    { x: -27, z: -27, w: 4, h: 2.6, d: 4, c: 0x95876f },
-  ];
+  // Couleurs conteneurs (acier peint) + néons
+  const RUST = 0x9e4b39, BLUE = 0x3f6f8e, AMBER = 0x9c7d3a, GREEN = 0x4f7a55;
+  const CYAN = 0x59d8ff, WARN = 0xffb000;
 
-  // Plateforme centrale surélevée (marchable) + rampes d'accès
-  const platform = { x: 0, z: 0, w: 10, d: 10, h: 1.4 };
-  // asc = direction de montée (vers la plateforme)
+  const blocks = [];
+  const add = (b) => { blocks.push(b); return b; };
+  // Miroir Nord→Sud (z → -z). Géométrie identique ; l'identité d'équipe vient des spawns, pas des couleurs.
+  const mir = (b) => { add(b); add(Object.assign({}, b, { z: -b.z })); return b; };
+
+  // ---------- ENCEINTE ----------
+  mir({ x: 0, z: HALF, w: HALF * 2, h: 6, d: 1.2, type: 'concrete' });   // murs Nord + Sud
+  add({ x: HALF, z: 0, w: 1.2, h: 6, d: HALF * 2, type: 'concrete' });   // mur Est
+  add({ x: -HALF, z: 0, w: 1.2, h: 6, d: HALF * 2, type: 'concrete' });  // mur Ouest
+  // Tours d'angle (perchoirs + wall-bounce)
+  mir({ x: 42, z: 42, w: 5, h: 8, d: 5, type: 'concrete' });
+  mir({ x: -42, z: 42, w: 5, h: 8, d: 5, type: 'concrete' });
+
+  // ---------- BASES (U ouvert vers le centre, toit marchable à h=5) ----------
+  mir({ x: 0, z: 40, w: 20, h: 5, d: 2, type: 'metal' });            // mur de fond
+  mir({ x: -13, z: 34, w: 8, h: 5, d: 13, type: 'metal' });          // aile gauche
+  mir({ x: 13, z: 34, w: 8, h: 5, d: 13, type: 'metal' });           // aile droite
+  // Parapet sur le toit (cover en hauteur + wall-bounce niveau toit) — FLOTTANT (posé sur le toit)
+  mir({ x: 0, z: 29.5, w: 16, h: 1.6, y0: 5, d: 0.8, type: 'metal', glow: 'edge', gc: WARN });
+
+  // ---------- PASSERELLES (2e étage : on marche dessus, on court/tire dessous) ----------
+  // top = 4.4, dégagement au sol = 4.0 m (on passe largement dessous). Reliées aux toits (h5) et aux marches.
+  add({ x: -16, z: 0, w: 3, h: 0.4, y0: 4.0, d: 72, type: 'grate', rail: true, glow: 'edge', gc: CYAN });
+  add({ x: 16, z: 0, w: 3, h: 0.4, y0: 4.0, d: 72, type: 'grate', rail: true, glow: 'edge', gc: CYAN });
+  add({ x: 0, z: 0, w: 35, h: 0.4, y0: 4.0, d: 3, type: 'grate', rail: true, glow: 'edge', gc: CYAN }); // croix centrale
+
+  // ---------- MARCHES D'ACCÈS aux passerelles (conteneurs étagés : sol → 2.5 → 3.4 → 4.4) ----------
+  mir({ x: -13, z: 7, w: 3, h: 2.5, d: 3, type: 'container', c: BLUE });
+  mir({ x: 13, z: 7, w: 3, h: 2.5, d: 3, type: 'container', c: BLUE });
+  mir({ x: -15, z: 11.5, w: 3, h: 3.4, d: 3, type: 'container', c: RUST });
+  mir({ x: 15, z: 11.5, w: 3, h: 3.4, d: 3, type: 'container', c: RUST });
+
+  // ---------- PYLÔNES MID (structures hautes : wall-bounce en plein milieu) ----------
+  mir({ x: -24, z: 12, w: 6, h: 5, d: 2.5, type: 'metal' });
+  mir({ x: 24, z: 12, w: 6, h: 5, d: 2.5, type: 'metal' });
+  mir({ x: -24, z: 24, w: 2.5, h: 5, d: 6, type: 'metal' });
+  mir({ x: 24, z: 24, w: 2.5, h: 5, d: 6, type: 'metal' });
+
+  // ---------- CONTENEURS (couverture mi-hauteur, grimpables) ----------
+  mir({ x: -8, z: 16, w: 2.4, h: 2.5, d: 6, type: 'container', c: BLUE });
+  mir({ x: 8, z: 16, w: 2.4, h: 2.5, d: 6, type: 'container', c: GREEN });
+  mir({ x: -30, z: 14, w: 6, h: 2.5, d: 2.4, type: 'container', c: AMBER });
+  mir({ x: 30, z: 14, w: 6, h: 2.5, d: 2.4, type: 'container', c: AMBER });
+
+  // ---------- PETITES CAISSES (bunny hop : on les franchit sans casser l'élan) ----------
+  mir({ x: -6, z: 8, w: 1.6, h: 1.0, d: 1.6, type: 'container', c: GREEN });
+  mir({ x: 6, z: 8, w: 1.6, h: 1.0, d: 1.6, type: 'container', c: AMBER });
+  mir({ x: -18, z: 6, w: 1.8, h: 1.1, d: 1.8, type: 'container', c: RUST });
+  mir({ x: 18, z: 6, w: 1.8, h: 1.1, d: 1.8, type: 'container', c: BLUE });
+  mir({ x: -3, z: 22, w: 2, h: 0.9, d: 2, type: 'container', c: AMBER });
+  mir({ x: 3, z: 22, w: 2, h: 0.9, d: 2, type: 'container', c: RUST });
+  mir({ x: -12, z: 26, w: 1.8, h: 1.0, d: 1.8, type: 'container', c: GREEN });
+  mir({ x: 12, z: 26, w: 1.8, h: 1.0, d: 1.8, type: 'container', c: BLUE });
+
+  // ---------- COULOIRS LATÉRAUX (CQB le long de l'enceinte E/O) ----------
+  add({ x: -37, z: 0, w: 2.6, h: 4, d: 9, type: 'container', c: RUST });
+  add({ x: 37, z: 0, w: 2.6, h: 4, d: 9, type: 'container', c: RUST });
+  mir({ x: -37, z: 22, w: 2.6, h: 4, d: 9, type: 'container', c: BLUE });
+  mir({ x: 37, z: 22, w: 2.6, h: 4, d: 9, type: 'container', c: BLUE });
+
+  // ---------- PLATEFORME CENTRALE (point de contrôle bas, sous la croix de passerelles) ----------
+  const platform = { x: 0, z: 0, w: 12, d: 12, h: 1.6 };
+  // asc = direction de montée (vers le haut de la rampe)
   const ramps = [
-    { x: 0, z: 8.5, w: 7, d: 7, h: 1.4, asc: [0, -1] },
-    { x: 0, z: -8.5, w: 7, d: 7, h: 1.4, asc: [0, 1] },
+    // accès à la plateforme centrale
+    { x: 0, z: -9, w: 8, d: 8, h: 1.6, asc: [0, 1] },
+    { x: 0, z: 9, w: 8, d: 8, h: 1.6, asc: [0, -1] },
+    // gangways vers les TOITS des bases (h=5)
+    { x: 0, z: 33, w: 6, d: 12, h: 5, asc: [0, 1] },   // base Nord (monte vers z+ = mur de fond)
+    { x: 0, z: -33, w: 6, d: 12, h: 5, asc: [0, -1] }, // base Sud
   ];
 
-  // 6 points de spawn répartis sur le pourtour, chacun orienté vers le centre.
-  // (yaw = atan2(-x, -z) pour regarder l'origine.)
+  // 6 spawns (2 par base + 2 flancs), chacun orienté vers le centre.
   const spawns = [
-    [-28, 0,   0,  Math.PI * 0.5],   // ouest
-    [ 28, 0,   0, -Math.PI * 0.5],   // est
-    [  0, 0, -28,  0],               // sud
-    [  0, 0,  28,  Math.PI],         // nord
-    [-28, 0,  28,  Math.PI * 0.75],  // nord-ouest
-    [ 28, 0, -28, -Math.PI * 0.25],  // sud-est
-  ];
+    [6, 0, 38], [-6, 0, 38],     // base Nord (de part et d'autre du gangway)
+    [6, 0, -38], [-6, 0, -38],   // base Sud
+    [30, 0, 0], [-30, 0, 0],     // flancs Est / Ouest
+  ].map(([x, y, z]) => [x, y, z, Math.atan2(-x, -z)]);
 
   function groundHeightAt(px, pz) {
     let g = 0;
