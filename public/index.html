@@ -4153,7 +4153,10 @@ function doMyRespawn(m){
   weapon.state = 'equipped'; weapon.t = 0; gun.visible = true; runArms.visible = false;
   document.getElementById('reloadmsg').style.display='none';
   updateHPShieldUI(); updateAmmoUI();
-  alive = true; hide('deathscreen'); lock();
+  alive = true;
+  // Si on est dans un menu (mort survenue pendant la navigation manette) : on respawn en FOND, mais on
+  // NE relock PAS et on NE ferme PAS le menu → le joueur reste sur sa fenêtre. Le lock reprend au "Reprendre".
+  if(!(typeof aMenuIsOpen === 'function' && aMenuIsOpen())){ hide('deathscreen'); lock(); }
   // on NE vide PAS le buffer ici : le ring buffer écrase naturellement les vieilles frames.
   // On marque juste l'instant du spawn pour ignorer d'éventuelles frames d'avant la mort précédente.
   REC.spawnAt = performance.now();
@@ -4585,9 +4588,11 @@ function botSeesPlayer(b){
 }
 function localPlayerDeath(){
   if(!alive) return;
-  alive = false; playSfx('death'); show('deathscreen');
+  alive = false; playSfx('death');
+  const _inMenu = (typeof aMenuIsOpen === 'function' && aMenuIsOpen()); // mort en plein menu → on y reste
+  if(!_inMenu) show('deathscreen');
   localBotKills = 0; { const ps = document.getElementById('pscore'); if(ps) ps.textContent = '0'; }   // reset des kills a la mort
-  document.exitPointerLock && document.exitPointerLock();
+  if(!_inMenu) document.exitPointerLock && document.exitPointerLock();
   setTimeout(()=>{ if(!localBotMode) return;
     const sps = MAP.spawns || [[0,0,0,0]]; const sp = sps[Math.floor(Math.random()*sps.length)];
     doMyRespawn({ p:[sp[0], 0, sp[2]], yaw: sp[3]||0 });
@@ -6716,6 +6721,9 @@ function dcBanner(txt){
 function startDeathCam(killerSeat, head){
   const DC = GAMECFG.DEATHCAM || {};
   stopReloadSfx();                 // la mort interrompt le reload → coupe son son
+  // Si un MENU est ouvert (pause/options, navigué à la manette) : on NE prend PAS le contrôle de l'écran.
+  // Le joueur meurt (alive=false) mais RESTE sur son menu, curseur manette actif ; le respawn se fait en fond.
+  if(typeof aMenuIsOpen === 'function' && aMenuIsOpen()){ alive = false; playSfx('death'); return; }
   console.log('[NEON] startDeathCam appelée | ENABLED =', DC.ENABLED, '| RIG =', RIG_READY, '| buffer count =', REC.count);
   if(!DC.ENABLED){ alive = false; show('deathscreen'); playSfx('death'); document.exitPointerLock&&document.exitPointerLock(); return; }
   alive = false;
