@@ -2895,8 +2895,11 @@ function animateSoldierRigged(s, anim, dt, t){
       if(s.current){ s.current.stop(); s.current.setEffectiveWeight(0); s.current.enabled = false; }
       s.current = null; s.currentKey = null; s.layered = true;
     }
-    // vitesse locale (repere du corps) : vx (droite), vz (avance)
-    const vx = anim.vx || 0, vz = anim.vz || 0;
+    // vitesse locale (repere du corps) : vx (droite), vz (avance).
+    // Si vx/vz absents (ex: killcam, anim enregistree) -> on synthetise une avance depuis anim.m.
+    let vx = anim.vx, vz = anim.vz;
+    if(vx == null && vz == null){ vx = 0; vz = (anim.m || 0) * 4.0; }   // m (0..1) -> ~avance (m/s)
+    else { vx = vx || 0; vz = vz || 0; }
     const sp = Math.hypot(vx, vz);
     const TR_RUN = (GAMECFG.MODELS.layer_anim && GAMECFG.MODELS.layer_anim.run_thresh) || 0.6;
     const TR_WALK = (GAMECFG.MODELS.layer_anim && GAMECFG.MODELS.layer_anim.walk_thresh) || 0.2;
