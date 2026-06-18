@@ -174,6 +174,7 @@
         mag: 30, fire_rate: 0.078, reload_t: 1.9,
         damage_body: 13, damage_head: 19,
         spread_hip: 0.050, spread_ads: 0.002,
+        red: { damage_body: 20, damage_head: 27, spread_hip: 0.018, sfx: 'shot_red' }, // BONUS ROUGE (3 kills) : +degats, spread reduit, 10s
         recoil_mult: 1.0,
         recoil_vertical: 1.0,
         recoil_speed: 1.0,
@@ -193,8 +194,9 @@
         model: '/models/wingman_hand.glb',
         icon: '/textures/hud/wingman.png',
         mag: 3, fire_rate: 0.545, reload_t: 1.04,
-        damage_body: 70, damage_head: 175,
+        damage_body: 70, damage_head: 90,   // tete revert a 90 (normal) — le BONUS ROUGE la remonte a 175
         spread_hip: 0.028, spread_ads: 0.0003,
+        red: { damage_body: 70, damage_head: 175, spread_hip: 0.010, sfx: 'shot_red' }, // BONUS ROUGE (3 kills) : +degats, spread reduit, 10s
         recoil_mult: 1.4,
         recoil_vertical: 0.7,
         recoil_speed: 0.9,
