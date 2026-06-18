@@ -3733,7 +3733,7 @@ function initAudio(){
   ensureAudioCtx();
   buildReverb();
   for(const [name, url] of Object.entries(GAMECFG.SFX_FILES)){
-    loadAudioBuffer(url, buf=>{ audioBuffers[name] = buf; });
+    loadAudioBuffer(url, buf=>{ audioBuffers[name] = buf; if(name==='menu_audio') maybeStartMenuMusic(); });
   }
   // Sons d'impact par surface (optionnels) : chargés seulement si use_files. Absent → fallback synthèse.
   const IMP = GAMECFG.IMPACT_SFX || {};
@@ -3770,6 +3770,40 @@ function playSfx(name, pitch){
   } else if(FALLBACK_SFX[name]) FALLBACK_SFX[name]();
   return null;
 }
+
+/* ===== Audio UI : musique de menu (boucle) + clics boutons + son de spawn ===== */
+let menuMusicSrc = null, menuMusicWanted = true, audioUnlocked = false;
+function startMenuMusic(){
+  if(menuMusicSrc || !audioUnlocked) return;
+  const buf = audioBuffers['menu_audio']; if(!buf) return;
+  const ctx = ensureAudioCtx(); if(!ctx) return;
+  const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true;
+  const g = ctx.createGain(); g.gain.value = GAMECFG.MENU_MUSIC_VOLUME ?? 0.5;
+  s.connect(g).connect(ctx.destination); s.start();
+  menuMusicSrc = s;
+}
+function stopMenuMusic(){ if(menuMusicSrc){ try{ menuMusicSrc.stop(); }catch(e){} menuMusicSrc = null; } }
+// Lance la musique si souhaitée ET qu'un écran front-end est ouvert (accueil/lobby/options), hors partie.
+function maybeStartMenuMusic(){
+  if(!menuMusicWanted || playing) return;
+  if(!document.querySelector('.screen.show')) return;
+  startMenuMusic();
+}
+// Entrée effective en partie : son de spawn + coupe la musique de menu.
+function onEnterGameAudio(){ menuMusicWanted = false; stopMenuMusic(); playSfx('spawn'); }
+function unlockMenuAudio(){ audioUnlocked = true; ensureAudioCtx(); maybeStartMenuMusic(); }
+addEventListener('pointerdown', unlockMenuAudio, { once:true });
+addEventListener('keydown', unlockMenuAudio, { once:true });
+// Sons de clic : button1 (Mêlée/Bots), Jouer = spawn à l'entrée, button2 = tout le reste.
+document.addEventListener('click', (e)=>{
+  const btn = e.target && e.target.closest && e.target.closest('button');
+  if(!btn || btn.disabled) return;
+  audioUnlocked = true; ensureAudioCtx();
+  const id = btn.id;
+  if(id==='playbtn' || id==='botbtnmenu' || id==='botbtn') playSfx('button1');
+  else if(id==='seatbtn'){ /* spawn joué à l'entrée réelle en partie */ }
+  else playSfx('button2');
+}, true);
 
 /* ---------- Tir ---------- */
 const tracers = [];
@@ -4348,6 +4382,7 @@ function onJoinGame(m){
   updateHPShieldUI(); updateAmmoUI();
   alive = true; playing = true;
   REC.spawnAt = performance.now();
+  onEnterGameAudio();          // son de spawn + coupe la musique de menu (entrée en partie)
   lock();
 }
 function onPlayerLeft(m){
@@ -4534,6 +4569,7 @@ function startLocalBotMode(){
   const bots = []; const _placed = [];
   for(let i=0;i<_startCount;i++){ const _p = lbotSpawnPoint(i, _startCount, _placed); _placed.push([_p[0], _p[2]]); bots.push({ id: i+1, p: _p, yaw: Math.random()*Math.PI*2 }); }
   onBotStart({ humanSeat: 0, spawns: MAP.spawns, bots, countdown: 3 });   // crée le décor + le décompte
+  onEnterGameAudio();   // son de spawn + coupe la musique de menu (mode bots)
   for(const bb of bots){ const b = botMgr.get(bb.id); if(b){ b.hp = maxHp; b.sh = maxShield; b._shPrev = maxShield;
     initLocalBotAI(b); } }
   // HUD : score d'entraînement (cache le tableau FFA)
@@ -4939,6 +4975,7 @@ function toMenu(msg){
   playing = false; alive = true; myId = -1;
   if(ws){ ws.onclose=null; ws.close(); ws=null; }
   hideAll(); show('menu');
+  menuMusicWanted = true; maybeStartMenuMusic();   // reprend la musique d'accueil
   const pb = document.getElementById('playbtn'); if(pb){ pb.disabled = false; pb.textContent = 'Mêlée Générale'; }
   if(msg) alert(msg);
 }

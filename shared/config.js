@@ -595,6 +595,11 @@
       footstep: '/audio/footstep.mp3', death: '/audio/death.mp3',
       orb_pickup: '/audio/orb_pickup.mp3', crouch: '/audio/crouch.mp3',
       wingman_shot: '/audio/wingman_shot.mp3', wingman_reload: '/audio/wingman_reload.mp3',
+      // ===== UI / menu =====
+      menu_audio: '/audio/menu_audio.mp3',   // musique d'accueil (boucle)
+      button1: '/audio/button1.mp3',         // clic : Mêlée Générale / Mode Bots
+      button2: '/audio/button2.mp3',         // clic : tous les autres boutons
+      spawn: '/audio/spawn.mp3',             // entrée en partie (online / bots)
       perfect_kill: '/audio/perfect_kill.mp3',   // jingle de félicitation au kill (notif PERFECT KILL / NICE SHOTS)
       velocity: '/audio/velocity.mp3',           // boucle "vitesse" jouée à la vélocité max (fondu d'entrée/sortie)
       saber_equip: '/audio/saber_equip.mp3',     // sortie du sabre laser
@@ -603,6 +608,7 @@
       saber_hit1: '/audio/saber_hit1.mp3', saber_hit2: '/audio/saber_hit2.mp3', // IMPACT du sabre sur un ennemi (aléatoire)
     },
     SFX_VOLUME: 0.6,
+    MENU_MUSIC_VOLUME: 0.5,   // volume de la musique du menu (boucle accueil/lobby)
     SHOT_PITCH_VAR: 0.18,
     // ===== Volume PAR SON (multiplicateur individuel) =====
     // Chaque valeur multiplie le volume de CE son uniquement : 1 = inchangé, 0.5 = moitié, 2 = double.
@@ -617,6 +623,7 @@
       slide: 1.0, slide_jump: 1.0, wallbounce: 1.0, mantle: 1.0, superglide: 1.0,
       holster: 1.0, equip: 1.0, crouch: 1.0,
       death: 1.0, orb_pickup: 1.0,
+      button1: 1.0, button2: 1.0, spawn: 1.0,
     },
     // ===== Sons d'impact de balle PAR SURFACE =====
     // Par défaut les impacts sont SYNTHÉTISÉS (un caractère par surface : mur, conteneur, rampe, sol).
@@ -778,7 +785,7 @@
     // Apparaît quand on touche la cible, puis s'efface. Taille constante à l'écran. S'applique aux bots aussi.
     ENEMY_HEALTHBAR: {
       ENABLED: true,
-      screen_width: 0.16,      // largeur de la barre = fraction de la largeur d'écran (constante)
+      screen_width: 0.13,      // largeur de la barre = fraction de la largeur d'écran (constante)
       aspect: 7.0,             // largeur/hauteur de la barre (plus haut = barre plus fine)
       y_offset: 2.25,          // hauteur au-dessus des pieds, debout (m)
       y_offset_crouch: 1.55,   // hauteur accroupi (m)
