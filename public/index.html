@@ -4997,7 +4997,12 @@ document.getElementById('botbtnmenu').onclick = ()=>{
 })();
 // ===== Navigation MANETTE des menus : petit curseur blanc (stick gauche) + bouton OPTIONS = Échap =====
 let gpCurX = innerWidth/2, gpCurY = innerHeight/2, _gpMenuPrev = [], _gpHover = null;
-function aMenuIsOpen(){ return !document.pointerLockElement && !!document.querySelector('.screen.show'); }
+// Un VRAI menu de navigation est ouvert (pause/options/lobby/menu) — PAS l'écran de mort/fin (ceux-là
+// sont des états transitoires gérés par le respawn ; les inclure bloquerait le hide+lock du respawn).
+function aMenuIsOpen(){
+  if(document.pointerLockElement) return false;
+  return ['menu','options','lobby','pause'].some(id=>{ const e = document.getElementById(id); return e && e.classList.contains('show'); });
+}
 function updateMenuGamepad(g){
   const cur = document.getElementById('gpcursor'); if(!cur) return;
   // Bouton OPTIONS / START (index 9) = Échap : fait apparaître le menu pause pendant le jeu
