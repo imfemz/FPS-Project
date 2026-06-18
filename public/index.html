@@ -271,7 +271,7 @@
   <div class="optrow"><span style="width:190px;text-align:right">Zone morte manette</span><input type="range" id="deadzone" min="0" max="0.4" step="0.01"><span id="deadzonev"></span></div>
   <div class="optrow"><span style="width:190px;text-align:right">Aim assist (manette)</span><input type="checkbox" id="aimassist"></div>
   <div class="optrow"><span style="width:190px;text-align:right">Champ de vision (FOV)</span><input type="range" id="fov" min="50" max="100" step="1"><span id="fovv"></span></div>
-  <div class="optrow"><span style="width:190px;text-align:right">Vitesse de visée (ADS)</span><input type="range" id="adsspeed" min="10" max="40" step="1"><span id="adsspeedv"></span></div>
+  <div class="optrow"><span style="width:190px;text-align:right">Vitesse de visée (ADS)</span><input type="range" id="adsspeed" min="10" max="17" step="1"><span id="adsspeedv"></span></div>
   <div class="optrow"><span style="width:190px;text-align:right">Molette = changer d'arme</span><input type="checkbox" id="wheelswitch"></div>
   <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--txt-faint);margin:14px 0 4px">VISEUR</div>
   <div class="optrow"><span style="width:190px;text-align:right">Taille</span><input type="range" id="chsize" min="2" max="30" step="1"><span id="chsizev"></span></div>
@@ -432,7 +432,7 @@ const DEFAULTS = {
   gp: { forward:-1, back:-1, left:-1, right:-1, jump:0, crouch:1, sprint:10, reload:2, shoot:7, ads:6, holster:3, weapon_stick:11, weapon3:-1 },
   sensKb: 1.0, sensGp: 1.0, aimAssist: true, crouchMode: 'hold', autoSprint: true, fov: 0, deadzone: 0.06,
   wheelSwitch: false,            // molette souris = changer d'arme (activable en options)
-  adsSpeed: 22,                  // vitesse de montée en visée (ADS)
+  adsSpeed: 17,                  // vitesse de montée en visée (ADS)
   crosshair: { size: 13, gap: 17, thickness: 2, color: '#ffffff', dot: false }, // viseur perso
 };
 let cfg = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('nc_cfg')||'{}'));
@@ -440,7 +440,8 @@ cfg.kb = Object.assign({}, DEFAULTS.kb, cfg.kb); cfg.gp = Object.assign({}, DEFA
 cfg.crosshair = Object.assign({}, DEFAULTS.crosshair, cfg.crosshair); // fusion (anciennes sauvegardes)
 if(!cfg.crouchMode) cfg.crouchMode = 'hold';
 if(cfg.autoSprint === undefined) cfg.autoSprint = true;
-if(cfg.adsSpeed === undefined) cfg.adsSpeed = 22;
+if(cfg.adsSpeed === undefined) cfg.adsSpeed = 17;
+if(cfg.adsSpeed > 17) cfg.adsSpeed = 17; // plafond ADS = 17 (option max 17)
 // MIGRATION : le stick droit (R3) gère seul armes+holster. On retire tout bind manette
 // en conflit (weapon1/weapon2/holster posés à la main sur le R3) qui bloquait l'arme.
 (function fixWeaponBinds(){
@@ -464,9 +465,9 @@ const gpName = i => i<0 ? '—' : (GP_NAMES[i]||('Btn '+i));
 const keysDown = new Set();
 let mouseDX = 0, mouseDY = 0;
 addEventListener('keydown', e=>{ keysDown.add(e.code); if(listening) captureKb(e.code);
-  if(e.code==='KeyH' && !listening){ DEBUG_HITBOX = !DEBUG_HITBOX; if(hitboxMesh) hitboxMesh.visible = DEBUG_HITBOX; }
+  if(e.code==='KeyK' && !listening){ DEBUG_HITBOX = !DEBUG_HITBOX; if(!DEBUG_HITBOX) hitboxPool.forEach(m=>{ m.visible=false; }); }
 });
-let DEBUG_HITBOX = false, hitboxMesh = null;
+let DEBUG_HITBOX = false, hitboxMesh = null; let hitboxPool = [];
 addEventListener('keyup', e=>keysDown.delete(e.code));
 addEventListener('mousedown', e=>{ keysDown.add('Mouse'+e.button); if(listening) captureKb('Mouse'+e.button); });
 addEventListener('mouseup', e=>keysDown.delete('Mouse'+e.button));
@@ -944,7 +945,7 @@ function addRailings(b){
     const geo = along ? new THREE.BoxGeometry(0.05,0.05,L) : new THREE.BoxGeometry(L,0.05,0.05);
     const r = new THREE.Mesh(geo, railMat);
     if(along) r.position.set(b.x + s*off, top + hy, b.z); else r.position.set(b.x, top + hy, b.z + s*off);
-    scene.add(r); mapMeshes.push(r);
+    scene.add(r); // deco non collisionnante : PAS dans mapMeshes (sinon bloque les balles)
   }
 }
 // ===== AO "BAKED" (statique) — remplace la GTAO instable =====
@@ -978,7 +979,7 @@ function addContactShadow(cx, cz, w, d){
     new THREE.MeshBasicMaterial({ map: tex, color: 0x000000, transparent: true, opacity: B.ground_opacity ?? 0.5,
       depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, toneMapped: false }));
   q.rotation.x = -Math.PI/2; q.position.set(cx, 0.02, cz); q.renderOrder = 1;
-  scene.add(q); mapMeshes.push(q);
+  scene.add(q); // ombre de contact (decal sol) : hors collision balle
 }
 function buildMap(){
   const G = GAMECFG.GRAPHICS || {};
@@ -1010,7 +1011,7 @@ function buildMap(){
       const sw = (b.d >= b.w) ? Math.min(b.w, .2) : b.w*0.98;
       const strip = new THREE.Mesh(new THREE.BoxGeometry(sw,.06,sd),
         new THREE.MeshStandardMaterial({color:gc, emissive:gc, emissiveIntensity:0.55}));
-      strip.position.set(b.x, y0 + b.h + .035, b.z); scene.add(strip); mapMeshes.push(strip);
+      strip.position.set(b.x, y0 + b.h + .035, b.z); scene.add(strip); // strip deco : hors collision balle
       if(b.light){ const l = new THREE.PointLight(gc, .45, 12); l.position.set(b.x, y0+b.h+.6, b.z); scene.add(l); }
     }
     if(b.glow==='side' && b.light){
@@ -1334,7 +1335,7 @@ function nearestEnemyCapsuleT(o, d){
   }
   for(const b of botMgr.values()){
     if(b.dead || !b.soldier) continue;
-    const t = rayCapsuleT(o, d, b.pos, !!(b.anim && (b.anim.c || b.anim.sl)));
+    const t = rayCapsuleT(o, d, b.pos, !!(b.anim && (b.anim.c || b.anim.sl)), LBOT.hit_pad ?? 1.4);
     if(t < best) best = t;
   }
   return best;
@@ -1557,6 +1558,7 @@ function updateRagdolls(dt){
 
 /* ---------- Orbes de soin ---------- */
 const orbsFx = {}; // id → {grp, parts, t}
+let nextLocalOrbId = 1; // ids des orbes lâchées par les bots tués en mode entraînement (pas de serveur)
 const ORB_TEX = makeRadialTexture('rgba(140,210,255,1)','rgba(80,160,255,0)');
 function spawnOrb(id, p){
   if(orbsFx[id]) return;
@@ -1595,6 +1597,19 @@ function updateOrbs(dt){
       const u = (o.t*0.65 + sp.userData.phase) % 1.4;
       sp.position.set(Math.cos(sp.userData.a)*sp.userData.r, u - .4, Math.sin(sp.userData.a)*sp.userData.r);
       sp.material.opacity = Math.max(0, 1 - u/1.4);
+    }
+  }
+  // Mode entraînement : ramassage des orbes côté CLIENT (pas de serveur pour gérer la collecte).
+  // En ligne c'est le serveur qui détecte le pickup et envoie 'orbtaken'.
+  if(localBotMode && alive){
+    for(const id in orbsFx){
+      const g = orbsFx[id].grp.position;
+      const dx = me.pos.x - g.x, dy = (me.pos.y + 1) - g.y, dz = me.pos.z - g.z;
+      if(dx*dx + dy*dy + dz*dz < 1.8*1.8){
+        me.hp = maxHp; me.sh = maxShield; updateHPShieldUI();
+        playSfxAt('orb_pickup', g.clone(), 1);
+        removeOrb(id);
+      }
     }
   }
 }
@@ -2087,7 +2102,16 @@ function createSoldierRigged(accent){
   inst.traverse(n=>{ const nm=(n.name||'').toLowerCase(); if(!hand && (nm==='hand.r'||nm.includes('righthand')||nm.includes('hand_r')||nm==='wrist.r')) hand = n; });
   if(hand) hand.add(flash); else root.add(flash);
 
-  const s = { root, rigged:true, mixer, actions, flash, accent,
+  // Bones de la colonne -> visee haut du corps (pitch additif applique APRES le mixer)
+  const _SA = (GAMECFG.MODELS && GAMECFG.MODELS.spine_aim) || {};
+  const _spineNames = _SA.bones || ['Abdomen','Torso','Chest'];
+  const spine = [];
+  inst.traverse(n=>{ if(n && n.name && _spineNames.indexOf(n.name) !== -1){ n.userData.qRest = n.quaternion.clone(); spine.push(n); } });
+  // Bones de jambes -> saut procedural (pose normale, plus de roulade)
+  const legs = {}; const _legMap = { ulL:'UpperLeg.L', ulR:'UpperLeg.R', llL:'LowerLeg.L', llR:'LowerLeg.R' };
+  inst.traverse(n=>{ if(!n || !n.name) return; for(const k in _legMap){ if(n.name === _legMap[k]){ n.userData.qRest = n.quaternion.clone(); legs[k] = n; } } });
+
+  const s = { root, rigged:true, mixer, actions, flash, accent, spine, legs, jumpW:0,
               current:null, gun:{visible:true},
               // membres factices pour compat ragdoll (non utilisés si anim Death existe)
               torso:root, head:root, armL:root, armR:root, legL:root, legR:root };
@@ -2109,6 +2133,58 @@ function playClip(s, key, fade){
   s.currentKey = key;
 }
 // Choix de l'animation selon les flags d'input + avance le mixer
+const _spineAxX = new THREE.Vector3(1,0,0), _spineAxY = new THREE.Vector3(0,1,0), _spineAxZ = new THREE.Vector3(0,0,1), _spineQ = new THREE.Quaternion();
+// Visee haut-du-corps : pitch additif reparti sur les vertebres, base sur la pose de repos
+// (qRest) -> stable, jamais d'accumulation meme si un clip n'anime pas la colonne.
+function applySpineAim(s, anim){
+  if(!s.spine || !s.spine.length) return;
+  const SA = (GAMECFG.MODELS && GAMECFG.MODELS.spine_aim) || {};
+  if(SA.enabled === false) return;
+  const mx = SA.max ?? 1.3;
+  let p = (anim && anim.pitch) || 0;
+  p = Math.max(-mx, Math.min(mx, p));
+  const ax = SA.axis === 'y' ? _spineAxY : (SA.axis === 'z' ? _spineAxZ : _spineAxX);
+  const per = p * (SA.pitch_gain ?? 0.65) * (SA.sign ?? 1) / s.spine.length;
+  _spineQ.setFromAxisAngle(ax, per);
+  for(const b of s.spine){
+    if(b.userData.qRest) b.quaternion.copy(b.userData.qRest).multiply(_spineQ);
+    else b.quaternion.multiply(_spineQ);
+  }
+}
+const _jumpQ = new THREE.Quaternion(), _jumpE = new THREE.Euler(), _jumpTgt = new THREE.Quaternion();
+// Pose de saut NORMALE construite avec les bones (jambes flechies). slerp par poids jumpW :
+// blend doux entree/sortie, jamais d'accumulation (slerp depuis la pose courante vers la cible).
+function applyJumpPose(s, w){
+  if(!s.legs || w < 0.01) return;
+  const JP = (GAMECFG.MODELS && GAMECFG.MODELS.jump_pose) || {};
+  if(JP.enabled === false) return;
+  const sgn = JP.sign ?? 1, ul = JP.upperleg || [0.55,0,0.08], ll = JP.lowerleg || [-0.95,0,0];
+  function bend(b, e){
+    if(!b || !b.userData.qRest) return;
+    _jumpE.set(e[0]*sgn, e[1]*sgn, e[2]*sgn);
+    _jumpTgt.copy(b.userData.qRest).multiply(_jumpQ.setFromEuler(_jumpE));
+    b.quaternion.slerp(_jumpTgt, w);
+  }
+  bend(s.legs.ulL, ul); bend(s.legs.ulR, ul);
+  bend(s.legs.llL, ll); bend(s.legs.llR, ll);
+}
+const _crQ = new THREE.Quaternion(), _crE = new THREE.Euler(), _crTgt = new THREE.Quaternion();
+// Pose ACCROUPIE : jambes flechies (squat), slerp par poids crouchW (meme principe que la pose de
+// saut), appliquee PAR-DESSUS le clip de base, depuis la pose de repos -> pas d'accumulation.
+function applyCrouchPose(s, w){
+  if(!s.legs || w < 0.01) return;
+  const CP = (GAMECFG.MODELS && GAMECFG.MODELS.crouch_pose) || {};
+  if(CP.enabled === false) return;
+  const sgn = CP.sign ?? 1, ul = CP.upperleg || [0.5,0,0.16], ll = CP.lowerleg || [-0.85,0,0];
+  function bend(b, e){
+    if(!b || !b.userData.qRest) return;
+    _crE.set(e[0]*sgn, e[1]*sgn, e[2]*sgn);
+    _crTgt.copy(b.userData.qRest).multiply(_crQ.setFromEuler(_crE));
+    b.quaternion.slerp(_crTgt, w);
+  }
+  bend(s.legs.ulL, ul); bend(s.legs.ulR, ul);
+  bend(s.legs.llL, ll); bend(s.legs.llR, ll);
+}
 function animateSoldierRigged(s, anim, dt, t){
   // Si une anim one-shot (hit) est en cours, on la laisse finir avant de reprendre la normale
   if(s.currentKey === 'death'){ if(s.mixer) s.mixer.update(dt); return; }
@@ -2116,19 +2192,27 @@ function animateSoldierRigged(s, anim, dt, t){
   const move = anim.m||0, crouch = anim.c?1:0, air = anim.a?1:0;
   const slide = anim.sl?1:0, holster = anim.h?1:0, climb = anim.cl?1:0;
   const firing = anim.f?1:0; // tir (transmis via le state réseau)
-  let key = 'idle';
-  if(air || climb) key = 'jump';
+  let key = 'idle', jumping = 0;
+  if(climb) key = 'jump';                          // grimpe : clip inchange pour l'instant
+  else if(air){ key = 'idle'; jumping = 1; }       // SAUT : base neutre + pose procedurale (plus de roulade)
   else if(slide) key = 'jump';
-  else if(crouch) key = 'crouch';
+  else if(crouch) key = (move > 0.1 ? 'walk' : 'idle'); // ACCROUPI : base neutre + flexion jambes procedurale (fini le "Roll")
   else if(move > 0.1){
     key = (firing && s.actions.run_shoot) ? 'run_shoot' : (move > 0.6 ? 'run' : 'walk');
   } else if(firing && s.actions.shoot){
     key = 'shoot';
   }
+  const _jb = (GAMECFG.MODELS.jump_pose && GAMECFG.MODELS.jump_pose.blend) || 12;
+  s.jumpW = (s.jumpW || 0) + (jumping - (s.jumpW || 0)) * Math.min(1, dt * _jb);
+  const _cb = (GAMECFG.MODELS.crouch_pose && GAMECFG.MODELS.crouch_pose.blend) || 10;
+  s.crouchW = (s.crouchW || 0) + ((crouch && !air ? 1 : 0) - (s.crouchW || 0)) * Math.min(1, dt * _cb);
   // fallback si le clip n'existe pas
   if(!s.actions[key]) key = s.actions.idle ? 'idle' : Object.keys(s.actions)[0];
   if(key !== s.currentKey) playClip(s, key, 0.18);
   if(s.mixer) s.mixer.update(dt);
+  applyJumpPose(s, s.jumpW || 0);
+  applyCrouchPose(s, s.crouchW || 0);
+  applySpineAim(s, anim);
 }
 // Jouer l'animation de mort (one-shot) puis figer
 function playDeathAnim(s){
@@ -2157,6 +2241,7 @@ function playHitAnim(s){
 let gun, gunMag, muzzle, muzzleLight, muzzleFlashSprite, sightCenter;
 let runArms;
 let recoil = 0, swayX = 0, swayY = 0, adsAmount = 0, sprintPose = 0, reloadAnimT = -1;
+let reloadUWWeight = 0; // poids de fondu (blend_in/out) de la pose de reload procédurale, appliquée dans updateWeaponAnimation
 let lastMyAnim = {}; // dernier état d'anim local (pour la capture killcam 60Hz)
 let crouchTilt = 0, slideRoll = 0, mantlePose = 0; // lissages (v3)
 let swayPhase = 0, swayW = 0;                       // sway caméra "vivant" (course) : phase + poids lissé
@@ -3520,26 +3605,93 @@ function playSfx(name, pitch){
 
 /* ---------- Tir ---------- */
 const tracers = [];
+// Point monde correspondant au BOUT DU CANON a l'ecran. Le muzzle vit dans la gunScene (FOV
+// separe) : on projette sa position via la gunCam puis on la reconstruit devant la camera reelle.
+// Recalcule A CHAQUE FRAME pour le tracer du joueur -> le depart reste colle au canon en bougeant.
+function muzzleWorldPoint(){
+  const mNode = weaponMuzzleNodes[me.weaponIdx] || muzzle;
+  if(mNode && gunCam){
+    // gunCam (parent du canon) n'est synchronisee sur la camera qu'a la fin de la frame, APRES
+    // la boucle des tracers -> on la recale ICI sur la camera courante pour supprimer le retard
+    // d'1 frame qui faisait "depasser" le tracer hors du canon en strafe rapide.
+    gunCam.position.copy(camera.position);
+    gunCam.quaternion.copy(camera.quaternion);
+    camera.updateMatrixWorld();
+    gunCam.updateMatrixWorld(true);
+    const mWorld = mNode.getWorldPosition(new THREE.Vector3());
+    const ndc = mWorld.project(gunCam);
+    const pt = new THREE.Vector3(ndc.x, ndc.y, 0.5).unproject(camera);
+    const dirS = pt.sub(camera.position).normalize();
+    return camera.position.clone().add(dirS.multiplyScalar(0.5));
+  }
+  return camera.position.clone();
+}
+// Tracer DROIT en repere monde (tirs adverses) : depart/arrivee fixes.
 function spawnTracer(a,b,color){
   const geo = new THREE.BufferGeometry().setFromPoints([a,b]);
   const line = new THREE.Line(geo, new THREE.LineBasicMaterial({color, transparent:true, opacity:.9}));
-  scene.add(line); tracers.push({line, life:.07});
+  scene.add(line); tracers.push({line, life:.07, maxLife:.07, attached:false});
 }
-// Capsule de debug (touche H) : reproduit EXACTEMENT la hitbox serveur autour de l'adversaire.
+// Tracer DU JOUEUR : depart verrouille au canon (recalcule chaque frame) + courbe quand on bouge.
+const TRACER_SEGS = 14;
+function spawnTracerFromMuzzle(end, dir0, color){
+  const start0 = muzzleWorldPoint();
+  const dist0 = Math.max(0.01, start0.distanceTo(end));
+  // point de controle fige sur la trajectoire initiale : quand le canon bouge, le depart suit
+  // et la ligne SE COURBE pour rester accrochee au canon tout en rejoignant l'impact.
+  const control = start0.clone().add(dir0.clone().multiplyScalar(dist0 * 0.45));
+  const pos = new Float32Array(TRACER_SEGS * 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({color, transparent:true, opacity:.95}));
+  line.frustumCulled = false;
+  scene.add(line);
+  const t = { line, life:.085, maxLife:.085, attached:true, end:end.clone(), control };
+  tracers.push(t);
+  updateAttachedTracer(t);
+  return t;
+}
+// Reconstruit la courbe (Bezier quadratique start->control->end) avec le canon LIVE comme depart.
+function updateAttachedTracer(t){
+  const start = muzzleWorldPoint();
+  const arr = t.line.geometry.attributes.position.array;
+  const N = TRACER_SEGS, c = t.control, e = t.end;
+  for(let i=0;i<N;i++){
+    const u = i/(N-1), mt = 1-u, a = mt*mt, b = 2*mt*u, d = u*u;
+    arr[i*3]   = a*start.x + b*c.x + d*e.x;
+    arr[i*3+1] = a*start.y + b*c.y + d*e.y;
+    arr[i*3+2] = a*start.z + b*c.z + d*e.z;
+  }
+  t.line.geometry.attributes.position.needsUpdate = true;
+  t.line.geometry.computeBoundingSphere();
+}
+// Debug (touche K) : dessine le VRAI volume de hit (capsule, pad bot inclus) autour de chaque
+// bot + adversaire. Vert = la hitbox testee par la balle. Si ton viseur est DEDANS mais que ca
+// rate -> c'est le code (pas la hitbox) ; si DEHORS -> c'est la visee.
 function updateHitboxDebug(){
   const M = GAMECFG.MODELS || {}, HB = M.hitbox || {}, sc = M.character_scale || 1;
-  const R = (HB.radius ?? 0.32) * sc;
-  const bottom = (HB.bottom ?? 0.10) * sc;
-  const lowered = remote.anim && (remote.anim.c || remote.anim.sl);
-  const top = (lowered ? (HB.top_crouch ?? 1.15) : (HB.top ?? 1.80)) * sc;
-  const h = Math.max(0.1, top - bottom);
-  if(!hitboxMesh){
-    const geo = new THREE.CylinderGeometry(1, 1, 1, 14, 1, true);
-    hitboxMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color:0x00ff88, wireframe:true, transparent:true, opacity:0.6}));
-    hitboxMesh.visible = DEBUG_HITBOX; scene.add(hitboxMesh);
+  const bottom = (HB.bottom ?? 0.0) * sc;
+  let i = 0;
+  function ensure(){
+    if(!hitboxPool[i]){
+      const geo = new THREE.CylinderGeometry(1,1,1,16,1,true);
+      const mh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color:0x00ff88, wireframe:true, transparent:true, opacity:0.7, depthTest:false}));
+      mh.renderOrder = 999; scene.add(mh); hitboxPool[i] = mh;
+    }
+    return hitboxPool[i];
   }
-  hitboxMesh.scale.set(R, h, R);
-  hitboxMesh.position.set(remote.pos.x, (remote.pos.y||0) + bottom + h/2, remote.pos.z);
+  function place(pos, lowered, pad){
+    const R = (HB.radius ?? 0.42) * sc * (pad || 1);
+    const top = (lowered ? (HB.top_crouch ?? 1.22) : (HB.top ?? 1.86)) * sc;
+    const h = Math.max(0.1, top - bottom);
+    const mh = ensure(); mh.visible = true;
+    mh.scale.set(R, h, R);
+    mh.position.set(pos.x, (pos.y||0) + bottom + h/2, pos.z);
+    i++;
+  }
+  if(remote && remote.soldier && !remote.dead && remote.pos) place(remote.pos, !!(remote.anim && (remote.anim.c || remote.anim.sl)), 1);
+  if(botMgr) for(const b of botMgr.values()){ if(b && !b.dead && b.pos && b.soldier) place(b.pos, !!(b.anim && b.anim.c), (typeof LBOT!=='undefined' ? (LBOT.hit_pad ?? 1.4) : 1.4)); }
+  for(; i < hitboxPool.length; i++) hitboxPool[i].visible = false;
 }
 let recoilAccum = 0, recoilYawAccum = 0, burstDir = 1, shotsInBurst = 0; // recul caméra à recentrer (vertical + horizontal)
 let aimVel = 0; // vitesse angulaire de visée lissée (rad/s) — pilote le recoil smoothing
@@ -3675,28 +3827,9 @@ function shoot(){
   }
   const o = camera.position.clone();
   const end = traceBulletOnMap(o, dir, true);
-  // Départ visuel du tracer : un point dans le MONDE réel correspondant au bout du canon à
-  // l'écran. Le muzzle vit dans la gunScene (FOV séparé), donc sa position monde n'est pas
-  // utilisable directement. On part d'un point devant la caméra, légèrement bas-droite, qui
-  // donne l'impression que la balle sort de l'arme, puis on file vers le point d'impact.
-  // DÉPART DU TRACER PILE AU BOUT DU CANON :
-  // on prend le nœud "muzzle origin" du GLB de l'arme s'il existe (sinon le repère muzzle de
-  // la config). Il vit dans la gunScene (FOV séparé) : on projette sa position écran via la
-  // gunCam, puis on reconstruit un point à la même position écran dans le monde réel.
-  let tracerStart;
-  const mNode = weaponMuzzleNodes[me.weaponIdx] || muzzle;
-  if(mNode && gunCam){
-    gunCam.updateMatrixWorld(true);
-    const mWorld = mNode.getWorldPosition(new THREE.Vector3());
-    const screen = mWorld.clone().project(gunCam);
-    const ndc = new THREE.Vector3(screen.x, screen.y, 0.5);
-    tracerStart = ndc.unproject(camera);
-    const dirS = tracerStart.sub(camera.position).normalize();
-    tracerStart = camera.position.clone().add(dirS.multiplyScalar(0.5));
-  } else {
-    tracerStart = o.clone();
-  }
-  spawnTracer(tracerStart, end, 0xffd27a);
+  // Tracer du joueur : depart verrouille au bout du canon (recalcule chaque frame) et qui
+  // se courbe quand on bouge, au lieu d'une ligne monde figee qui se detache de l'arme.
+  spawnTracerFromMuzzle(end, dir, 0xffd27a);
   if(localBotMode){ localBotShoot(o, dir, end); }          // mode entraînement : hit detection LOCALE
   else if(ws && ws.readyState===1){
     // délai de rembobinage pour la lag comp : on voyait la cible avec ce retard
@@ -4137,6 +4270,10 @@ function onBotKill(m){
     fadeOutSoldier(b.soldier);
     killHealthBar('bot'+m.id);
   }
+  // Mode entraînement : le bot tué LÂCHE un orbe bleu (rend toute la vie/bouclier au ramassage).
+  if(localBotMode && b){
+    spawnOrb('lb'+(nextLocalOrbId++), [b.pos.x, (b.pos.y||0)+1.1, b.pos.z]);
+  }
   killFeed('VOUS ☠ BOT' + (m.head ? ' (tête)' : ''));
 }
 function onBotRespawn(m){
@@ -4154,8 +4291,25 @@ function onBotRespawn(m){
    Réutilise les handlers existants onBotStart / onBotHit / onBotKill / onBotRespawn.
    ========================================================================== */
 let localBotMode = false, localBotKills = 0;
-const LBOT = { count: 5, speed: 1.9, respawn: 1500, engage_dist: 12,
-  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4 };  // séparation = distance mini entre bots ; radius = collision joueur ; hit_pad = hitbox bien généreuse pour bien toucher
+const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist: 12,
+  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4,
+  ai: {
+    difficulty: 'medium',     // 'easy' | 'medium' | 'hard'
+    fire_range: 15,           // portee de tir des bots (m) -- ils ouvrent le feu en rafale des 15 m
+    view_range: 24,           // distance de detection (LOS) + poursuite
+    forget_time: 3.0,         // memoire (s) apres perte de vue
+    preferred_dist: 4.0,      // distance de combat preferee
+    damage_player: true,      // les tirs des bots t'infligent des degats reels
+    move_full_speed: 9,       // vitesse joueur (m/s) ou le malus de MOUVEMENT est au max (statique = 0 malus)
+    far_hit_mult: 0.6,        // hit a portee MAX = base x ce mult ; au CONTACT = base -> loin = un peu moins
+    gravity: 22, jump_vel: 6.6,
+    tiers: {
+      // burst: [rafale a portee MAX, rafale au CONTACT] -> plus c'est proche, plus la rafale est longue
+      easy:   { react: 0.55, hit_chance: 0.50, move_pen: 0.65, burst:[1,4],  gap:[0.7,1.3], reload: 2.0, evade: 0.20, dmg_mult: 0.7 },
+      medium: { react: 0.32, hit_chance: 0.72, move_pen: 0.50, burst:[2,7],  gap:[0.4,0.8], reload: 1.6, evade: 0.45, dmg_mult: 1.0 },
+      hard:   { react: 0.16, hit_chance: 0.90, move_pen: 0.35, burst:[3,12], gap:[0.25,0.5], reload: 1.3, evade: 0.75, dmg_mult: 1.15 }
+    }
+  } };  // séparation = distance mini entre bots ; radius = collision joueur ; hit_pad = hitbox bien généreuse pour bien toucher
 const _botTmp = new THREE.Vector3();
 // IA simple mais vivante : chaque bot erre vers une destination, se rapproche du joueur,
 // et strafe quand il est proche. b.anim.m anime les jambes (marche/course).
@@ -4163,12 +4317,28 @@ function initLocalBotAI(b){
   const lim = (MAP.HALF || 30) - 3;
   b.mv = { tx:(Math.random()*2-1)*lim, tz:(Math.random()*2-1)*lim,
            retarget: 1.2 + Math.random()*2.2, strafeDir: Math.random()<.5?1:-1, strafeT: 0.6+Math.random() };
+  b.ai = { reactT: 0.3, fireT: 0.3+Math.random()*0.5, shotsLeft: 0, reloadT: 0,
+           vy: 0, air: false, evadeT: 0, jumpCD: 1.5+Math.random()*2.5,
+           seenT: 0, fireFlash: 0, lastX: b.pos?b.pos.x:0, lastZ: b.pos?b.pos.z:0, jumpQueued: false };
 }
-function lbotSpawnPoint(i, n){ // répartis sur un grand cercle (angles réguliers) → bien espacés au départ
+function lbotSpawnPoint(i, n){ // (re)spawn TOUJOURS à >= MIN_DIST du joueur (jamais plus près)
   const lim = (MAP.HALF || 30) - 4;
-  const a = ((i != null && n) ? (i / n) * Math.PI*2 : Math.random()*Math.PI*2) + (Math.random()-0.5)*0.5;
-  const r = Math.min(lim, 14 + Math.random()*8);
-  return [Math.cos(a)*r, 0, Math.sin(a)*r];
+  const MIN = 10;                                            // distance mini autour du joueur (m)
+  const px = (me && me.pos) ? me.pos.x : 0, pz = (me && me.pos) ? me.pos.z : 0;
+  let best = [lim, 0, 0], bestD = -1;
+  for(let k=0; k<30; k++){
+    // 1er essai = angle réparti (spawn initial bien espacé) ; ensuite angles aléatoires
+    const a = (k === 0 && i != null && n) ? (i / n) * Math.PI*2 + (Math.random()-0.5)*0.4
+                                          : Math.random()*Math.PI*2;
+    const r = Math.min(lim, MIN + 4 + Math.random()*12);     // rayon (autour du centre) déjà large
+    const x = Math.cos(a)*r, z = Math.sin(a)*r;
+    if(Math.hypot(x - px, z - pz) >= MIN) return [x, 0, z];   // assez loin du joueur → OK
+    const d = Math.hypot(x - px, z - pz);
+    if(d > bestD){ bestD = d; best = [x, 0, z]; }             // sinon retient le plus éloigné trouvé
+  }
+  // joueur coincé près d'un bord : on POUSSE le meilleur point à MIN du joueur (borné à la map)
+  let dx = best[0]-px, dz = best[2]-pz, d = Math.hypot(dx,dz) || 1;
+  return [ Math.max(-lim, Math.min(lim, px + dx/d*MIN)), 0, Math.max(-lim, Math.min(lim, pz + dz/d*MIN)) ];
 }
 function startLocalBotMode(){
   // Mode solo : on coupe le réseau proprement (pas de message "connexion perdue")
@@ -4183,66 +4353,166 @@ function startLocalBotMode(){
   const lb = document.getElementById('leaderboard'); if(lb) lb.style.display = 'none';
   const sc = document.getElementById('score'); if(sc) sc.style.display = 'flex';
 }
+// --- IA combat bots (local) : perception, tir/accuracy, degats joueur, esquive, saut ---
+const _losO = new THREE.Vector3(), _losDir = new THREE.Vector3();
+function botSeesPlayer(b){
+  const eyeB = (b.pos.y||0) + 1.5, eyeP = (me.pos.y||0) + (CONFIG.EYE_STAND||1.62);
+  _losO.set(b.pos.x, eyeB, b.pos.z);
+  _losDir.set(me.pos.x - b.pos.x, eyeP - eyeB, me.pos.z - b.pos.z);
+  const d = _losDir.length(); if(d < 0.001) return true;
+  _losDir.multiplyScalar(1/d);
+  mapRay.set(_losO, _losDir); mapRay.far = d - 0.4;
+  return mapRay.intersectObjects(mapMeshes, false).length === 0;
+}
+function localPlayerDeath(){
+  if(!alive) return;
+  alive = false; playSfx('death'); show('deathscreen');
+  document.exitPointerLock && document.exitPointerLock();
+  setTimeout(()=>{ if(!localBotMode) return;
+    const sps = MAP.spawns || [[0,0,0,0]]; const sp = sps[Math.floor(Math.random()*sps.length)];
+    doMyRespawn({ p:[sp[0], 0, sp[2]], yaw: sp[3]||0 });
+  }, 1400);
+}
+function damagePlayerLocal(dmg){
+  if(!alive || !localBotMode) return;
+  let rest = dmg;
+  if(me.sh > 0){ const a = Math.min(me.sh, rest); me.sh -= a; rest -= a; }
+  if(rest > 0) me.hp -= rest;
+  if(me.hp < 0) me.hp = 0;
+  updateHPShieldUI(); triggerDamageFeedback();
+  if(me.hp <= 0) localPlayerDeath();
+}
+function _rR(a){ return a[0] + Math.random()*(a[1]-a[0]); }
+function _rI(a){ return a[0] + Math.floor(Math.random()*(a[1]-a[0]+1)); }
+function botShoot(b, tier, playerSpeed, distP){
+  b.ai.fireFlash = 0.08;
+  const A = LBOT.ai || {};
+  // Precision = base x MOUVEMENT x DISTANCE :
+  //  - plus le joueur va vite, moins ca touche (statique = max de hit)
+  const moveF = 1 - Math.min(1, playerSpeed / (A.move_full_speed ?? 9)) * (tier.move_pen ?? 0.4);
+  //  - un peu moins de hit a longue portee (au contact = max)
+  const fr = A.fire_range ?? 15;
+  const distF = 1 - Math.min(1, (distP||0) / fr) * (1 - (A.far_hit_mult ?? 0.6));
+  if(Math.random() < (tier.hit_chance ?? 0.7) * moveF * distF){
+    const W = (GAMECFG.WEAPONS && GAMECFG.WEAPONS[b.weaponIdx||0]) || {};
+    if((LBOT.ai && LBOT.ai.damage_player) !== false) damagePlayerLocal((W.damage_body ?? 15) * (tier.dmg_mult ?? 1));
+  }
+  playSfxAt('shot', b.pos, 0.7, { refDistance: 8, maxDistance: 60, rolloff: 0.8 });
+}
 function updateLocalBots(dt){
   if(!localBotMode || !playing) return;
   const lim = (MAP.HALF || 30) - 2;
+  const A = LBOT.ai || {};
+  const tier = (A.tiers && (A.tiers[A.difficulty] || A.tiers.medium)) || {};
+  const playerSpeed = Math.hypot(me.vel.x, me.vel.z);
   for(const [id,b] of botMgr){
     if(b.dead || !b.pos) continue;
-    if(!b.mv) initLocalBotAI(b);
-    const mv = b.mv;
+    if(!b.mv || !b.ai) initLocalBotAI(b);
+    const mv = b.mv, ai = b.ai;
     const dxp = me.pos.x - b.pos.x, dzp = me.pos.z - b.pos.z;
     const distP = Math.hypot(dxp, dzp) || 0.0001;
     mv.retarget -= dt; mv.strafeT -= dt;
-    if(mv.strafeT <= 0){ mv.strafeDir *= -1; mv.strafeT = 1.5 + Math.random()*1.6; } // strafe plus lisse (moins de juke) = trackable
-    if(mv.retarget <= 0){                              // nouvelle destination d'errance (parfois vers le joueur)
-      mv.retarget = 1.6 + Math.random()*2.6;
-      if(Math.random() < 0.5){ mv.tx = me.pos.x + (Math.random()*2-1)*7; mv.tz = me.pos.z + (Math.random()*2-1)*7; }
-      else { mv.tx = (Math.random()*2-1)*lim; mv.tz = (Math.random()*2-1)*lim; }
-    }
-    let vx, vz, run;
-    if(distP < LBOT.engage_dist){                      // proche : strafe autour du joueur + gestion de distance
+    if(mv.strafeT <= 0){ mv.strafeDir *= -1; mv.strafeT = 1.0 + Math.random()*1.4; }
+
+    // Perception
+    const see = (distP < (A.view_range ?? 24)) && alive && botSeesPlayer(b);
+    ai.seenT = see ? (A.forget_time ?? 3) : Math.max(0, ai.seenT - dt);
+    if(see){ ai.lastX = me.pos.x; ai.lastZ = me.pos.z; }
+    const knows = see || ai.seenT > 0;
+    const inFire = see && alive && distP <= (A.fire_range ?? 15);
+
+    // Tir + accuracy
+    ai.fireT -= dt; ai.reloadT -= dt; ai.fireFlash = Math.max(0, ai.fireFlash - dt);
+    if(inFire){
+      if(ai.reactT > 0){ ai.reactT -= dt; }
+      else if(ai.reloadT <= 0 && ai.fireT <= 0){
+        const _W = (GAMECFG.WEAPONS && GAMECFG.WEAPONS[b.weaponIdx||0]) || {};
+        const magSize = _W.mag || 30, reloadT = _W.reload_t || tier.reload || 1.6, fireRate = _W.fire_rate || 0.11;
+        if(ai.mag == null) ai.mag = magSize;
+        if(ai.shotsLeft <= 0){                      // nouvelle rafale : plus LONGUE quand le bot est PROCHE
+          const fr = A.fire_range ?? 15;
+          const prox = Math.max(0, Math.min(1, (fr - distP) / Math.max(1, fr - 2.5)));
+          const bl = tier.burst || [2,6];
+          ai.shotsLeft = Math.max(1, Math.round(bl[0] + (bl[1]-bl[0])*prox));
+        }
+        botShoot(b, tier, playerSpeed, distP);
+        ai.shotsLeft--; ai.mag--;
+        if(ai.mag <= 0){ ai.mag = magSize; ai.reloadT = reloadT; ai.shotsLeft = 0; }   // chargeur vide -> reload (temps de l'arme)
+        else if(ai.shotsLeft <= 0){ ai.fireT = _rR(tier.gap || [0.4,0.8]); }            // fin de rafale -> courte pause
+        else { ai.fireT = fireRate; }                                                   // cadence intra-rafale
+      }
+    } else { ai.reactT = tier.react ?? 0.3; ai.shotsLeft = 0; }
+
+    // Decision de deplacement
+    let vx=0, vz=0, run=false;
+    if(see && distP <= (A.fire_range ?? 15)){
       const px = dxp/distP, pz = dzp/distP, sx = -pz, sz = px;
       vx = sx*mv.strafeDir; vz = sz*mv.strafeDir;
-      if(distP > LBOT.engage_dist*0.75){ vx += px*0.7; vz += pz*0.7; }       // se rapproche
-      else if(distP < LBOT.engage_dist*0.4){ vx -= px*0.7; vz -= pz*0.7; }   // recule si trop près
-      b.yaw = Math.atan2(-dxp, -dzp);                  // FACE le joueur (convention réseau : rotation = yaw+π)
-      run = false;
-    } else {                                           // loin : marche/court vers la destination d'errance
+      const pref = A.preferred_dist ?? 4;
+      if(distP > pref+1){ vx += px*0.85; vz += pz*0.85; }
+      else if(distP < pref-1){ vx -= px*0.85; vz -= pz*0.85; }
+      b.yaw = Math.atan2(-dxp, -dzp);
+      run = distP > pref+2.5;
+    } else if(knows){
+      const tx = see ? me.pos.x : ai.lastX, tz = see ? me.pos.z : ai.lastZ;
+      const dx = tx - b.pos.x, dz = tz - b.pos.z, d = Math.hypot(dx,dz) || 0.0001;
+      vx = dx/d; vz = dz/d; b.yaw = Math.atan2(-vx, -vz); run = true;
+      if(d < 1.2) ai.seenT = 0;
+    } else {
+      if(mv.retarget <= 0){ mv.retarget = 1.6 + Math.random()*2.6;
+        if(Math.random() < 0.4){ mv.tx = me.pos.x + (Math.random()*2-1)*8; mv.tz = me.pos.z + (Math.random()*2-1)*8; }
+        else { mv.tx = (Math.random()*2-1)*lim; mv.tz = (Math.random()*2-1)*lim; } }
       const dxt = mv.tx - b.pos.x, dzt = mv.tz - b.pos.z, dt2 = Math.hypot(dxt,dzt) || 0.0001;
-      vx = dxt/dt2; vz = dzt/dt2;
-      if(dt2 < 1.5) mv.retarget = 0;                   // arrivé → re-cible
-      b.yaw = Math.atan2(-vx, -vz);                    // FACE la direction de marche (convention réseau)
-      run = true;
+      vx = dxt/dt2; vz = dzt/dt2; if(dt2 < 1.5) mv.retarget = 0;
+      b.yaw = Math.atan2(-vx, -vz); run = true;
     }
-    // SÉPARATION : s'écarte des autres bots trop proches → ils restent espacés entre eux
+
+    // Esquive (sous le feu) : juke lateral renforce
+    if(ai.evadeT > 0){ ai.evadeT -= dt;
+      const px = dxp/distP, pz = dzp/distP;
+      vx += (-pz)*mv.strafeDir*1.4; vz += (px)*mv.strafeDir*1.4; run = true; }
+
+    // Saut (esquive / franchissement)
+    ai.jumpCD -= dt;
+    if(!ai.air){
+      if(ai.jumpQueued){ ai.vy = A.jump_vel ?? 6.6; ai.air = true; ai.jumpQueued = false; }
+      else if(ai.jumpCD <= 0 && knows){ if(Math.random() < 0.35){ ai.vy = A.jump_vel ?? 6.6; ai.air = true; } ai.jumpCD = 2 + Math.random()*3; }
+    }
+
+    // Separation entre bots
     const sepR = LBOT.separation ?? 4;
-    for(const [oid, ob] of botMgr){
-      if(oid === id || ob.dead || !ob.pos) continue;
-      const ex = b.pos.x-ob.pos.x, ez = b.pos.z-ob.pos.z, ed = Math.hypot(ex,ez);
-      if(ed > 0.0001 && ed < sepR){ const s = (LBOT.sep_force ?? 2) * (1 - ed/sepR); vx += (ex/ed)*s; vz += (ez/ed)*s; }
-    }
+    for(const [oid, ob] of botMgr){ if(oid===id || ob.dead || !ob.pos) continue;
+      const ex=b.pos.x-ob.pos.x, ez=b.pos.z-ob.pos.z, ed=Math.hypot(ex,ez);
+      if(ed>0.0001 && ed<sepR){ const sp2=(LBOT.sep_force ?? 2)*(1-ed/sepR); vx+=(ex/ed)*sp2; vz+=(ez/ed)*sp2; } }
     const vlen = Math.hypot(vx,vz) || 1; vx/=vlen; vz/=vlen;
-    // COLLISION : collide() pousse hors des caisses/murs/plateforme (contournement) + borne la map
-    _botTmp.set(b.pos.x + vx*LBOT.speed*dt, 0, b.pos.z + vz*LBOT.speed*dt);
-    collide(_botTmp, LBOT.radius ?? 0.5, 0);
-    // collide() ne gère PAS la rampe (géométrie inclinée) → les bots CONTOURNENT son emprise au sol
+
+    // Horizontale + collision
+    const spd = run ? (LBOT.run_speed ?? 4.6) : LBOT.speed;
+    _botTmp.set(b.pos.x + vx*spd*dt, 0, b.pos.z + vz*spd*dt);
+    collide(_botTmp, LBOT.radius ?? 0.5, b.pos.y||0);
     const brad = LBOT.radius ?? 0.5;
     for(const r of (MAP.ramps || [])){
       const minx=r.x-r.w/2, maxx=r.x+r.w/2, minz=r.z-r.d/2, maxz=r.z+r.d/2;
       const cx=Math.max(minx,Math.min(_botTmp.x,maxx)), cz=Math.max(minz,Math.min(_botTmp.z,maxz));
       const ddx=_botTmp.x-cx, ddz=_botTmp.z-cz, d2=ddx*ddx+ddz*ddz;
-      if(d2 < brad*brad){
-        if(d2 > 1e-6){ const d=Math.sqrt(d2); _botTmp.x += ddx/d*(brad-d); _botTmp.z += ddz/d*(brad-d); }
-        else { _botTmp.x = (_botTmp.x < r.x ? minx-brad : maxx+brad); } // pile au centre → sort par le côté
-      }
+      if(d2 < brad*brad){ if(d2>1e-6){ const dd=Math.sqrt(d2); _botTmp.x+=ddx/dd*(brad-dd); _botTmp.z+=ddz/dd*(brad-dd);} else { _botTmp.x=(_botTmp.x<r.x?minx-brad:maxx+brad);} }
     }
-    const nx = _botTmp.x, nz = _botTmp.z;
+    const nx=_botTmp.x, nz=_botTmp.z;
     const realMove = Math.hypot(nx-b.pos.x, nz-b.pos.z);
-    if(realMove < 0.01) mv.retarget = Math.min(mv.retarget, 0.2);      // bloqué (mur) → re-cible vite pour contourner
-    b.pos.x = nx; b.pos.z = nz; b.pos.y = 0; b.buf.length = 0;          // position locale = vérité (pas d'interp réseau)
-    b.anim = b.anim || {};                             // anime les jambes : course en errance, marche en combat
-    b.anim.m = realMove > 0.002 ? (run ? 0.85 : 0.5) : 0;
-    b.anim.a = 0; b.anim.sl = 0; b.anim.c = 0;
+    if(realMove < 0.01 && !knows) mv.retarget = Math.min(mv.retarget, 0.2);
+
+    // Verticale (saut)
+    ai.vy -= (A.gravity ?? 22) * dt;
+    let ny = (b.pos.y||0) + ai.vy*dt;
+    const groundY = (MAP.groundHeightAt ? MAP.groundHeightAt(nx, nz) : 0);
+    if(ny <= groundY){ ny = groundY; ai.vy = 0; ai.air = false; }
+
+    b.pos.x = nx; b.pos.z = nz; b.pos.y = ny; b.buf.length = 0;
+    { const _dy = (me.pos.y||0)+1.0 - ((b.pos.y||0)+1.5); b.pitch = Math.atan2(_dy, distP); }
+    b.anim = b.anim || {};
+    b.anim.m = realMove > 0.002 ? (run ? 0.9 : 0.5) : 0;
+    b.anim.a = ai.air ? 1 : 0; b.anim.sl = 0; b.anim.c = 0;
+    b.anim.f = (inFire && ai.reactT <= 0) ? 1 : 0;
   }
 }
 function applyLocalBotDamage(id, b, dmg, head, melee){
@@ -4251,6 +4521,7 @@ function applyLocalBotDamage(id, b, dmg, head, melee){
   if(b.sh > 0){ const a = Math.min(b.sh, rest); b.sh -= a; rest -= a; }
   if(rest > 0) b.hp -= rest;
   onBotHit({ id, dmg, head: !!head, hp: Math.max(0,b.hp), sh: Math.max(0,b.sh), melee: !!melee });
+  if(b.ai && b.hp > 0){ b.ai.evadeT = Math.max(b.ai.evadeT||0, 0.7); const _A=LBOT.ai||{}, _t=(_A.tiers&&(_A.tiers[_A.difficulty]||_A.tiers.medium))||{}; if(Math.random() < (_t.evade ?? 0.4)) b.ai.jumpQueued = true; if(b.mv && Math.random()<0.6) b.mv.strafeDir *= -1; }
   if(b.hp <= 0){
     onBotKill({ id, head: !!head });
     showKillBanner(reloadedSinceKill ? 'NICE SHOTS !' : 'PERFECT KILL !', !!head);
@@ -4267,7 +4538,9 @@ function applyLocalBotDamage(id, b, dmg, head, melee){
 function localBotShoot(o, dir, end){
   if(!localBotMode) return;
   const W = curWeapon(); if(W.melee) return;
-  const wallDist = end ? o.distanceTo(end) : Infinity;
+  mapRay.set(o, dir); mapRay.far = 200;
+  const _wh = mapRay.intersectObjects(mapMeshes, false);
+  const wallDist = (_wh.length ? _wh[0].distance : Infinity) + 0.35; // mur/sol DEVANT le bot bloque ; marge anti-rejet au ras du sol
   let best = null, bestT = Infinity;
   for(const [id,b] of botMgr){
     if(b.dead || !b.pos) continue;
@@ -4740,16 +5013,11 @@ function applyCustomAnim(dt){
     basePose = { pos:[animState.px,animState.py,animState.pz], rot:[animState.rx,animState.ry,animState.rz] };
   }
 
-  // ----- COUCHE ACTION reload : sa pose se superpose selon reloadW -----
+  // ----- COUCHE ACTION reload : NE PAS l'appliquer ici. Cette pose serait de toute façon écrasée
+  // par le gun.position.copy()/rotation.set() ABSOLU d'updateWeaponAnimation, qui s'exécute APRÈS
+  // applyCustomAnim dans playerUpdate. La pose de reload (RELOAD_ANIM.phases via reloadPose) est
+  // donc appliquée DANS updateWeaponAnimation, le système d'arme autoritaire (cf. bloc reload là-bas).
   let pose = basePose;
-  if(reloadW > 0.001){
-    const rp = reloadPose(dt);
-    if(rp){
-      const rPose = { pos:[rp.px,rp.py,rp.pz], rot:[rp.rx,rp.ry,rp.rz] };
-      // le reload prend le contrôle principal selon son poids, mais garde le sway/idle dessous
-      pose = blendPose(basePose, rPose, reloadW);
-    }
-  }
 
   // ----- COUCHE ADDITIVE : inertie de visée (l'arme traîne derrière le regard) -----
   if(B && B.inertia){
@@ -5316,20 +5584,27 @@ function updateWeaponAnimation(dt, sprinting, moving){
     if(weapon.state==='equipping' && !gun.visible){ gun.visible = true; }
   }
 
+  // ----- RELOAD (armes NON pilotées par le viewmodel GLB, ex: Wingman) -----
+  // Pose pilotée par RELOAD_ANIM.phases (cf. reloadPose). Appliquée ICI car c'est le système
+  // d'arme autoritaire (updateWeaponAnimation écrit gun en absolu APRÈS applyCustomAnim).
+  // Fondu lissé en entrée/sortie (blend_in/blend_out) → plus de "snap" en fin de reload.
   const _animatedReload = (typeof reloadVMHandlesWeapon === 'function' && reloadVMHandlesWeapon());
+  const _RA = GAMECFG.RELOAD_ANIM || {};
+  const _rTarget = (me.reloading && !_animatedReload) ? 1 : 0;
+  const _rSpd = (_rTarget > reloadUWWeight) ? (_RA.blend_in || 14) : (_RA.blend_out || 9);
+  reloadUWWeight += (_rTarget - reloadUWWeight) * Math.min(1, dt*_rSpd);
   if(reloadAnimT >= 0 && !_animatedReload){
-    const t = reloadAnimT;
-    const ease = x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
-    let tilt=0, magY=0;
-    if(t<0.35) tilt = ease(t/0.35);
-    else if(t<1.5) tilt = 1;
-    else tilt = 1-ease(Math.min(1,(t-1.5)/0.4));
+    const w = reloadUWWeight;
+    const rp = (w > 0.001 && typeof reloadPose === 'function') ? reloadPose(dt) : null;
+    if(rp){
+      gun.position.x += rp.px*w; gun.position.y += rp.py*w; gun.position.z += rp.pz*w;
+      gun.rotation.x += rp.rx*w; gun.rotation.y += rp.ry*w; gun.rotation.z += rp.rz*w;
+    }
+    // descente/remontée du chargeur procédural (gunMag) — détail conservé
+    const t = reloadAnimT, ease = x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2; let magY=0;
     if(t>=0.35 && t<0.8) magY = -ease((t-0.35)/0.45)*0.24;
     else if(t>=0.8 && t<1.3) magY = -0.24 + ease((t-0.8)/0.5)*0.24;
-    gun.rotation.x += tilt*0.55; gun.rotation.z += tilt*0.35;
-    gun.position.y -= tilt*0.07;
     gunMag.position.y = -0.06 + magY;
-    if(t>1.5 && t<1.62) gun.position.z += 0.03;
   } else gunMag.position.y = -0.06;
 
   // v5 : montée/descente des bras synchronisée avec le holster
@@ -5844,6 +6119,14 @@ function playerUpdate(dt, g){
   updateClimb(dt, jumpEdge, wishDir, f);
 
   /* --- Gravité / sol (terrain + dessus des caisses) --- */
+  // ---- Vitesse MAX selon l'arme : plus basse avec une arme a feu qu'avec le sabre ----
+  // Arme a feu equipee -> plafond MAX_SPEED_GUN (sol + air). Sabre = non plafonne cote client
+  // (le serveur le borne deja a MAX_SPEED_SERVER), donc speed max armes < speed max sabre.
+  if(weapon.state === 'equipped' && !isSaber()){
+    const maxGun = GAMECFG.MAX_SPEED_GUN ?? 8;
+    const hsp = Math.hypot(me.vel.x, me.vel.z);
+    if(hsp > maxGun){ const k = maxGun / hsp; me.vel.x *= k; me.vel.z *= k; }
+  }
   me.vel.y -= CONFIG.GRAVITY*dt;
   me.pos.x += me.vel.x*dt; me.pos.z += me.vel.z*dt; me.pos.y += me.vel.y*dt;
   collide(me.pos, .5, me.pos.y);
@@ -5912,19 +6195,29 @@ function playerUpdate(dt, g){
   const ch = document.getElementById('crosshair');
   const dotSize = (GAMECFG.CROSSHAIR && GAMECFG.CROSSHAIR.HOLSTER_DOT) || 0;
   const dotEl = ch.querySelector('.ch-dot');
-  ch.querySelectorAll('.ch').forEach(s=>s.style.visibility = holstered ? 'hidden' : 'visible');
+  ch.querySelectorAll('.ch').forEach(s=>s.style.visibility = (holstered || isSaber()) ? 'hidden' : 'visible'); // sabre = point seul (croix masquee)
   if(dotEl){
     if(holstered && dotSize > 0){
       dotEl.style.display = 'block';
       dotEl.style.width = dotSize+'px'; dotEl.style.height = dotSize+'px';
       dotEl.style.marginLeft = (-dotSize/2)+'px'; dotEl.style.marginTop = (-dotSize/2)+'px';
     } else if(!holstered){
-      // POINT DE VISÉE PRÉCIS toujours affiché = exactement là où part la balle (centre écran).
-      // Vise avec CE point (pas le guidon de l'arme, qui peut être légèrement décalé). Taille perso si réglée.
-      const ds = dotEl._userDot ? (dotEl._userSize || 4) : 3;
-      dotEl.style.display = 'block';
-      dotEl.style.width = ds+'px'; dotEl.style.height = ds+'px';
-      dotEl.style.marginLeft = (-ds/2)+'px'; dotEl.style.marginTop = (-ds/2)+'px';
+      if(isSaber()){
+        // Sabre laser : point blanc central PERMANENT (repere de frappe), independant de l'option viseur.
+        const ds = dotEl._userSize || 4;
+        dotEl.style.background = crosshairCfg.color || '#ffffff';
+        dotEl.style.display = 'block';
+        dotEl.style.width = ds+'px'; dotEl.style.height = ds+'px';
+        dotEl.style.marginLeft = (-ds/2)+'px'; dotEl.style.marginTop = (-ds/2)+'px';
+      } else if(dotEl._userDot){
+        // Arme a feu : point affiche UNIQUEMENT si active dans les options (plus de point parasite).
+        const ds = dotEl._userSize || 4;
+        dotEl.style.display = 'block';
+        dotEl.style.width = ds+'px'; dotEl.style.height = ds+'px';
+        dotEl.style.marginLeft = (-ds/2)+'px'; dotEl.style.marginTop = (-ds/2)+'px';
+      } else {
+        dotEl.style.display = 'none';
+      }
     } else dotEl.style.display = 'none';
   }
   ch.style.opacity = holstered ? (dotSize>0 ? 0.9 : 0) : (1 - adsAmount);
@@ -6420,9 +6713,14 @@ function animate(){
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), .05);
   const g = pollGamepad();
+  // Hit reg : on actualise la position des ennemis au temps de rendu courant AVANT le tir, pour
+  // que la detection touche exactement ce qui est a l'ecran. Sinon le tir testait la position
+  // d'1 frame en arriere alors que le mesh est rendu a la nouvelle position -> tirs rates sur
+  // cible pourtant centree dans le viseur.
+  if(localBotMode) updateLocalBots(dt);   // IA des bots d'entrainement -> b.pos a jour
+  else if(!spec.active && remote.exists && remote.buf && remote.buf.length >= 2) interpRemote(); // remote.pos a jour
   if(playing && alive) playerUpdate(dt, g);
   if(playing && alive) applySaberMagnet(dt);   // aimant de visée quand le sabre est sorti près d'un ennemi
-  if(localBotMode) updateLocalBots(dt);   // IA des bots d'entraînement (mouvement)
   // mes propres pas, réactifs à la vitesse (cadence + volume + pitch)
   if(playing && alive && me.onGround && !me.slide.active && !me.mantle.active){
     const sp2 = Math.hypot(me.vel.x, me.vel.z);
@@ -6442,6 +6740,7 @@ function animate(){
       if(interpBuf(spec.bufs[s], specTmp) && !spec.dead[s] && !sol.ragdolling){
         sol.root.position.copy(specTmp.pos);
         sol.root.rotation.set(0, specTmp.yaw + Math.PI, 0);
+        specTmp.anim.pitch = specTmp.pitch || 0;
         animateSoldier(sol, specTmp.anim, dt, performance.now()*0.001);
       }
     }
@@ -6465,6 +6764,7 @@ function animate(){
         remote.soldier.root.position.set(remote.pos.x, remote.pos.y, remote.pos.z);
         // perso DEBOUT : on force l'axe vertical (sinon un reste de ragdoll/anim le laisse penché)
         remote.soldier.root.rotation.set(0, remote.yaw + Math.PI, 0);
+        remote.anim.pitch = remote.pitch || 0;
         animateSoldier(remote.soldier, remote.anim, dt, performance.now()*0.001);
       } else if(remote.dead && remote.soldier.rigged && remote.soldier.mixer){
         remote.soldier.mixer.update(dt); // laisse jouer l'animation de mort
@@ -6484,6 +6784,7 @@ function animate(){
         if(interpBuf(b.buf, tmp)){ b.pos.copy(tmp.pos); b.yaw = tmp.yaw; b.pitch = tmp.pitch; b.anim = tmp.anim; }
         b.soldier.root.position.set(b.pos.x, b.pos.y, b.pos.z);
         b.soldier.root.rotation.set(0, b.yaw + Math.PI, 0);
+        b.anim.pitch = b.pitch || 0;
         animateSoldier(b.soldier, b.anim, dt, performance.now()*0.001);
         // spectateur 1re personne : on masque le corps du joueur dont on regarde les yeux
         b.soldier.root.visible = !(spec.active && spec.follow === seat);
@@ -6517,10 +6818,13 @@ function animate(){
     const meAnim = Object.assign({}, (lastMyAnim||{}), { adsv: adsAmount });
     recPush(me.pos, me.yaw, me.pitch, meAnim, enP, enYaw, enPitch, enAnim);
   }
+  if(DEBUG_HITBOX) updateHitboxDebug();
   for(let i=tracers.length-1;i>=0;i--){
-    tracers[i].life -= dt;
-    tracers[i].line.material.opacity = Math.max(0,tracers[i].life/0.07);
-    if(tracers[i].life<=0){ scene.remove(tracers[i].line); tracers.splice(i,1); }
+    const t = tracers[i];
+    t.life -= dt;
+    if(t.attached && t.life>0) updateAttachedTracer(t);   // depart recolle au canon + courbe
+    t.line.material.opacity = Math.max(0, t.life/(t.maxLife||0.07));
+    if(t.life<=0){ scene.remove(t.line); if(t.line.geometry) t.line.geometry.dispose(); tracers.splice(i,1); }
   }
   updateImpactEffects(dt);
   updateHealthBars(dt);

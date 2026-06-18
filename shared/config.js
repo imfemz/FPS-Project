@@ -12,7 +12,7 @@
       // --- Lumière ---
       sun_intensity: 1.05,      // soleil (directionnelle chaude). Donne le contraste et les ombres
       sun_color: '#d6dde8',    // couleur du soleil (lumière froide, ambiance industrielle)
-      sky_light: 0.78,          // lumière du ciel (hemisphere) qui remplit les ombres
+      sky_light: 0.48,          // lumière du ciel (hemisphere) qui remplit les ombres
       ground_bounce: '#5d646e',// couleur du rebond de lumière du sol (béton froid)
       ambient: 0.13,           // ambiante minimale (évite les noirs bouchés). 0 = ombres plus profondes
       // --- Reflets d'environnement ---
@@ -23,24 +23,24 @@
       gun_env: 0.8,            // reflets d'environnement sur l'arme
       // Tamise les surfaces texturées (1 = pleine luminosité, plus bas = plus sombre). Évite le sol
       // texturé qui part en blanc cramé. Descends vers 0.7 si c'est encore trop clair.
-      tex_brightness: 0.98,
+      tex_brightness: 0.78,
       // --- Atmosphère ---
       fog_color: '#878f99', fog_near: 65, fog_far: 200, // brume froide ; far poussé (map 90×90)
       // --- POST-FX (vrai shader) : anti-aliasing + occlusion ambiante + bloom ---
       POSTFX: true,            // false = désactive tout le post-traitement (si souci de perf/rendu)
       AA: true,                // anti-aliasing (MSAA natif + SMAA) — corrige les bords crénelés avec le post-FX
-      aa_samples: 4,           // niveau de MSAA (2 / 4 / 8) — ↑ = plus lisse, un peu plus lourd
+      aa_samples: 2,           // niveau de MSAA (2 / 4 / 8) — ↑ = plus lisse, un peu plus lourd
       AO: false,               // GTAO (occlusion ambiante écran) DÉSACTIVÉE : instable (clignote avec la distance,
                                // ne couvre pas toutes les faces). Remplacée par une AO BAKED stable (voir BAKED_AO).
       ao: { radius: 5.8, scale: 2.8, distanceExponent: 0.7, thickness: 1.4, samples: 18 },
       // AO "cuite" (statique, indépendante de la caméra) : ombre de contact au sol sous chaque caisse/mur
       // + assombrissement progressif du bas des faces verticales. Cohérente sous tous les angles.
-      BAKED_AO: { enabled: true, ground_opacity: 0.42, ground_margin: 2.8, face_darken: 0.38 },
+      BAKED_AO: { enabled: true, ground_opacity: 0.42, ground_margin: 2.8, face_darken: 0.58 },
       BLOOM: true,             // halo lumineux sur les sources vives (sabre, néon, soleil)
-      bloom: { strength: 0.55, radius: 0.5, threshold: 0.8 }, // ↑strength = plus de glow ; threshold = seuil de brillance
+      bloom: { strength: 0.35, radius: 0.8, threshold: 0.7 }, // ↑strength = plus de glow ; threshold = seuil de brillance
     },
     DAMAGE: { BODY: 15, HEAD: 20 },
-    ADS_SPEED: 22,   // vitesse de montée en visée (ADS) plus rapide (réglable en jeu : "Vitesse de visée")
+    ADS_SPEED: 12,   // vitesse de montée en visée (ADS) plus rapide (réglable en jeu : "Vitesse de visée")
     MOMENTUM_FOV: 12, // élargissement FOV max (°) quand le momentum est au max (0 = off) — sensation de vitesse
     // À la mort, le corps se dissout en PARTICULES qui tombent au sol et fade out (false = ancien fondu).
     DEATH_DISSOLVE: true,
@@ -88,22 +88,23 @@
       pulse_freq: 9,         // vitesse de la pulsation (vibration)
       pulse_amount: 0.38,    // amplitude de la pulsation
     },
-    MAX_SPEED_SERVER: 17,
+    MAX_SPEED_SERVER: 10,
+    MAX_SPEED_GUN: 9,           // vitesse horizontale MAX avec une arme a feu equipee (sol+air). Sabre = non plafonne (serveur borne a MAX_SPEED_SERVER). Repere : walk 6.6 / sprint 9.6 / sabre ~10
     // Son de vitesse : boucle qui monte quand on atteint (presque) la vélocité max, et FONDU SORTANT si on ralentit.
     VELOCITY_SFX: { enabled: true, speed: 13.5, volume: 0.6, fade_in: 0.12, fade_out: 0.55 },
-    SPREAD: { HIP: 0.010, ADS: 0.002, SLIDE: 0.014 }, // hip/slide resserres : la balle part bien dans le viseur (fini "pile dessus sans toucher")
+    SPREAD: { HIP: 0.090, ADS: 0.002, SLIDE: 0.014 }, // hip/slide resserres : la balle part bien dans le viseur (fini "pile dessus sans toucher")
     FIRE_RATE: 0.056,
     RECOIL: {
-      VERTICAL: 0.0018, HORIZONTAL: 0.0005, PATTERN_DRIFT: 0.50,
-      FIRST_SHOT_MULT: 2.78, ADS_MULT: 0.62, RECOVERY_DELAY: 0.13,
+      VERTICAL: 0.0018, HORIZONTAL: 0.0005, PATTERN_DRIFT: 0.20,
+      FIRST_SHOT_MULT: 2.78, ADS_MULT: 0.32, RECOVERY_DELAY: 0.13,
       RECOVERY_SPEED: 0.35, RECOVERY_AMOUNT: 1.75, SMOOTH_THRESHOLD: 0.90,
-      SMOOTH_MAX: 0.65, KICK_VM: 0.78, VM_BACK: 0.13, VM_MAX: 0.01,
+      SMOOTH_MAX: 0.95, KICK_VM: 0.78, VM_BACK: 0.07, VM_MAX: 0.01,
       VM_ROT: 0.024, VM_PUNCH_SPEED: 10, VM_RETURN_SPEED: 20,
       // Ramp-up du spray R99 : plus tu maintiens le tir, plus le recul devient nerveux, avec un plafond.
-      SPRAY_RAMP: 0.018, SPRAY_MAX: 1.32,
+      SPRAY_RAMP: 0.018, SPRAY_MAX: 5.32,
       // Micro-vibration par balle : casse la ligne zigzag trop propre et donne un spray R99 plus vivant.
       MICRO_JITTER_X: 0.0024, MICRO_JITTER_Y: 0.0006,
-      MICRO_JITTER_FREQ: 6.7, MICRO_JITTER_RANDOM: 0.10,
+      MICRO_JITTER_FREQ: 10.7, MICRO_JITTER_RANDOM: 2.10,
     },
     // ===== Contrôle du shake caméra au tir =====
     // RECOIL_* agit sur le vrai mouvement caméra/viseur causé par le recul.
@@ -169,19 +170,19 @@
         name: 'R-69',
         model: '/models/R69_hands.glb',
         icon: '/textures/hud/weapon.png',
-        mag: 30, fire_rate: 0.038, reload_t: 1.9,
-        damage_body: 15, damage_head: 20,
-        spread_hip: 0.010, spread_ads: 0.002,
+        mag: 30, fire_rate: 0.048, reload_t: 1.9,
+        damage_body: 13, damage_head: 19,
+        spread_hip: 0.050, spread_ads: 0.002,
         recoil_mult: 1.0,
         recoil_vertical: 1.0,
         recoil_speed: 1.0,
         kick_back: 1.0,
         fire_vibe: { amount: 0.0005, freq: 13, x_amount: 0.001, x_freq: 18 },
         sfx_shot: 'shot', sfx_reload: 'reload',
-        scale: 1, position: [0, 0.1, 0], rotation_y_deg: 0, sight: null,
-        muzzle: [0, 0.20, -0.45],
-        muzzle_scale: 0.7,
-        muzzle_opacity: 0.5,
+        scale: 1.2, position: [0, 0.1, -0.04], rotation_y_deg: 0, sight: null,
+        muzzle: [0.02, 0.20, -0.35],
+        muzzle_scale: 0.3,
+        muzzle_opacity: 0.2,
         muzzle_origin: [0, -0.06, -0.5],
         hip: { pos: [0.05, -0.28, -0.10], rot: [0.05, 0.005, 0] },
         ads: { rot: [0, 0, 0], dist: 0.11, align: [0, -0.01] },
@@ -192,7 +193,7 @@
         icon: '/textures/hud/wingman.png',
         mag: 5, fire_rate: 0.445, reload_t: 1.04,
         damage_body: 70, damage_head: 175,
-        spread_hip: 0.008, spread_ads: 0.0003,
+        spread_hip: 0.028, spread_ads: 0.0003,
         recoil_mult: 1.4,
         recoil_vertical: 0.7,
         recoil_speed: 0.9,
@@ -395,7 +396,7 @@
       // Micro-shake "chamber reset" déclenché à cette fraction du reload (0.34 = au 1/3).
       chamber_shake_at: 0.34,
       chamber_shake: 0.06,  // amplitude du micro-shake chamber reset (rad) — discret
-      kick_amount: 1.14,    // kick à l'insertion du chargeur (m)
+      kick_amount: 0.5,    // kick à l'insertion du chargeur (m)
       kick_sfx: null,       // son JOUÉ sur le kick d'insertion (null = aucun). NE PAS mettre 'reload' :
                             // chaque arme joue déjà SON son de reload via sfx_reload au début du reload.
                             // Mets un nom de son court (ex: un clic) seulement si tu veux un effet en plus.
@@ -403,22 +404,26 @@
       overshoot: 0.05,      // léger dépassement au retour idle (ressort) — réduit pour un retour plus doux
       noise_amount: 0.004,  // micro-noise sur la pose pour casser le côté parfait (rad/m)
       sprint_damp: 0.35,    // pendant le reload, la pose de course est réduite à ce facteur (anti hors-cadre)
-      // Animation façon Apex : l'arme descend ET s'incline FORT vers la gauche (roll),
-      // reste basse et contenue dans le cadre. Le canon ne se redresse jamais à la verticale.
-      // pos: x+ =droite, y+ =haut, z+ =vers soi | rot: x+ =canon bas, y+ =droite, z+ =roll horaire
+      // Animation façon recharge REVOLVER : l'arme s'incline à GAUCHE (roll) ET le CANON (avant)
+      // pique vers le BAS / arrière monte (basculement vers le sol).
+      // NB Wingman : axes du modèle particuliers → rz = roll (lean, POSITIF = gauche),
+      //   ry = PITCH (canon haut/bas = le vrai "pencher en bas"), rx = yaw/côté (laissé à 0 ici).
+      // pos: x+ =droite, y+ =haut, z+ =vers soi
       phases: [
-        // 1) début : l'arme descend un peu et commence à s'incliner à gauche (canon part haut-gauche)
-        { t: 0.12, pos: [-0.01, -0.06, 0.03], rot: [0.10, -0.18, -0.55], ease: 'easeOut' },
-        // 2) phase principale : bien inclinée à gauche + descendue, le dessous/chargeur exposé (mag out)
-        { t: 0.25, pos: [-0.005, -0.11, 0.02], rot: [0.22, -0.16, -0.80], ease: 'easeInOut' },
-        // 3) nouveau chargeur qui remonte par le bas (l'arme reste basse et inclinée)
-        { t: 0.35, pos: [0, -0.09, 0.01], rot: [0.18, -0.14, -0.72], ease: 'easeInOut' },
+        // 1) début : l'arme commence à s'incliner à gauche + le canon commence à piquer vers le bas
+        { t: 0.12, pos: [-0.01, -0.04, 0.03], rot: [0, 0.16, 0.28], ease: 'easeOut' },
+        // 2) phase principale : inclinée à gauche + canon BIEN piqué vers le bas (arrière monte), chargeur exposé
+        { t: 0.25, pos: [-0.005, -0.07, 0.02], rot: [0, 0.32, 0.42], ease: 'easeInOut' },
+        // 3) nouveau chargeur qui remonte par le bas (l'arme reste basculée canon vers le bas)
+        { t: 0.35, pos: [0, -0.06, 0.01], rot: [0, 0.30, 0.38], ease: 'easeInOut' },
         // 4) insertion + impact (kick) : petit à-coup vers le bas
-        { t: 0.12, pos: [0, -0.07, 0.00], rot: [0.20, -0.12, -0.66], ease: 'easeOut', kick: true },
-        // 5) chamber : redressement SEC et léger (pas à la verticale !), on arme le mécanisme
-        { t: 0.18, pos: [0, -0.02, -0.01], rot: [-0.06, 0.04, -0.30], ease: 'easeOut', shake: true },
-        // 6) retour idle fluide et PROGRESSIF (phase allongée → plus de coupure nette vers l'idle)
-        { t: 0.40, pos: [0, 0, 0], rot: [0, 0, 0], ease: 'easeInOut' },
+        { t: 0.12, pos: [0, -0.05, 0.00], rot: [0, 0.30, 0.34], ease: 'easeOut', kick: true },
+        // 5) FERMETURE DU BARILLET : coup de poignet SEC vers le HAUT — le canon remonte vite et
+        //    DÉPASSE l'horizontale (ry négatif = canon haut), comme le "clap" qui referme le barillet,
+        //    avec un petit shake d'impact. Phase courte + easeOut = mouvement vif.
+        { t: 0.10, pos: [0, 0.02, -0.01], rot: [0, -0.20, 0.10], ease: 'easeOut', shake: true },
+        // 6) retour NET et rapide à la pose idle juste après le clap (l'overshoot/ressort lisse la fin)
+        { t: 0.20, pos: [0, 0, 0], rot: [0, 0, 0], ease: 'easeInOut' },
       ],
     },
     CROSSHAIR: { SIZE: 13, GAP: 17, THICKNESS: 1, EXPAND: 10, EXPAND_SPEED: 18, HOLSTER_DOT: 4 },
@@ -429,10 +434,10 @@
     // L'arme se penche vite à GAUCHE au contact du mur, puis revient doucement à sa position.
     WALLBOUNCE_KICK: {
       ENABLED: true,
-      roll: -0.22,    // roll de l'arme (rad). NÉGATIF = penche à GAUCHE (~ -0.22 ≈ 13°). Positif = droite.
+      roll: 0.52,    // roll de l'arme (rad). NÉGATIF = penche à GAUCHE (~ -0.22 ≈ 13°). Positif = droite.
       pos_x: -0.015,  // léger décalage de position vers la gauche (m). 0 = aucun.
       yaw: -0.05,     // léger yaw de l'arme (rad). 0 = aucun.
-      attack: 0.05,   // temps de MONTÉE jusqu'au max (s) — petit = "se penche vite".
+      attack: 0.15,   // temps de MONTÉE jusqu'au max (s) — petit = "se penche vite".
       return: 0.55,   // temps de RETOUR à zéro (s) — grand = "revient doucement".
     },
     // Léger shake de la caméra joueur au wall bounce. Amplitude en rad (≈ 0.01 = discret). 0 = off.
@@ -453,9 +458,9 @@
       // micro-noise "main" : plus rapide, très subtil, casse le côté robotique
       hand_pos: 0.0025,     // amplitude position (m)
       hand_rot: 0.004,      // amplitude rotation (rad)
-      hand_speed: 2.6,      // vitesse du noise main
+      hand_speed: 0.6,      // vitesse du noise main
       // atténuation en ADS (pour garder le viseur lisible) et en mouvement
-      ads_damp: 1.35,       // en ADS, la vie est réduite à ce facteur
+      ads_damp: 0.35,       // en ADS, la vie est réduite à ce facteur
       move_damp: 0.6,       // en déplacement, légèrement réduite
       // overshoot au retour (ressort) : léger dépassement quand l'arme revient en place
       overshoot: 0.12,
@@ -539,6 +544,14 @@
     MODELS: {
       character: '/models/SWAT.glb',
       character_scale: 1,
+      // Visee haut-du-corps de l'adversaire : la colonne suit le pitch (regard haut/bas).
+      // sign: -1 si ca penche a l'envers ; pitch_gain: amplitude ; bones: vertebres concernees.
+      spine_aim: { enabled: true, pitch_gain: 0.65, sign: 1, axis: 'x', bones: ['Abdomen','Torso','Chest'], max: 1.3 },
+      // Saut : pose procedurale (plus de roulade). euler [x,y,z] rad par bone. sign: -1 si jambes a l'envers.
+      jump_pose: { enabled: true, blend: 12, sign: 1, upperleg: [0.55, 0, 0.08], lowerleg: [-0.95, 0, 0] },
+      // Accroupi : flexion procedurale des jambes (squat), MEME convention que jump_pose.
+      // upperleg = cuisse vers l'avant/ecartee, lowerleg = genou plie. blend = vitesse d'entree/sortie.
+      crouch_pose: { enabled: true, blend: 10, sign: 1, upperleg: [0.5, 0, 0.16], lowerleg: [-0.85, 0, 0] },
       character_yaw_deg: 0,
       hitbox: {
         // Capsule ÉLARGIE pour bien englober le model 3D (torse ~0.34 de demi-largeur, haut ~1.79 m).
@@ -745,7 +758,7 @@
         { file: '/textures/hud/logo.png', anchor: 'top-right', x: 24, y: 18, w: 220, opacity: 0.9 },
       ],
       colors: { shield: '#4db8ff', health: '#ff5a5a', name: '#eef2f6' },
-      name_size: 24, hide: [], ammo_scale: 1.7, score_scale: 1.2,
+      name_size: 14, hide: [], ammo_scale: 1.7, score_scale: 1.2,
     },
     // ===== Numéros de dégâts (au-dessus de l'ennemi/bot) =====
     // TAILLE CONSTANTE À L'ÉCRAN : le chiffre garde la même taille quelle que soit la distance.
@@ -758,8 +771,8 @@
       glow_shield:  '#1f9dff', // halo bleu autour du chiffre quand on touche le bouclier (image 1)
       glow_health:  '#e62121', // halo orangé autour du chiffre quand on touche les PV (image 2)
       glow_head:    '#ff3030', // halo rouge sur headshot
-      glow_strength: 10,       // intensité du halo (px de flou). 0 = pas de glow
-      stack_window: 1.0,       // s : tant qu'on retape la cible dans cette fenêtre, les dégâts s'empilent
+      glow_strength: 1,       // intensité du halo (px de flou). 0 = pas de glow
+      stack_window: 0.7,       // s : tant qu'on retape la cible dans cette fenêtre, les dégâts s'empilent
     },
     // ===== Barre d'info SHIELD / PV au-dessus de l'ennemi (image 3) =====
     // Apparaît quand on touche la cible, puis s'efface. Taille constante à l'écran. S'applique aux bots aussi.
