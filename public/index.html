@@ -128,12 +128,13 @@
   #dmgdir{position:fixed;left:50%;top:50%;width:0;height:0;z-index:6;pointer-events:none;opacity:0;transition:opacity .35s ease;transform:translate(-50%,-50%) rotate(0deg)}
   #dmgdir svg{position:absolute;left:-150px;top:-150px;width:300px;height:300px;overflow:visible}
   #dmgdir .ddarc{fill:none;stroke:#ff2b2b;stroke-width:9;stroke-linecap:round;filter:drop-shadow(0 0 7px rgba(255,40,40,.9))}
-  /* ===== MOMENTUM (bas centre) : equalizer de dots qui s'allument avec la vitesse ===== */
-  #momentum{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:7px;opacity:.35;transition:opacity .3s}
-  #momentum .mdots{display:flex;gap:5px;align-items:center}
-  #momentum .mdot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.13);transition:background .1s,box-shadow .1s,transform .1s,height .1s}
-  #momentum .mdot.lit{background:var(--accent);box-shadow:0 0 8px rgba(92,224,255,.55);transform:scaleY(1.6)}
-  #momentum .mlabel{font-family:var(--mono);font-size:8px;letter-spacing:4px;color:var(--txt-faint)}
+  /* ===== MOMENTUM (bas centre) : barre de velocite (opacite + largeur montent avec la vitesse) ===== */
+  #momentum{position:absolute;left:50%;bottom:30px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;opacity:.92;transition:opacity .3s;pointer-events:none}
+  #momentum .mvel{font-family:var(--mono);font-size:19px;font-weight:700;color:#dceefa;letter-spacing:1px;text-shadow:0 1px 6px rgba(0,0,0,.55);display:flex;align-items:baseline;gap:5px}
+  #momentum .mvel .mu{font-size:10px;font-weight:500;color:var(--txt-faint);letter-spacing:2px}
+  #momentum .mbar{position:relative;width:440px;max-width:62vw;height:9px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.16);border-radius:3px;overflow:hidden}
+  #momentum .mbar-fill{position:absolute;left:0;top:0;height:100%;width:0;background:#5ce0ff;opacity:.3;box-shadow:0 0 10px rgba(92,224,255,.5);transition:width .07s linear,opacity .1s linear}
+  #momentum .mbar-max{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:8px;letter-spacing:1px;color:rgba(255,255,255,.42)}
   /* ===== TAGS de statut (haut centre, sous le leaderboard) ===== */
   #toasts{position:absolute;left:50%;top:96px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;align-items:center;z-index:6}
   .toast{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--txt);background:var(--panel);border:1px solid var(--brd);border-radius:999px;padding:5px 14px;
@@ -328,7 +329,7 @@
   </div>
   <div id="cooldownbar"><div class="cdfill"></div></div>
   <div id="dashbar"><span class="dash-lbl">&#10218;&#10218; DASH</span><div class="dash-track"><div class="dash-fill"></div></div></div>
-  <div id="momentum"><div class="mdots"></div><div class="mlabel">MOMENTUM</div></div>
+  <div id="momentum"><div class="mvel"><span id="mvelnum">0.0</span><span class="mu">M/S</span></div><div class="mbar"><div class="mbar-fill" id="mbarfill"></div><span class="mbar-max">MAX</span></div></div>
   <div id="toasts"></div>
   <div id="killbanner"></div>
   <div id="reloadmsg">RECHARGEMENT</div>
@@ -4850,16 +4851,15 @@ function initMomentum(){
 }
 function updateMomentumHUD(){
   const m = document.getElementById('momentum'); if(!m) return;
-  const dots = m.querySelectorAll('.mdot'); if(!dots.length) return;
+  const fill = document.getElementById('mbarfill'), num = document.getElementById('mvelnum');
+  if(!fill || !num) return;
   const spd = (playing && alive) ? Math.hypot(me.vel.x, me.vel.z) : 0;
-  // 0 à SPRINT = échauffement, au-delà (slide jump / bunny hop) = dots pleins + accent vif
+  // 0 -> SPRINT*1.6 (slide jump / bunny hop) = barre pleine
   const norm = Math.min(1, spd / ((CONFIG.SPRINT_SPEED||9.6) * 1.6));
-  const lit = Math.round(norm * MOMENTUM_DOTS);
-  if(lit !== momentumLit){
-    momentumLit = lit;
-    dots.forEach((dt2,i)=>dt2.classList.toggle('lit', i < lit));
-    m.style.opacity = lit > 0 ? '1' : '.35';
-  }
+  fill.style.width = (norm*100).toFixed(1) + '%';
+  fill.style.opacity = (0.28 + 0.72*norm).toFixed(2);   // bleu peu opaque (lent) -> opaque (vitesse max)
+  num.textContent = spd.toFixed(1);
+  m.style.opacity = spd > 0.3 ? '0.95' : '0.4';
 }
 function killFeed(txt){
   const f = document.getElementById('killfeed');
