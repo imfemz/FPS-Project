@@ -5784,11 +5784,23 @@ function doSuperglide(){
 // ===== DASH SABRE "Bonus d'attaque" : bond avant (superglide) sans avoir à grimper.
 // Cooldown 6 s, RECHARGÉ instantanément quand on touche un ennemi au sabre. Touche F (PC) / R1 (manette). =====
 const DASH_CD = 6;
+const DASH_SPEED_MULT = 1.2;   // dash sabre : +20% de vitesse vs un superglide normal
 let _dashPrev = false;
-function tryDash(g){
+// Dash sabre : bond dans la direction d'INPUT (déplacement WASD/stick) — à défaut, là où on regarde.
+function tryDash(g, wishDir, f){
   const held = actionDown('dash', g);
   if(held && !_dashPrev && isSaber() && playing && alive && (me.dashCD||0) <= 0){
-    doSuperglide();            // même bond que le superglide, mais déclenché directement (pas besoin de grimper)
+    const SG = GAMECFG.SUPERGLIDE;
+    const dir = (wishDir && wishDir.lengthSq() > 1e-4) ? new THREE.Vector3(wishDir.x, 0, wishDir.z)
+              : (f ? new THREE.Vector3(f.x, 0, f.z) : new THREE.Vector3(-Math.sin(me.yaw), 0, -Math.cos(me.yaw)));
+    dir.normalize();
+    const spd = (SG.SPEED || 13.5) * DASH_SPEED_MULT;   // +20%
+    me.vel.set(dir.x*spd, SG.UP ?? 4.2, dir.z*spd);
+    me.onGround = false;
+    sgFiredAt = performance.now();
+    sgFovKick = SG.FOV_KICK || 0;
+    triggerSpeedFx(GAMECFG.SPEED_FX_DURATION ?? 1.8);
+    playSfx('superglide');
     me.dashCD = DASH_CD;
   }
   _dashPrev = held;
@@ -6634,7 +6646,6 @@ function playerUpdate(dt, g){
   me.crouchHeld = crouchPressed;
   me.slide.cooldown = Math.max(0, me.slide.cooldown - dt);
   if(me.dashCD > 0) me.dashCD = Math.max(0, me.dashCD - dt);   // recharge du dash sabre (Bonus d'attaque)
-  tryDash(g);                                                  // déclenche le dash si touche pressée + dispo
 
   /* --- Déplacement analogique + course auto manette --- */
   const f = new THREE.Vector3(-Math.sin(me.yaw),0,-Math.cos(me.yaw));
@@ -6653,6 +6664,7 @@ function playerUpdate(dt, g){
   }
   const wl = Math.min(1, wish.length());        // intensité analogique (stick léger → marche lente)
   const wishDir = wl > 0 ? wish.clone().normalize() : null;
+  tryDash(g, wishDir, f);   // dash sabre : dans la direction d'input (wishDir), sinon le regard (f)
   const crouching = isCrouching() && !me.slide.active;
   // En l'air, être accroupi ne freine PAS : la vélocité accumulée (sprint, slide jump)
   // se conserve jusqu'à l'atterrissage, où le slide se déclenche avec tout l'élan
