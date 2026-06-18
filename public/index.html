@@ -4822,8 +4822,8 @@ function updateMenuGamepad(g){
     if(_gpHover && _gpHover !== tgt) _gpHover.classList.remove('gp-hover');
     if(tgt){ tgt.classList.add('gp-hover'); cur.classList.add('over'); } else cur.classList.remove('over');
     _gpHover = tgt;
-    // A / Croix (index 0) = clic sur l'élément survolé
-    if(g.buttons[0] && g.buttons[0].pressed && !_gpMenuPrev[0] && tgt){ tgt.click(); }
+    // A / Croix (index 0) = clic sur l'élément survolé (+ son de bouton)
+    if(g.buttons[0] && g.buttons[0].pressed && !_gpMenuPrev[0] && tgt){ if(typeof uiClick==='function') uiClick(); tgt.click(); }
   } else {
     if(cur.style.display !== 'none') cur.style.display = 'none';
     if(_gpHover){ _gpHover.classList.remove('gp-hover'); _gpHover = null; }
@@ -4840,7 +4840,7 @@ document.getElementById('resumebtn').onclick = ()=>{ hide('pause'); lock(); };
 const _pq = document.getElementById('pausequit'); if(_pq) _pq.onclick = ()=>{ toMenu(); };
 // ===== Sons d'interface (clic des boutons de menu) — discret, façon OS premium =====
 function uiClick(){ try{ ensureAudioCtx(); sfx(560, 900, 0.030, 0.05, 'sine'); setTimeout(()=>sfx(1150, 1320, 0.022, 0.022, 'sine'), 16); }catch(e){} }
-document.addEventListener('pointerdown', e=>{ const t=e.target; if(t && t.closest && t.closest('.btn,.bindbtn')) uiClick(); }, true);
+document.addEventListener('pointerdown', e=>{ const t=e.target; if(t && t.closest && t.closest('.btn,.bindbtn,.diffbtn')) uiClick(); }, true);
 
 /* ---------- Options / remapping ---------- */
 let listening = null;
