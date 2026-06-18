@@ -2471,6 +2471,180 @@ function swapSoldiersToRigged(){
     }
   } catch(e){ console.warn('[NEON] swap soldats riggés échoué:', e); }
 }
+/* ============================================================
+   ANIMATION EN COUCHES (third-person bots & remotes)
+   ------------------------------------------------------------
+   Le rig SWAT a un haut de corps (Hips→...→Wrist/doigts) et des
+   jambes (UpperLeg/LowerLeg) DISJOINTS dans la hierarchie. On
+   joue donc 2 clips simultanes sur le MEME mixer, chacun filtre
+   pour ne toucher QUE son ensemble de bones :
+     - couche BAS (jambes)  : Run_Right/Left/Shoot, Walk, Idle_Neutral
+     - couche HAUT (torse+bras+doigts) : Gun_Shoot, Idle_Sword, Sword_Slash
+   Les bones de VISEE (Hips/Abdomen/Torso) sont pilotes en pur
+   procedural (Phase 4) -> exclus des clips de couche.
+   ============================================================ */
+let ANIM_DEBUG = false;   // overlay debug couches (toggle KeyJ)
+// Ensembles de bones par couche
+const LOWER_BONES = ['UpperLeg.L','UpperLeg.R','LowerLeg.L','LowerLeg.R','Foot.L','Foot.R','PT.L','PT.R'];
+const AIM_BONES   = ['Hips','Abdomen','Torso'];   // pilotes procedural (visee) -> jamais par un clip de couche
+// UPPER = haut du corps SAUF les bones de visee. Construit par prefixe (doigts inclus).
+const _UPPER_PREFIX = ['Chest','Neck','Head','Shoulder','UpperArm','LowerArm','Wrist',
+                       'Index','Middle','Ring','Pinky','Thumb'];
+function _isUpperBone(name){
+  if(!name) return false;
+  if(AIM_BONES.indexOf(name) !== -1) return false;       // Hips/Abdomen/Torso exclus
+  if(name === 'Body' || name === 'Root' || name === 'Armature') return false;
+  for(const p of _UPPER_PREFIX){ if(name === p || name.indexOf(p) === 0) return true; }
+  return false;
+}
+function _isLowerBone(name){ return LOWER_BONES.indexOf(name) !== -1; }
+
+// Nom de node d'une track Three : "<NodeName>.<prop>". Les bones contiennent des '.'
+// (UpperLeg.L) -> on split sur le DERNIER point. Robuste aux deux conventions de nommage
+// GLTFLoader (avec ou sans points) : on compare aussi une version sans points.
+function _trackNodeAndProp(trackName){
+  const i = trackName.lastIndexOf('.');
+  if(i < 0) return [trackName, ''];
+  return [trackName.slice(0, i), trackName.slice(i+1)];
+}
+// Construit un clip derive ne gardant que les tracks 'quaternion' des bones de boneSet.
+// boneSetFn(name) -> bool. On DROP position/scale (rotation only) pour eviter tout drift racine.
+function makeLayerClip(srcClip, boneSetFn, suffix){
+  if(!srcClip) return null;
+  const tracks = [];
+  for(const tr of srcClip.tracks){
+    const [node, prop] = _trackNodeAndProp(tr.name);
+    if(prop !== 'quaternion') continue;                 // rotation uniquement
+    // tolerance noms sans points (au cas ou GLTFLoader strip) : compare brut ET strip
+    const ok = boneSetFn(node) || boneSetFn(node.replace(/_/g,'.'));
+    if(!ok) continue;
+    tracks.push(tr.clone());
+  }
+  if(!tracks.length) return null;
+  return new THREE.AnimationClip(srcClip.name + suffix, srcClip.duration, tracks);
+}
+// Cache des clips de couche (calcule une fois sur le template). Cle = nom de clip source.
+let LAYER_CLIPS = null;   // { lower:{name:clip}, upper:{name:clip} } ou null si pas pret
+const LOWER_CLIP_SOURCES = ['Run_Right','Run_Left','Run_Shoot','Walk','Idle_Neutral'];
+const UPPER_CLIP_SOURCES = ['Gun_Shoot','Idle_Sword','Sword_Slash','Idle_Neutral'];
+function _findClipByShortName(clips, shortName){
+  // les clips sont prefixes "CharacterArmature|" -> on matche le suffixe
+  for(const c of clips){
+    const nm = c.name || '';
+    if(nm === shortName || nm.endsWith('|' + shortName) || nm.endsWith(shortName)) return c;
+  }
+  return null;
+}
+function buildLayerClips(){
+  if(LAYER_CLIPS) return LAYER_CLIPS;
+  const clips = (RIG_TEMPLATE && RIG_TEMPLATE.userData && RIG_TEMPLATE.userData.clips) || [];
+  const lower = {}, upper = {};
+  for(const sn of LOWER_CLIP_SOURCES){
+    const src = _findClipByShortName(clips, sn);
+    if(!src){ console.warn('[ANIM] clip manquant (LOWER):', sn); continue; }
+    const c = makeLayerClip(src, _isLowerBone, '_LOWER');
+    if(c) lower[sn] = c; else console.warn('[ANIM] aucune track LOWER pour', sn);
+  }
+  for(const sn of UPPER_CLIP_SOURCES){
+    const src = _findClipByShortName(clips, sn);
+    if(!src){ console.warn('[ANIM] clip manquant (UPPER):', sn); continue; }
+    const c = makeLayerClip(src, _isUpperBone, '_UPPER');
+    if(c) upper[sn] = c; else console.warn('[ANIM] aucune track UPPER pour', sn);
+  }
+  LAYER_CLIPS = { lower, upper };
+  console.log('[ANIM] clips de couche construits — LOWER:', Object.keys(lower).join(','),
+              '| UPPER:', Object.keys(upper).join(','));
+  return LAYER_CLIPS;
+}
+
+/* ============================================================
+   ARMES TIERCE-PERSONNE attachees sur Index1.R (par soldat)
+   ------------------------------------------------------------
+   Chargees UNE seule fois (cache de promesse). Pour le SABRE on
+   extrait du modele arms.glb les meshes 'saber'/'lightsaber'.
+   ============================================================ */
+const WEAPON_ATTACH_CONFIG = {
+  R69:     { file:'/models/weapon.glb',  bone:'Index1.R', position:{x:0,y:0,z:0}, rotation:{x:0,y:0,z:0}, scale:1 },
+  WINGMAN: { file:'/models/wingman.glb', bone:'Index1.R', position:{x:0,y:0,z:0}, rotation:{x:0,y:0,z:0}, scale:1 },
+  SABER:   { fromArms:true,              bone:'Index1.R', position:{x:0,y:0,z:0}, rotation:{x:0,y:0,z:0}, scale:1 },
+};
+// weaponIdx (config WEAPONS) -> cle de WEAPON_ATTACH_CONFIG
+function _weaponKeyForIdx(idx){ return idx === 1 ? 'WINGMAN' : (idx === 2 ? 'SABER' : 'R69'); }
+const _weaponModelCache = {};   // cle -> Promise<Object3D|null> (template a cloner)
+function _loadGLBOnce(url){
+  if(!_weaponModelCache['__glb__' + url]){
+    _weaponModelCache['__glb__' + url] = new Promise((resolve)=>{
+      if(typeof GLTFLoader === 'undefined'){ resolve(null); return; }
+      new GLTFLoader().load(url, g=>resolve(g.scene), undefined, e=>{
+        console.warn('[ANIM] GLB arme manquant:', url, e||''); resolve(null);
+      });
+    });
+  }
+  return _weaponModelCache['__glb__' + url];
+}
+// Renvoie une Promise du TEMPLATE (Object3D) d'une arme tierce-personne, mise en cache.
+function getThirdPersonWeapon(key){
+  if(_weaponModelCache[key]) return _weaponModelCache[key];
+  const cfg = WEAPON_ATTACH_CONFIG[key];
+  if(!cfg){ return (_weaponModelCache[key] = Promise.resolve(null)); }
+  if(cfg.fromArms){
+    _weaponModelCache[key] = _loadGLBOnce('/models/arms.glb').then(scene=>{
+      if(!scene){ return null; }
+      // extrait les meshes de sabre (exclut bras/mains/doigts)
+      const grp = new THREE.Group(); grp.name = 'saberThird';
+      const EXCL = ['arm','hand','wrist','finger'];
+      scene.traverse(o=>{
+        if(!o.isMesh) return;
+        const nm = (o.name||'').toLowerCase();
+        if(!(nm.includes('saber') || nm.includes('lightsaber'))) return;
+        if(EXCL.some(k=>nm.includes(k))) return;
+        const m = o.clone(true);
+        // re-applique le world transform du mesh source en local (les meshes peuvent etre profonds)
+        o.updateWorldMatrix(true, false);
+        m.matrix.copy(o.matrixWorld); m.matrix.decompose(m.position, m.quaternion, m.scale);
+        grp.add(m);
+      });
+      if(!grp.children.length){ console.warn('[ANIM] aucun mesh sabre trouve dans arms.glb — sabre tierce-personne ignore'); return null; }
+      return grp;
+    });
+  } else {
+    _weaponModelCache[key] = _loadGLBOnce(cfg.file).then(scene=> scene ? scene : null);
+  }
+  return _weaponModelCache[key];
+}
+// Clone profond preservant le skin si besoin.
+function _cloneWeaponModel(tpl){
+  let skinned = false; tpl.traverse(o=>{ if(o.isSkinnedMesh) skinned = true; });
+  return skinned ? cloneRigged(tpl) : tpl.clone(true);
+}
+// Attache (asynchrone) les 3 armes au socket du soldat, cachees ; applique offsets de config.
+function attachWeaponsToSoldier(s){
+  if(!s || !s.weaponSocket) return;   // pas de bone Index1.R -> deja warn
+  for(const key of ['R69','WINGMAN','SABER']){
+    const cfg = WEAPON_ATTACH_CONFIG[key];
+    getThirdPersonWeapon(key).then(tpl=>{
+      if(!tpl || !s.weaponSocket) return;
+      const m = _cloneWeaponModel(tpl);
+      m.position.set(cfg.position.x, cfg.position.y, cfg.position.z);
+      m.rotation.set(cfg.rotation.x, cfg.rotation.y, cfg.rotation.z);
+      const sc = cfg.scale || 1; m.scale.multiplyScalar(sc);
+      m.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.frustumCulled = false; } });
+      m.visible = false;
+      s.weapons[key] = m;
+      s.weaponSocket.add(m);
+      // si l'arme courante du soldat est deja celle-ci, l'afficher
+      if(s.weaponIdx >= 0 && _weaponKeyForIdx(s.weaponIdx) === key) m.visible = true;
+    });
+  }
+}
+// Montre l'arme correspondant a l'index, cache les autres.
+function setSoldierWeapon(s, idx){
+  if(!s) return;
+  s.weaponIdx = idx|0;
+  const want = _weaponKeyForIdx(s.weaponIdx);
+  for(const key in s.weapons){ const m = s.weapons[key]; if(m) m.visible = (key === want); }
+}
+
 function createSoldierRigged(accent){
   const root = new THREE.Group();
   const inst = cloneRigged(RIG_TEMPLATE);
@@ -2515,12 +2689,41 @@ function createSoldierRigged(accent){
   const legs = {}; const _legMap = { ulL:'UpperLeg.L', ulR:'UpperLeg.R', llL:'LowerLeg.L', llR:'LowerLeg.R' };
   inst.traverse(n=>{ if(!n || !n.name) return; for(const k in _legMap){ if(n.name === _legMap[k]){ n.userData.qRest = n.quaternion.clone(); legs[k] = n; } } });
 
-  const s = { root, rigged:true, mixer, actions, flash, accent, spine, legs, jumpW:0,
+  // --- Bones de VISEE (Hips/Abdomen/Torso) : twist procedural du corps vers la cible (Phase 4).
+  // Capture qRest pour chacun (Abdomen/Torso le sont deja via spine, mais on referme proprement ici).
+  const aim = {};
+  inst.traverse(n=>{ if(n && n.name && AIM_BONES.indexOf(n.name) !== -1){
+    if(!n.userData.qRest) n.userData.qRest = n.quaternion.clone(); aim[n.name] = n; } });
+
+  // --- COUCHES d'animation (memes clips filtres, joues sur le MEME mixer) ---
+  const LC = buildLayerClips();
+  const lower = {}, upper = {};
+  for(const sn in LC.lower){ const a = mixer.clipAction(LC.lower[sn]); a.enabled = true; a.setLoop(THREE.LoopRepeat, Infinity); lower[sn] = a; }
+  for(const sn in LC.upper){ const a = mixer.clipAction(LC.upper[sn]); a.enabled = true; upper[sn] = a; }
+
+  // Bone d'attache des armes (Index1.R) + socket
+  let index1R = null;
+  inst.traverse(n=>{ if(!index1R && n && n.name === 'Index1.R') index1R = n; });
+  let weaponSocket = null;
+  if(index1R){
+    weaponSocket = new THREE.Object3D(); weaponSocket.name = 'WeaponSocket_R';
+    index1R.add(weaponSocket);
+  } else {
+    const dispo = []; inst.traverse(n=>{ if(n && n.name) dispo.push(n.name); });
+    console.warn('[ANIM] bone Index1.R introuvable, bones dispo: ' + dispo.join(','));
+  }
+
+  const s = { root, inst, rigged:true, mixer, actions, flash, accent, spine, legs, aim, jumpW:0,
+              lower, upper, lowerCur:null, lowerKey:null, upperCur:null, upperKey:null,
+              upperOneShot:false, weaponSocket, index1R, weapons:{}, weaponIdx:-1,
+              bodyYaw:0, aimYaw:0, twistYaw:0, layered:false,
               current:null, gun:{visible:true},
               // membres factices pour compat ragdoll (non utilisés si anim Death existe)
               torso:root, head:root, armL:root, armR:root, legL:root, legR:root };
-  // démarrer en idle
+  // démarrer en idle (full-body) — bascule en mode couches au 1er animateSoldierRigged
   playClip(s, 'idle', 0);
+  // attache les armes (clones caches) sur le socket si dispo
+  attachWeaponsToSoldier(s);
   return s;
 }
 // Transition douce vers un clip
@@ -2589,18 +2792,170 @@ function applyCrouchPose(s, w){
   bend(s.legs.ulL, ul); bend(s.legs.ulR, ul);
   bend(s.legs.llL, ll); bend(s.legs.llR, ll);
 }
+// Crossfade d'une couche (lower/upper) vers une nouvelle action. Ne restart pas si deja courante.
+function crossfadeLayer(s, layer, key, fade){
+  const map = layer === 'upper' ? s.upper : s.lower;
+  const curKeyProp = layer === 'upper' ? 'upperKey' : 'lowerKey';
+  const curProp    = layer === 'upper' ? 'upperCur' : 'lowerCur';
+  if(!map) return;
+  if(s[curKeyProp] === key && s[curProp]){ return; }   // deja en cours -> rien
+  const next = map[key];
+  if(!next){ if(s[curKeyProp] !== key) console.warn('[ANIM] action de couche injouable:', layer, key); return; }
+  next.reset(); next.enabled = true; next.setLoop(THREE.LoopRepeat, Infinity);
+  next.paused = false; next.setEffectiveWeight(1); next.play();
+  if(s[curProp] && s[curProp] !== next) s[curProp].crossFadeTo(next, fade != null ? fade : 0.10, false);
+  s[curProp] = next; s[curKeyProp] = key;
+}
+// Joue l'action HAUT en FREEZE FRAME 1 (pose tenue) : Gun_Shoot fige = pose de combat.
+function freezeUpper(s, key){
+  const a = s.upper && s.upper[key];
+  if(!a) return;
+  if(s.upperKey !== key || !s.upperCur){
+    a.reset(); a.enabled = true; a.setLoop(THREE.LoopRepeat, Infinity); a.setEffectiveWeight(1); a.play();
+    if(s.upperCur && s.upperCur !== a) s.upperCur.crossFadeTo(a, 0.10, false);
+    s.upperCur = a; s.upperKey = key;
+  }
+  a.paused = true; a.time = 0.0001;   // frame 1 tenue
+  s.upperOneShot = false;
+}
+// Declenche Gun_Shoot HAUT en lecture (restart controle a chaque tir), sans bloquer les jambes.
+function fireUpperShoot(s){
+  const a = s.upper && s.upper['Gun_Shoot'];
+  if(!a) return;
+  a.reset(); a.enabled = true; a.paused = false; a.setLoop(THREE.LoopOnce, 1);
+  a.clampWhenFinished = true; a.setEffectiveWeight(1); a.play();
+  if(s.upperCur && s.upperCur !== a) s.upperCur.crossFadeTo(a, 0.05, false);
+  s.upperCur = a; s.upperKey = 'Gun_Shoot'; s.upperOneShot = true;
+}
+
+const _wrapTwoPi = Math.PI*2;
+function wrapAngle(a){ a = a % _wrapTwoPi; if(a > Math.PI) a -= _wrapTwoPi; else if(a < -Math.PI) a += _wrapTwoPi; return a; }
+const _aimQ = new THREE.Quaternion(), _aimY = new THREE.Vector3(0,1,0);
+// Phase 4 : twist procedural du corps (Hips/Abdomen/Torso) vers la visee, APRES mixer.update.
+// Tourne progressivement le facing du corps si l'ecart depasse maxOff ; repartit le reste en twist.
+// Combine avec le pitch (applySpineAim conserve son additif sur les vertebres).
+function applyBodyAim(s, anim, dt){
+  const AB = (GAMECFG.MODELS && GAMECFG.MODELS.body_aim) || {};
+  if(AB.enabled === false || !s.aim){ return; }
+  const smooth = AB.smooth ?? 12;
+  const maxOff = THREE.MathUtils.degToRad(AB.max_deg ?? 58);
+  // bodyYaw courant = ce que le jeu a mis dans root.rotation.y cette frame
+  s.bodyYaw = s.root.rotation.y;
+  const aimYaw = (anim && typeof anim.aimYaw === 'number') ? anim.aimYaw : s.bodyYaw;
+  s.aimYaw = aimYaw;
+  let delta = wrapAngle(aimYaw - s.bodyYaw);
+  if(Math.abs(delta) > maxOff){
+    // tourne le corps vers la visee (lisse) puis reapplique a root
+    s.bodyYaw += wrapAngle(aimYaw - s.bodyYaw) * Math.min(1, dt * smooth);
+    s.root.rotation.y = s.bodyYaw;
+    delta = wrapAngle(aimYaw - s.bodyYaw);
+  }
+  const twist = Math.max(-maxOff, Math.min(maxOff, delta));
+  s.twistYaw = (s.twistYaw || 0) + (twist - (s.twistYaw || 0)) * Math.min(1, dt * smooth);
+  // repartition du twist (rotation autour de Y local) a partir de qRest
+  const dist = AB.dist || { Hips:0.45, Abdomen:0.35, Torso:0.20 };
+  for(const name in dist){
+    const b = s.aim[name]; if(!b || !b.userData.qRest) continue;
+    _aimQ.setFromAxisAngle(_aimY, s.twistYaw * dist[name]);
+    b.quaternion.copy(b.userData.qRest).multiply(_aimQ);
+  }
+}
+
 function animateSoldierRigged(s, anim, dt, t){
   // Si une anim one-shot (hit) est en cours, on la laisse finir avant de reprendre la normale
   if(s.currentKey === 'death'){ if(s.mixer) s.mixer.update(dt); return; }
   if(s.hitUntil && performance.now() < s.hitUntil){ if(s.mixer) s.mixer.update(dt); return; }
+
   const move = anim.m||0, crouch = anim.c?1:0, air = anim.a?1:0;
   const slide = anim.sl?1:0, holster = anim.h?1:0, climb = anim.cl?1:0;
-  const firing = anim.f?1:0; // tir (transmis via le state réseau)
+  const firing = anim.f?1:0;
+  const grounded = (anim.grounded != null) ? !!anim.grounded : !air;
+  const wi = (anim.wi != null) ? (anim.wi|0) : (s.weaponIdx >= 0 ? s.weaponIdx : 0);
+  const isSaber = (wi === 2);
+
+  // arme tierce-personne : montre/cache selon wi (ne recharge jamais)
+  if(s.weaponIdx !== wi) setSoldierWeapon(s, wi);
+
+  // --- Mode COUCHES (si les clips de couche sont prets) : sinon fallback plein-corps ---
+  const canLayer = s.lower && s.upper && Object.keys(s.lower).length && Object.keys(s.upper).length
+                   && !crouch && !slide && !climb;   // crouch/slide/climb -> plein-corps procedural existant
+
+  if(canLayer){
+    // bascule depuis le plein-corps : on coupe l'action idle full-body (sinon ses tracks luttent)
+    if(!s.layered){
+      if(s.current){ s.current.stop(); s.current.setEffectiveWeight(0); s.current.enabled = false; }
+      s.current = null; s.currentKey = null; s.layered = true;
+    }
+    // vitesse locale (repere du corps) : vx (droite), vz (avance)
+    const vx = anim.vx || 0, vz = anim.vz || 0;
+    const sp = Math.hypot(vx, vz);
+    const TR_RUN = (GAMECFG.MODELS.layer_anim && GAMECFG.MODELS.layer_anim.run_thresh) || 0.6;
+    const TR_WALK = (GAMECFG.MODELS.layer_anim && GAMECFG.MODELS.layer_anim.walk_thresh) || 0.2;
+    // BAS DU CORPS
+    let lowKey = 'Idle_Neutral';
+    if(!grounded || slide){ lowKey = 'Idle_Neutral'; }     // en l'air : pas de jambes qui courent
+    else if(sp < TR_WALK){ lowKey = 'Idle_Neutral'; }
+    else {
+      const ax = Math.abs(vx), az = Math.abs(vz);
+      if(az >= ax && vz > TR_RUN) lowKey = 'Run_Shoot';      // avance
+      else if(ax > az && vx > TR_RUN) lowKey = 'Run_Right';  // droite
+      else if(ax > az && vx < -TR_RUN) lowKey = 'Run_Left';  // gauche
+      else lowKey = 'Walk';                                  // vitesse moderee / oblique
+    }
+    if(!s.lower[lowKey]) lowKey = s.lower['Idle_Neutral'] ? 'Idle_Neutral' : Object.keys(s.lower)[0];
+    crossfadeLayer(s, 'lower', lowKey, 0.12);
+
+    // HAUT DU CORPS
+    if(isSaber){
+      // attaque sabre (hook futur) : anim.saber_attack -> Sword_Slash one-shot, sinon Idle_Sword
+      if(anim.saber_attack && s.upper['Sword_Slash']){
+        if(s.upperKey !== 'Sword_Slash' || !s.upperOneShot){
+          const a = s.upper['Sword_Slash'];
+          a.reset(); a.enabled = true; a.paused = false; a.setLoop(THREE.LoopOnce, 1);
+          a.clampWhenFinished = true; a.setEffectiveWeight(1); a.play();
+          if(s.upperCur && s.upperCur !== a) s.upperCur.crossFadeTo(a, 0.06, false);
+          s.upperCur = a; s.upperKey = 'Sword_Slash'; s.upperOneShot = true;
+        }
+      } else {
+        if(s.upperOneShot && s.upperCur && s.upperCur.isRunning()){ /* laisse finir le slash */ }
+        else crossfadeLayer(s, 'upper', 'Idle_Sword', 0.12);
+      }
+    } else {
+      // R69 / Wingman : tir -> Gun_Shoot joue ; sinon FREEZE frame 1 (pose combat)
+      if(firing){
+        // (re)declenche au front montant du tir
+        if(!s._wasFiring || (s.upperOneShot && s.upperCur && !s.upperCur.isRunning())) fireUpperShoot(s);
+        else if(!s.upperOneShot) fireUpperShoot(s);
+      } else {
+        if(s.upperOneShot && s.upperCur && s.upperCur.isRunning()){ /* laisse finir le tir */ }
+        else freezeUpper(s, 'Gun_Shoot');
+      }
+    }
+    s._wasFiring = firing;
+
+    if(s.mixer) s.mixer.update(dt);
+    // pose de saut procedurale sur les jambes (par-dessus la couche basse) en l'air
+    const _jb = (GAMECFG.MODELS.jump_pose && GAMECFG.MODELS.jump_pose.blend) || 12;
+    s.jumpW = (s.jumpW || 0) + ((!grounded ? 1 : 0) - (s.jumpW || 0)) * Math.min(1, dt * _jb);
+    applyJumpPose(s, s.jumpW || 0);
+    s.crouchW = (s.crouchW || 0) + (0 - (s.crouchW || 0)) * Math.min(1, dt * 10);
+    applySpineAim(s, anim);     // pitch (regard haut/bas) conserve
+    applyBodyAim(s, anim, dt);  // twist + rotation corps vers la visee
+    return;
+  }
+
+  // ---------- FALLBACK plein-corps (crouch/slide/climb, ou couches non pretes) ----------
+  if(s.layered){
+    // on revient au plein-corps : coupe les couches, relance idle full-body
+    if(s.lowerCur){ s.lowerCur.stop(); s.lowerCur.setEffectiveWeight(0); s.lowerCur.enabled=false; s.lowerCur=null; s.lowerKey=null; }
+    if(s.upperCur){ s.upperCur.stop(); s.upperCur.setEffectiveWeight(0); s.upperCur.enabled=false; s.upperCur=null; s.upperKey=null; }
+    s.upperOneShot = false; s._wasFiring = 0; s.layered = false; s.current = null; s.currentKey = null;
+  }
   let key = 'idle', jumping = 0;
-  if(climb) key = 'jump';                          // grimpe : clip inchange pour l'instant
-  else if(air){ key = 'idle'; jumping = 1; }       // SAUT : base neutre + pose procedurale (plus de roulade)
+  if(climb) key = 'jump';
+  else if(air){ key = 'idle'; jumping = 1; }
   else if(slide) key = 'jump';
-  else if(crouch) key = (move > 0.1 ? 'walk' : 'idle'); // ACCROUPI : base neutre + flexion jambes procedurale (fini le "Roll")
+  else if(crouch) key = (move > 0.1 ? 'walk' : 'idle');
   else if(move > 0.1){
     key = (firing && s.actions.run_shoot) ? 'run_shoot' : (move > 0.6 ? 'run' : 'walk');
   } else if(firing && s.actions.shoot){
@@ -2610,17 +2965,27 @@ function animateSoldierRigged(s, anim, dt, t){
   s.jumpW = (s.jumpW || 0) + (jumping - (s.jumpW || 0)) * Math.min(1, dt * _jb);
   const _cb = (GAMECFG.MODELS.crouch_pose && GAMECFG.MODELS.crouch_pose.blend) || 10;
   s.crouchW = (s.crouchW || 0) + ((crouch && !air ? 1 : 0) - (s.crouchW || 0)) * Math.min(1, dt * _cb);
-  // fallback si le clip n'existe pas
   if(!s.actions[key]) key = s.actions.idle ? 'idle' : Object.keys(s.actions)[0];
   if(key !== s.currentKey) playClip(s, key, 0.18);
   if(s.mixer) s.mixer.update(dt);
   applyJumpPose(s, s.jumpW || 0);
   applyCrouchPose(s, s.crouchW || 0);
   applySpineAim(s, anim);
+  applyBodyAim(s, anim, dt);   // twist vers la visee aussi en mode crouch/slide
 }
 // Jouer l'animation de mort (one-shot) puis figer
+// Coupe les couches lower/upper et remet les bones de visee a leur pose de repos.
+// Utilise avant une anim PLEIN-CORPS one-shot (mort/hit) pour qu'elle ne soit pas combattue.
+function _stopLayers(s){
+  if(s.lowerCur){ s.lowerCur.stop(); s.lowerCur.setEffectiveWeight(0); s.lowerCur.enabled=false; }
+  if(s.upperCur){ s.upperCur.stop(); s.upperCur.setEffectiveWeight(0); s.upperCur.enabled=false; }
+  s.lowerCur=null; s.lowerKey=null; s.upperCur=null; s.upperKey=null; s.upperOneShot=false; s._wasFiring=0;
+  s.layered = false; s.twistYaw = 0;
+  if(s.aim){ for(const k in s.aim){ const b=s.aim[k]; if(b && b.userData.qRest) b.quaternion.copy(b.userData.qRest); } }
+}
 function playDeathAnim(s){
   if(!s || !s.actions || !s.actions.death){ return false; }
+  _stopLayers(s);
   const d = s.actions.death;
   d.reset(); d.setLoop(THREE.LoopOnce, 1); d.clampWhenFinished = true;
   d.enabled = true; d.setEffectiveWeight(1); d.play();
@@ -2631,6 +2996,7 @@ function playDeathAnim(s){
 // Réaction de douleur courte (one-shot) qui revient ensuite à l'anim normale
 function playHitAnim(s){
   if(!s || !s.actions || !s.actions.hit || s.currentKey==='death') return false;
+  _stopLayers(s);
   const a = s.actions.hit;
   a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = false;
   a.enabled = true; a.setEffectiveWeight(1); a.play();
@@ -3039,6 +3405,62 @@ function checkOverchargeUnlock(){
   overBase = localBotKills;                               // CONSOMME la série (refaire 3) + corrige le re-arm après expiration
 }
 function resetOvercharge(){ overReady = false; overBase = 0; redUntil[0]=redUntil[1]=redUntil[2]=0; if(overActive) endOvercharge(); }
+// ===== PEAU ÉNERGIE ROUGE : pendant tout le bonus rouge, une texture électrique rouge DÉFILE en émissif
+// sur l'arme tenue (R-69 / Wingman / sabre hors lame) → effet "vibrant/électrique" avec glow, puis FADE OUT. =====
+let redEnergyTex = null;
+function getRedEnergyTexture(){
+  if(redEnergyTex) return redEnergyTex;
+  const W=64, H=256, c=document.createElement('canvas'); c.width=W; c.height=H;
+  const g=c.getContext('2d'); const img=g.createImageData(W,H);
+  const colAmp=[]; for(let x=0;x<W;x++) colAmp[x]=Math.pow(Math.random(),2.4);   // peu de colonnes très brillantes (éclairs)
+  for(let y=0;y<H;y++){ const v=y/H*Math.PI*2;
+    for(let x=0;x<W;x++){
+      let m=0.5+0.5*Math.sin(v*3+x*0.55)*Math.sin(v*7+x*1.3);   // modulation verticale périodique (boucle sans couture)
+      m=Math.max(0,m); let val=Math.pow(colAmp[x]*m,1.7);       // contraste : éclairs fins
+      const b=Math.min(255,val*255*1.6), i=(y*W+x)*4;
+      img.data[i]=b; img.data[i+1]=b; img.data[i+2]=b; img.data[i+3]=255;
+    }
+  }
+  g.putImageData(img,0,0);
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(1.5,2.2);
+  redEnergyTex=t; return t;
+}
+const redSkin = { model:null, mats:[], orig:[], weight:0 };
+function applyRedSkin(model){
+  if(!model) return; clearRedSkin();
+  const tex=getRedEnergyTexture(), col=new THREE.Color(0xff2a16);
+  const exclude=(model.userData && model.userData.saber && model.userData.saber.bladeMats) || [];  // sabre : garder la lame cyan
+  model.traverse(o=>{ if(!o.isMesh) return;
+    const mats=Array.isArray(o.material)?o.material:[o.material];
+    mats.forEach(m=>{ if(!m || exclude.includes(m) || !m.emissive) return;
+      redSkin.orig.push({ m, em:m.emissive.clone(), ei:m.emissiveIntensity||0, map:m.emissiveMap||null });
+      m.emissiveMap=tex; m.emissive.copy(col); m.emissiveIntensity=0; m.needsUpdate=true;
+      redSkin.mats.push(m);
+    });
+  });
+  redSkin.model=model; redSkin.weight=0;
+}
+function clearRedSkin(){
+  for(const o of redSkin.orig){ o.m.emissive.copy(o.em); o.m.emissiveIntensity=o.ei; o.m.emissiveMap=o.map; o.m.needsUpdate=true; }
+  redSkin.orig.length=0; redSkin.mats.length=0; redSkin.model=null; redSkin.weight=0;
+}
+function redSkinWanted(){
+  if(!playing || !alive) return false;
+  if(isSaber()) return overReady || overActive;                 // sabre : pendant que l'overcharge est armée/active
+  return !!(curWeapon().red && redActive(me.weaponIdx));         // flingue : pendant le bonus rouge (10 s)
+}
+function updateRedSkin(dt){
+  const want=redSkinWanted(), cur=weaponModels[me.weaponIdx];
+  if(want && redSkin.model!==cur) applyRedSkin(cur);             // (re)applique sur l'arme tenue
+  if(!redSkin.model) return;
+  const target=(want && redSkin.model===cur) ? 1 : 0;
+  redSkin.weight += (target-redSkin.weight) * Math.min(1, dt*(target?12:4));   // fade-in rapide, fade-out doux
+  if(target===0 && redSkin.weight<0.02){ clearRedSkin(); return; }
+  const tex=getRedEnergyTexture(); tex.offset.y -= dt*0.9; tex.offset.x += dt*0.10;   // défilement "électrique"
+  const pulse=0.78+0.22*Math.sin(performance.now()*0.013);
+  const ei=redSkin.weight*2.4*pulse;
+  for(const m of redSkin.mats) m.emissiveIntensity=ei;
+}
 function specialKeyLabel(){ return inputDevice==='gp' ? gpName(cfg.gp.special) : kbName(cfg.kb.special); }
 function showOverchargeReady(){
   const el = document.getElementById('overbanner'); if(!el) return;
@@ -7552,6 +7974,7 @@ function playerUpdate(dt, g){
 
   updateWeaponAnimation(dt, sprinting, Math.hypot(me.vel.x,me.vel.z) > 0.8);
   updateMelee(dt);   // sabre : pose de coup ADDITIVE par-dessus tout (+ lame/traînée), en dernier
+  updateRedSkin(dt); // peau énergie ROUGE défilante sur l'arme pendant le bonus rouge (puis fade out)
 }
 
 /* ---------- Caméra de mort : 3e personne sur son corps, puis kill cam ---------- */
