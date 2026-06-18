@@ -87,7 +87,9 @@
   #healthbar{height:4px;border-radius:3px;background:rgba(255,255,255,.10);overflow:hidden}
   #healthfill{height:100%;width:100%;background:var(--hp);border-radius:3px;transition:width .25s cubic-bezier(.2,.8,.2,1)}
   #shieldsegs{display:flex;gap:4px;margin-bottom:6px}
-  #shieldsegs .seg{flex:1;height:7px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden}
+  /* display:block + padding:0 + position:static : ANNULE la regle generique .seg (toggle options, ligne ~331)
+     qui fuyait ici (display:flex + padding:4px) et ecrasait la hauteur du fill bleu a 0 (=> shield gris). */
+  #shieldsegs .seg{flex:1;display:block;position:static;padding:0;height:7px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden}
   #shieldsegs .segfill{height:100%;width:100%;border-radius:3px;
     background:linear-gradient(180deg,#7fd0ff 0%,var(--shield) 60%,#2f9ae8 100%);
     box-shadow:0 0 9px rgba(77,184,255,.85),inset 0 0 4px rgba(255,255,255,.35);transition:width .2s ease}
