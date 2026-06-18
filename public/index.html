@@ -204,6 +204,11 @@
     padding:6px 16px;border-radius:999px;font-size:12px;font-family:var(--font);transition:all .15s}
   .diffbtn:hover{background:rgba(255,255,255,.10);color:var(--txt)}
   .diffbtn.sel{background:var(--accent);color:#04222b;border-color:var(--accent);font-weight:700}
+  /* ===== Mini-map / radar (haut gauche) : ennemis rouges clignotants + orbes, rayon 10 m ===== */
+  #minimap{position:absolute;top:18px;left:18px;width:140px;height:140px;border-radius:50%;
+    background:radial-gradient(circle at 50% 50%, rgba(12,16,20,.5), rgba(8,11,14,.8));
+    border:1.5px solid rgba(255,255,255,.16);box-shadow:0 4px 18px rgba(0,0,0,.45), inset 0 0 16px rgba(0,0,0,.45);
+    z-index:6;pointer-events:none;display:none}
   #countdown{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-family:var(--mono);font-size:120px;font-weight:700;color:var(--txt);z-index:9;pointer-events:none}
 
   #bindtable{border-collapse:collapse;margin:10px 0 14px;font-size:14px}
@@ -216,6 +221,23 @@
   .optrow{display:flex;align-items:center;gap:14px;margin:8px 0;font-size:14px;color:var(--txt-dim)}
   .optrow input[type=range]{width:180px;accent-color:var(--accent)}
   .optrow input[type=checkbox]{accent-color:var(--accent);width:17px;height:17px}
+  /* ===== Options : 2 colonnes + toggle clavier/manette ===== */
+  .optcols{display:flex;gap:42px;align-items:flex-start;justify-content:center;flex-wrap:wrap;text-align:left;margin:6px 0 2px}
+  .optcol{display:flex;flex-direction:column;align-items:center}
+  .optcol.settings{min-width:360px;align-items:flex-start}
+  .seg{position:relative;display:flex;width:330px;max-width:100%;background:rgba(255,255,255,.05);border:1px solid var(--brd-strong);border-radius:999px;padding:4px;margin:0 auto 12px}
+  .seg-btn{flex:1;position:relative;z-index:1;cursor:pointer;background:none;border:none;color:var(--txt-dim);font-size:13px;font-weight:600;padding:9px 8px;border-radius:999px;display:flex;align-items:center;justify-content:center;gap:7px;transition:color .2s;font-family:var(--font)}
+  .seg-btn.sel{color:#04222b}
+  .seg-ind{position:absolute;top:4px;left:4px;width:calc(50% - 4px);height:calc(100% - 8px);background:var(--accent);border-radius:999px;transition:transform .24s cubic-bezier(.4,0,.2,1);z-index:0}
+  .seg.gp .seg-ind{transform:translateX(100%)}
+  .opthint{color:var(--txt-faint);font-size:12px;margin:0 0 8px;max-width:330px;line-height:1.5;text-align:center}
+  #bindtable.kbview th:nth-child(3),#bindtable.kbview td:nth-child(3){display:none}
+  #bindtable.gpview th:nth-child(2),#bindtable.gpview td:nth-child(2){display:none}
+  .optsec{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--txt-faint);margin:16px 0 4px;text-align:center;width:100%}
+  .optlbl{width:200px;text-align:right;flex:0 0 auto}
+  .optcol.settings .optrow{font-size:16px;color:var(--txt)}
+  /* fond du menu EN JEU : vue floutee + assombrie (au lieu du degrade plein) */
+  #pause,.screen.ingame{background:rgba(8,9,12,.5);backdrop-filter:blur(13px);-webkit-backdrop-filter:blur(13px)}
   .pseudoinput{background:rgba(255,255,255,.05);border:1px solid var(--brd-strong);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 18px;letter-spacing:.5px;text-align:center;width:280px;margin-bottom:14px;outline:none;font-family:var(--font)}
   .pseudoinput:focus{border-color:var(--accent)}
   .pseudoinput::placeholder{color:var(--txt-faint)}
@@ -245,6 +267,7 @@
 <div id="game"></div>
 
 <div id="hud">
+  <canvas id="minimap" width="140" height="140"></canvas>
   <div id="crosshair">
     <span class="ch ch-l"></span><span class="ch ch-r"></span><span class="ch ch-t"></span><span class="ch ch-b"></span>
     <span class="ch-dot"></span>
@@ -307,34 +330,44 @@
 
 <div class="screen" id="options">
   <h1 style="font-size:32px">OPTIONS <b>&amp; TOUCHES</b></h1>
-  <p style="margin-bottom:6px">Cliquez sur une case puis pressez la touche / le bouton manette souhaité.</p>
-  <table id="bindtable">
-    <tr><th>ACTION</th><th>CLAVIER / SOURIS</th><th>MANETTE</th></tr>
-  </table>
-  <div class="optrow"><span style="width:190px;text-align:right">Mode accroupi</span>
-    <button class="bindbtn" id="cmhold">Maintenir</button>
-    <button class="bindbtn" id="cmtoggle">Toggle</button>
+  <div class="optcols">
+    <div class="optcol">
+      <div class="seg" id="ctrltoggle">
+        <span class="seg-ind"></span>
+        <button class="seg-btn sel" data-view="kb">⌨ Clavier / Souris</button>
+        <button class="seg-btn" data-view="gp">🎮 Manette</button>
+      </div>
+      <p class="opthint">Cliquez sur une case puis pressez la touche / le bouton souhaité.</p>
+      <table id="bindtable" class="kbview">
+        <tr><th>ACTION</th><th>CLAVIER / SOURIS</th><th>MANETTE</th></tr>
+      </table>
+      <div class="optrow"><span class="optlbl">Mode accroupi</span>
+        <button class="bindbtn" id="cmhold">Maintenir</button>
+        <button class="bindbtn" id="cmtoggle">Toggle</button>
+      </div>
+    </div>
+    <div class="optcol settings">
+      <div class="optrow"><span class="optlbl">Sensibilité souris</span><input type="range" id="senskb" min="0.5" max="3" step="0.1"><span id="senskbv"></span></div>
+      <div class="optrow"><span class="optlbl">Sensibilité manette</span><input type="range" id="sensgp" min="0.5" max="3" step="0.1"><span id="sensgpv"></span></div>
+      <div class="optrow"><span class="optlbl">Aim assist</span><input type="checkbox" id="aimassist"></div>
+      <div class="optrow"><span class="optlbl">Zone morte manette</span><input type="range" id="deadzone" min="0" max="0.4" step="0.01"><span id="deadzonev"></span></div>
+      <div class="optrow"><span class="optlbl">Course auto</span><input type="checkbox" id="autosprint"></div>
+      <div class="optrow"><span class="optlbl">Champ de vision (FOV)</span><input type="range" id="fov" min="50" max="100" step="1"><span id="fovv"></span></div>
+      <div class="optrow"><span class="optlbl">Vitesse de visée (ADS)</span><input type="range" id="adsspeed" min="10" max="17" step="1"><span id="adsspeedv"></span></div>
+      <div class="optrow"><span class="optlbl">Molette = changer d'arme</span><input type="checkbox" id="wheelswitch"></div>
+      <div class="optsec">VISEUR</div>
+      <div class="optrow"><span class="optlbl">Taille</span><input type="range" id="chsize" min="2" max="30" step="1"><span id="chsizev"></span></div>
+      <div class="optrow"><span class="optlbl">Écart</span><input type="range" id="chgap" min="0" max="40" step="1"><span id="chgapv"></span></div>
+      <div class="optrow"><span class="optlbl">Épaisseur</span><input type="range" id="chthick" min="1" max="8" step="1"><span id="chthickv"></span></div>
+      <div class="optrow"><span class="optlbl">Couleur</span><input type="color" id="chcolor" style="width:44px;height:26px;background:none;border:1px solid var(--brd-strong);border-radius:6px;cursor:pointer"></div>
+      <div class="optrow"><span class="optlbl">Point central</span><input type="checkbox" id="chdot"></div>
+    </div>
   </div>
-  <div class="optrow"><span style="width:190px;text-align:right">Course auto (manette)</span><input type="checkbox" id="autosprint"></div>
-  <div class="optrow"><span style="width:190px;text-align:right">Sensibilité souris</span><input type="range" id="senskb" min="0.5" max="3" step="0.1"><span id="senskbv"></span></div>
-  <div class="optrow"><span style="width:190px;text-align:right">Sensibilité manette</span><input type="range" id="sensgp" min="0.5" max="3" step="0.1"><span id="sensgpv"></span></div>
-  <div class="optrow"><span style="width:190px;text-align:right">Zone morte manette</span><input type="range" id="deadzone" min="0" max="0.4" step="0.01"><span id="deadzonev"></span></div>
-  <div class="optrow"><span style="width:190px;text-align:right">Aim assist (manette)</span><input type="checkbox" id="aimassist"></div>
-  <div class="optrow"><span style="width:190px;text-align:right">Champ de vision (FOV)</span><input type="range" id="fov" min="50" max="100" step="1"><span id="fovv"></span></div>
-  <div class="optrow"><span style="width:190px;text-align:right">Vitesse de visée (ADS)</span><input type="range" id="adsspeed" min="10" max="17" step="1"><span id="adsspeedv"></span></div>
-  <div class="optrow"><span style="width:190px;text-align:right">Molette = changer d'arme</span><input type="checkbox" id="wheelswitch"></div>
-  <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--txt-faint);margin:14px 0 4px">VISEUR</div>
-  <div class="optrow"><span style="width:190px;text-align:right">Taille</span><input type="range" id="chsize" min="2" max="30" step="1"><span id="chsizev"></span></div>
-  <div class="optrow"><span style="width:190px;text-align:right">Écart</span><input type="range" id="chgap" min="0" max="40" step="1"><span id="chgapv"></span></div>
-  <div class="optrow"><span style="width:190px;text-align:right">Épaisseur</span><input type="range" id="chthick" min="1" max="8" step="1"><span id="chthickv"></span></div>
-  <div class="optrow"><span style="width:190px;text-align:right">Couleur</span><input type="color" id="chcolor" style="width:44px;height:26px;background:none;border:1px solid var(--brd-strong);border-radius:6px;cursor:pointer"></div>
-  <div class="optrow"><span style="width:190px;text-align:right">Point central</span><input type="checkbox" id="chdot"></div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px">
     <button class="btn ghost" id="specmodebtn" style="display:none">👁 Mode spectateur</button>
     <button class="btn" id="optback">Retour</button>
   </div>
 </div>
-
 <div class="screen" id="lobby">
   <h1 style="font-size:34px">MÊLÉE <b>6 JOUEURS</b></h1>
   <p id="lobbytip" style="margin:4px 0 14px;font-size:13px;color:var(--accent);letter-spacing:.3px">Vous avez 2 armes + 1 secrète 🔥 · vous êtes difficile à toucher en sautant pendant un slide au sol.</p>
@@ -452,7 +485,7 @@ const CONFIG = {
   SUPERGLIDE_GRACE: 0.12,       // tolérance APRÈS la fin de la grimpe (appuis légèrement tardifs)
   SUPERGLIDE_SPEED: 13.5,
   SUPERGLIDE_UP: 4.2,
-  AUTOSPRINT_STICK: 0.85,       // déflexion du stick au-delà de laquelle on court
+  AUTOSPRINT_STICK: 0.85, AUTOSPRINT_DELAY: 0.4,       // déflexion du stick au-delà de laquelle on court
   MAG_SIZE: 30, FIRE_RATE: 0.105, RELOAD_T: 1.9,
   HOLSTER_T: 0.32, EQUIP_T: 0.38,
   EYE_STAND: 1.62, EYE_CROUCH: 1.02, EYE_SLIDE: 0.88,
@@ -4830,6 +4863,49 @@ function updateMenuGamepad(g){
   }
   if(g) _gpMenuPrev = g.buttons.map(b=>b.pressed);
 }
+// ===== Mini-map / radar (haut gauche) : tourne avec la vue (avant = haut). Ennemis = points ROUGES
+// clignotants dans un rayon de 10 m (opacité dégressive avec la distance, invisibles au-delà).
+// + orbes de soin bleus. Moi au centre (flèche = ma direction). =====
+function updateMinimap(){
+  const cv = document.getElementById('minimap'); if(!cv) return;
+  const inGame = ((typeof playing!=='undefined' && playing) || (typeof localBotMode!=='undefined' && localBotMode))
+                 && (typeof alive==='undefined' || alive) && me && me.pos;
+  if(!inGame){ if(cv.style.display!=='none') cv.style.display='none'; return; }
+  if(cv.style.display==='none') cv.style.display='block';
+  const ctx = cv.getContext('2d'); const W=cv.width, H=cv.height, cx=W/2, cy=H/2, R=W/2-10;
+  const RANGE=10, scale=R/RANGE;
+  ctx.clearRect(0,0,W,H);
+  // anneaux + croix discrets
+  ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx,cy,R*0.5,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx-R,cy); ctx.lineTo(cx+R,cy); ctx.moveTo(cx,cy-R); ctx.lineTo(cx,cy+R); ctx.stroke();
+  const yaw = me.yaw||0, fx=-Math.sin(yaw), fz=-Math.cos(yaw);   // direction du regard (avant)
+  const t = performance.now()*0.001;
+  const blink = 0.4 + 0.6*Math.abs(Math.sin(t*4));               // clignotement des ennemis
+  // projette une position monde dans le repère radar (avant = haut). null si > RANGE.
+  function plot(wx,wz){ const dx=wx-me.pos.x, dz=wz-me.pos.z, dist=Math.hypot(dx,dz);
+    if(dist>RANGE) return null;
+    return { x: cx + (-dx*fz + dz*fx)*scale, y: cy - (dx*fx + dz*fz)*scale, dist }; }
+  // Orbes de soin (bleu, fondu avec la distance)
+  if(typeof orbsFx==='object' && orbsFx){
+    for(const id in orbsFx){ const p=orbsFx[id].grp.position, q=plot(p.x,p.z); if(!q) continue;
+      ctx.fillStyle='rgba(120,210,255,'+((1-q.dist/RANGE)*0.9).toFixed(3)+')';
+      ctx.beginPath(); ctx.arc(q.x,q.y,3.2,0,Math.PI*2); ctx.fill(); }
+  }
+  // Ennemis (rouge clignotant, fondu avec la distance, invisibles au-delà de 10 m)
+  const enemies=[];
+  if(typeof botMgr!=='undefined' && botMgr) for(const b of botMgr.values()){ if(b && !b.dead && b.pos) enemies.push(b.pos); }
+  if(typeof remote!=='undefined' && remote && remote.pos && !remote.dead) enemies.push(remote.pos);
+  for(const ep of enemies){ const q=plot(ep.x,ep.z); if(!q) continue;
+    const a=Math.max(0,(1-q.dist/RANGE))*blink;
+    ctx.shadowColor='rgba(255,40,40,'+a.toFixed(3)+')'; ctx.shadowBlur=6;
+    ctx.fillStyle='rgba(255,60,60,'+a.toFixed(3)+')';
+    ctx.beginPath(); ctx.arc(q.x,q.y,3.8,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; }
+  // Moi au centre : flèche blanche pointant vers le haut (ma direction)
+  ctx.fillStyle='rgba(255,255,255,.95)';
+  ctx.beginPath(); ctx.moveTo(cx,cy-6); ctx.lineTo(cx-4.5,cy+5); ctx.lineTo(cx+4.5,cy+5); ctx.closePath(); ctx.fill();
+}
 document.getElementById('specbtn').onclick = ()=>{ if(ws && ws.readyState===1) ws.send(JSON.stringify({t:'seat', want:false})); };
 let optionsFrom = 'menu';
 document.getElementById('optbtn').onclick = ()=>{ hideAll(); buildOptions(); show('options'); optionsFrom='menu'; };
@@ -4862,6 +4938,16 @@ function buildOptions(){
     tr.appendChild(td1); tr.appendChild(td2);
     table.appendChild(tr);
   }
+  // Toggle Clavier/Manette (vue de la table de binds) + fond flou si on est en jeu
+  const _seg = document.getElementById('ctrltoggle');
+  if(_seg && !_seg._wired){ _seg._wired = true;
+    _seg.querySelectorAll('.seg-btn').forEach(btn=>{ btn.onclick = ()=>{
+      _seg.querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('sel')); btn.classList.add('sel');
+      const gp = btn.dataset.view === 'gp'; _seg.classList.toggle('gp', gp);
+      const t = document.getElementById('bindtable'); t.classList.toggle('gpview', gp); t.classList.toggle('kbview', !gp);
+    }; });
+  }
+  document.getElementById('options').classList.toggle('ingame', !!playing);
   const sk = document.getElementById('senskb'), sg = document.getElementById('sensgp'),
         aa = document.getElementById('aimassist'), asEl = document.getElementById('autosprint');
   sk.value = cfg.sensKb; sg.value = cfg.sensGp; aa.checked = (cfg.aimAssist !== false); asEl.checked = cfg.autoSprint;
@@ -6134,7 +6220,10 @@ function playerUpdate(dt, g){
   // En l'air, être accroupi ne freine PAS : la vélocité accumulée (sprint, slide jump)
   // se conserve jusqu'à l'atterrissage, où le slide se déclenche avec tout l'élan
   const crouchSlows = crouching && me.onGround;
-  const autoSprinting = g && cfg.autoSprint && stickMag > CONFIG.AUTOSPRINT_STICK && stickFwd > 0.4;
+  const _fwdKb = actionDown('forward') && !actionDown('back');
+  me._fwdT = _fwdKb ? (me._fwdT||0)+dt : 0;
+  const autoSprinting = (g && cfg.autoSprint && stickMag > CONFIG.AUTOSPRINT_STICK && stickFwd > 0.4)
+                        || (cfg.autoSprint && _fwdKb && me._fwdT > (CONFIG.AUTOSPRINT_DELAY ?? 0.4));
   const sprinting = (actionDown('sprint', g) || autoSprinting) && !crouchSlows && adsAmount<0.3 && wl>0;
   let speed;
   if(crouchSlows) speed = CONFIG.CROUCH_SPEED;
@@ -6946,6 +7035,7 @@ function animate(){
   updateDeathClouds(dt);
   updateAudioListener();
   updateOrbs(dt);
+  updateMinimap();   // radar haut-gauche : ennemis rouges clignotants + orbes, rayon 10 m
   updateRagdolls(dt);
   updateCrosshair(dt);
   updateMomentumHUD();
