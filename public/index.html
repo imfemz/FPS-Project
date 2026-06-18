@@ -19,7 +19,7 @@
     --txt-dim:#9a9ca3;                 /* texte secondaire */
     --txt-faint:#5d5f66;               /* texte tertiaire */
     --hp:#f4f5f7;                      /* vie : blanc */
-    --shield:#7cc4ff;                  /* bouclier : bleu froid discret */
+    --shield:#4db8ff;                  /* bouclier : bleu vif */
     --accent:#5ce0ff;                  /* sabre / momentum / liens */
     --red:#ff5a5a;                     /* dégâts / danger */
     --radius:18px;
@@ -114,10 +114,11 @@
   /* Dash sabre ("Bonus d'attaque") : icône + mini jauge grise qui se remplit en bleu à la recharge */
   #dashbar{position:absolute;right:26px;bottom:30px;display:none;flex-direction:column;align-items:flex-end;gap:5px;z-index:5;pointer-events:none}
   #dashbar .dash-lbl{font-family:var(--mono);font-size:11px;letter-spacing:3px;color:var(--txt-faint);transition:color .2s,text-shadow .2s}
-  #dashbar.ready .dash-lbl{color:var(--accent);text-shadow:0 0 10px rgba(92,224,255,.7)}
+  #dashbar.ready .dash-lbl{color:#46e88f;text-shadow:0 0 10px rgba(70,232,143,.7)}
   #dashbar .dash-track{width:130px;height:6px;border-radius:3px;background:rgba(255,255,255,.13);overflow:hidden}
-  #dashbar .dash-fill{height:100%;width:0%;background:var(--accent);border-radius:3px;box-shadow:0 0 8px rgba(92,224,255,.5);transition:width .08s linear}
-  #dashbar.ready .dash-fill{box-shadow:0 0 13px rgba(92,224,255,.95)}
+  #dashbar .dash-fill{height:100%;width:0%;background:var(--accent);border-radius:3px;box-shadow:0 0 8px rgba(92,224,255,.5);transition:width .08s linear,background .15s,box-shadow .15s}
+  /* dash chargé au MAX → la barre passe en VERT */
+  #dashbar.ready .dash-fill{background:#46e88f;box-shadow:0 0 13px rgba(70,232,143,.95)}
   #reloadmsg{position:absolute;left:50%;bottom:24%;transform:translateX(-50%);font-family:var(--mono);color:var(--txt);font-size:11px;letter-spacing:4px;display:none;
     background:var(--panel);border:1px solid var(--brd);border-radius:999px;padding:6px 16px;backdrop-filter:blur(var(--blur));box-shadow:var(--shadow-sm)}
   #score{position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center}

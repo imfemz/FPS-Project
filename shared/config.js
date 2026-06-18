@@ -229,7 +229,7 @@
       {
         name: 'SABRE LASER',
         model: '/models/arms.glb',
-        icon: '/textures/hud/saber.png',   // logo sabre laser affiché dans le HUD quand il est équipé
+        icon: '/textures/hud/saber2.png',   // logo sabre laser affiché dans le HUD quand il est équipé
         melee: true,                 // arme de mêlée (gérée par le système MELEE, pas de tir/munitions)
         auto_center: true, auto_fit: true,
         fit_size: 0.9,               // longueur cible du sabre à l'écran (m) — ↑ = plus grand
