@@ -11,8 +11,8 @@
   :root{
     /* ===== DA premium minimaliste (noir / blanc / gris, accents discrets) ===== */
     --bg:#0a0a0b;
-    --panel:rgba(20,20,23,.55);        /* fond des cartes flottantes */
-    --panel-2:rgba(28,28,32,.7);       /* cartes plus opaques (menus) */
+    --panel:rgba(20,20,23,.275);       /* fond des cartes flottantes — opacité -50% (HUD plus discret) */
+    --panel-2:rgba(28,28,32,.7);       /* cartes plus opaques (menus) — gardé pour la lisibilité des menus */
     --brd:rgba(255,255,255,.09);       /* bordures fines */
     --brd-strong:rgba(255,255,255,.16);
     --txt:#f4f5f7;                     /* texte principal */
@@ -221,7 +221,7 @@
   #wavebanner .wv-s{font-family:var(--mono);font-size:11px;letter-spacing:4px;color:var(--accent);margin-top:3px}
   /* ===== Mini-map / radar (haut gauche) : ennemis rouges clignotants + orbes, rayon 10 m ===== */
   #minimap{position:absolute;top:18px;left:18px;width:280px;height:280px;border-radius:50%;opacity:.85;
-    background:radial-gradient(circle at 50% 50%, rgba(12,16,20,.5), rgba(8,11,14,.8));
+    background:radial-gradient(circle at 50% 50%, rgba(12,16,20,.25), rgba(8,11,14,.4));
     border:1.5px solid rgba(255,255,255,.16);box-shadow:0 4px 18px rgba(0,0,0,.45), inset 0 0 16px rgba(0,0,0,.45);
     z-index:6;pointer-events:none;display:none}
   /* ===== Cadran de cap (compass FPS) en haut au centre : ticks + N/E/S/O, fade aux extrémités ===== */
@@ -486,8 +486,9 @@ const CONFIG = {
   JUMP_VELOCITY: 6.8,
   // Fatigue de saut : sous vel_frac x (vitesse max de l'arme), re-sauter trop vite = saut plus bas + cooldown
   JUMP_FATIGUE: { vel_frac: 0.8, height_mult: 0.4, cooldown: 500 },
+  AUTO_JUMP_INTERVAL: 250, // ms : intervalle MINI entre 2 sauts AUTO (anti "turbo"). Le saut manuel (appui) n'est pas limité.
   // HUD qui derive (inertie) selon le deplacement ; le viseur reste fixe (contre-translation)
-  HUD_SWAY: { amount: 0.4, max: 5, bob: 1.4, smooth: 8 },
+  HUD_SWAY: { amount: 0.75, max: 9, bob: 2.4, smooth: 8 },
   GRAVITY: 21,
   GROUND_ACCEL: 12,
   AIR_ACCEL: 0.6,               // dérive SANS input en l'air (bas = l'élan du slide jump se conserve)
@@ -6486,7 +6487,8 @@ function playerUpdate(dt, g){
       me.vel.z += (wish.z - me.vel.z)*Math.min(1, dt*accel);
     }
     if((jumpGround || jumpEdge) && performance.now() - sgFiredAt > 60){
-      if(me.onGround && jumpGround){
+      if(me.onGround && jumpGround && (jumpEdge || performance.now() - (me._autoJumpAt||0) >= (CONFIG.AUTO_JUMP_INTERVAL ?? 250))){
+        me._autoJumpAt = performance.now();   // anti-turbo : espace les sauts AUTO d'au moins AUTO_JUMP_INTERVAL
         { const _now = performance.now(), _hsp = Math.hypot(me.vel.x, me.vel.z), _JF = CONFIG.JUMP_FATIGUE || {};
           const _maxV = (typeof isSaber==='function' && isSaber()) ? (GAMECFG.MAX_SPEED_SERVER ?? 10) : (GAMECFG.MAX_SPEED_GUN ?? 8);
           let _jv = CONFIG.JUMP_VELOCITY;
@@ -6498,7 +6500,7 @@ function playerUpdate(dt, g){
         me.onGround = false;
         jumpShakeT = (GAMECFG.JUMP_SHAKE > 0) ? 1 : 0; // déclenche le shake (phase 1→0)
         jumpNoseTarget = (GAMECFG.WEAPON_ANIM_BLEND && GAMECFG.WEAPON_ANIM_BLEND.airborne && GAMECFG.WEAPON_ANIM_BLEND.airborne.jump_nose_dip) || 0; // nez qui pique
-      } else if(jumpEdge && !me.wallBounced && !me.climb.active){
+      } else if(!me.onGround && (jumpEdge || jumpGround) && !me.wallBounced && !me.climb.active){
         /* --- WALL BOUNCE (façon Apex : l'élan repart vers où on REGARDE) --- */
         const n = findWallNormal(me.pos, me.pos.y);
         const hv = new THREE.Vector3(me.vel.x, 0, me.vel.z);
