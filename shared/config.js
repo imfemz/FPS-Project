@@ -515,7 +515,7 @@
       BOT_BUBBLE_MULT: 0,
       BOT_STRENGTH_MULT: 0.25,
       // Aim assist en HIPFIRE = cette fraction de la force ADS (0.6 = 60%). 1 = identique à l'ADS.
-      HIP_MULT: 0.6,
+      HIP_MULT: 1.6,
       // En hipfire la bulle est agrandie de ce facteur (0.6 = +60%) pour que l'assist s'accroche même
       // quand on vise grossièrement (sans ADS). 0 = même bulle qu'en ADS.
       HIP_BUBBLE_EXTRA: 0.2,
