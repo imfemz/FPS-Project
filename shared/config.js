@@ -391,18 +391,18 @@
     },
     RELOAD_ANIM: {
       ENABLED: true,
-      blend_in: 14,         // vitesse de fondu À l'entrée du reload (prise de contrôle)
-      blend_out: 5,         // vitesse de fondu À la sortie (PLUS BAS = retour à l'idle plus doux, anti-coupure)
+      blend_in: 10,         // vitesse de fondu À l'entrée du reload (prise de contrôle)
+      blend_out: 8,         // vitesse de fondu À la sortie (PLUS BAS = retour à l'idle plus doux, anti-coupure)
       // Micro-shake "chamber reset" déclenché à cette fraction du reload (0.34 = au 1/3).
-      chamber_shake_at: 0.34,
-      chamber_shake: 0.06,  // amplitude du micro-shake chamber reset (rad) — discret
-      kick_amount: 0.5,    // kick à l'insertion du chargeur (m)
+      chamber_shake_at: 0.24,
+      chamber_shake: 0.56,  // amplitude du micro-shake chamber reset (rad) — discret
+      kick_amount: 3.5,    // kick à l'insertion du chargeur (m)
       kick_sfx: null,       // son JOUÉ sur le kick d'insertion (null = aucun). NE PAS mettre 'reload' :
                             // chaque arme joue déjà SON son de reload via sfx_reload au début du reload.
                             // Mets un nom de son court (ex: un clic) seulement si tu veux un effet en plus.
-      shake_amount: 0.12,   // micro-shake au chamber (rad)
-      overshoot: 0.05,      // léger dépassement au retour idle (ressort) — réduit pour un retour plus doux
-      noise_amount: 0.004,  // micro-noise sur la pose pour casser le côté parfait (rad/m)
+      shake_amount: 1.05,   // micro-shake au chamber (rad)
+      overshoot: 0.25,      // léger dépassement au retour idle (ressort) — réduit pour un retour plus doux
+      noise_amount: 0.07,  // micro-noise sur la pose pour casser le côté parfait (rad/m)
       sprint_damp: 0.35,    // pendant le reload, la pose de course est réduite à ce facteur (anti hors-cadre)
       // Animation façon recharge REVOLVER : l'arme s'incline à GAUCHE (roll) ET le CANON (avant)
       // pique vers le BAS / arrière monte (basculement vers le sol).
@@ -411,13 +411,13 @@
       // pos: x+ =droite, y+ =haut, z+ =vers soi
       phases: [
         // 1) début : l'arme commence à s'incliner à gauche + le canon commence à piquer vers le bas
-        { t: 0.12, pos: [-0.01, -0.04, 0.03], rot: [0, 0.16, 0.28], ease: 'easeOut' },
+        { t: 0.12, pos: [-0.01, -0.04, 0.03], rot: [1, 0.16, 0.28], ease: 'easeOut' },
         // 2) phase principale : inclinée à gauche + canon BIEN piqué vers le bas (arrière monte), chargeur exposé
-        { t: 0.25, pos: [-0.005, -0.07, 0.02], rot: [0, 0.32, 0.42], ease: 'easeInOut' },
+        { t: 0.25, pos: [-0.005, -0.07, 0.02], rot: [1, 0.02, 0.02], ease: 'easeInOut' },
         // 3) nouveau chargeur qui remonte par le bas (l'arme reste basculée canon vers le bas)
-        { t: 0.35, pos: [0, -0.06, 0.01], rot: [0, 0.30, 0.38], ease: 'easeInOut' },
+        { t: 0.35, pos: [0, -0.06, 0.01], rot: [1, 0.05, 0.08], ease: 'easeInOut' },
         // 4) insertion + impact (kick) : petit à-coup vers le bas
-        { t: 0.12, pos: [0, -0.05, 0.00], rot: [0, 0.30, 0.34], ease: 'easeOut', kick: true },
+        { t: 0.12, pos: [0, -0.05, 0.00], rot: [0, 0.30, 0.04], ease: 'easeOut', kick: true },
         // 5) FERMETURE DU BARILLET : coup de poignet SEC vers le HAUT — le canon remonte vite et
         //    DÉPASSE l'horizontale (ry négatif = canon haut), comme le "clap" qui referme le barillet,
         //    avec un petit shake d'impact. Phase courte + easeOut = mouvement vif.
@@ -548,7 +548,7 @@
       // sign: -1 si ca penche a l'envers ; pitch_gain: amplitude ; bones: vertebres concernees.
       spine_aim: { enabled: true, pitch_gain: 0.65, sign: 1, axis: 'x', bones: ['Abdomen','Torso','Chest'], max: 1.3 },
       // Saut : pose procedurale (plus de roulade). euler [x,y,z] rad par bone. sign: -1 si jambes a l'envers.
-      jump_pose: { enabled: true, blend: 12, sign: 1, upperleg: [0.55, 0, 0.08], lowerleg: [-0.95, 0, 0] },
+      jump_pose: { enabled: true, blend: 12, sign: 1, upperleg: [0.85, 0, 0.08], lowerleg: [-0.95, 0, 0] },
       // Accroupi : flexion procedurale des jambes (squat), MEME convention que jump_pose.
       // upperleg = cuisse vers l'avant/ecartee, lowerleg = genou plie. blend = vitesse d'entree/sortie.
       crouch_pose: { enabled: true, blend: 10, sign: 1, upperleg: [0.5, 0, 0.16], lowerleg: [-0.85, 0, 0] },
