@@ -1303,6 +1303,35 @@ function addContactShadow(cx, cz, w, d){
   q.rotation.x = -Math.PI/2; q.position.set(cx, 0.02, cz); q.renderOrder = 1;
   scene.add(q); // ombre de contact (decal sol) : hors collision balle
 }
+function mountStructureModels(){
+  const SM = GAMECFG.STRUCTURE_MODELS || {};
+  if(SM.enabled === false || !SM.byType || typeof GLTFLoader === 'undefined') return;
+  const byType = {};
+  for(const b of MAP.blocks){ const u = SM.byType[b.type]; if(u){ (byType[b.type] = byType[b.type] || []).push(b); } }
+  const ge = (GAMECFG.GRAPHICS||{}).env_intensity ?? 1;
+  for(const type in byType){
+    const url = SM.byType[type], blocks = byType[type];
+    new GLTFLoader().load(url, gltf=>{
+      try{
+        const src = gltf.scene;
+        const bb = new THREE.Box3().setFromObject(src);
+        const size = bb.getSize(new THREE.Vector3());
+        const ctr = bb.getCenter(new THREE.Vector3());
+        for(const b of blocks){
+          const inst = src.clone(true);
+          inst.position.set(-ctr.x, -ctr.y, -ctr.z);
+          const wrap = new THREE.Group();
+          wrap.add(inst);
+          wrap.scale.set(b.w/(size.x||1), b.h/(size.y||1), b.d/(size.z||1));
+          wrap.position.set(b.x, (b.y0||0) + b.h/2, b.z);
+          wrap.traverse(o=>{ if(o.isMesh){ o.castShadow = o.receiveShadow = true; if(o.material && o.material.isMeshStandardMaterial) o.material.envMapIntensity = ge; } });
+          scene.add(wrap);
+          if(SM.hideBox !== false && b._boxMesh) b._boxMesh.visible = false;
+        }
+      }catch(e){ console.warn('[structures]', type, e); }
+    }, undefined, ()=>{ console.warn('[structures] modele absent pour type', type, '-> boites conservees'); });
+  }
+}
 function buildMap(){
   const G = GAMECFG.GRAPHICS || {};
   const floorMat = new THREE.MeshStandardMaterial({color:0x5c6068, roughness: G.floor_roughness ?? .95, metalness: G.floor_metalness ?? 0});
@@ -1320,6 +1349,7 @@ function buildMap(){
     const m = new THREE.Mesh(boxGeo, boxMat);
     m.position.set(b.x, y0 + b.h/2, b.z); m.castShadow = m.receiveShadow = true; scene.add(m);
     mapMeshes.push(m);
+    b._boxMesh = m;
     const isWall = (b.h >= 5);
     (isWall ? wallMeshes : crateMeshes).push(m);
     m.userData.surface = isWall ? 'wall' : 'crate';
@@ -8070,7 +8100,7 @@ addEventListener('resize', ()=>{
   if(gtaoPass && gtaoPass.setSize) gtaoPass.setSize(innerWidth, innerHeight);
 });
 
-buildScene(); buildMap(); buildViewmodel(); buildReloadViewmodel(); applyCustomModels(); loadRiggedTemplate(); initAudio(); recInit();
+buildScene(); buildMap(); mountStructureModels(); buildViewmodel(); buildReloadViewmodel(); applyCustomModels(); loadRiggedTemplate(); initAudio(); recInit();
 applyCustomHUD();
 applyWeaponHUD();
 applyHudScales();

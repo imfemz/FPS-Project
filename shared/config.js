@@ -792,6 +792,19 @@
     WEAPON_LIGHT: { ambient: 0.5, key: 1.5, fill: 0.3, force_unlit: false }, // ambient=remplissage doux, key=directionnelle (contraste/relief), fill=contre-jour leger
     AMBIENT_FILE: '/audio/ambient.mp3',
     AMBIENT_VOLUME: 0.55,
+    // ===== Modeles 3D des structures (remplacent le VISUEL des boites par type ; collision conservee) =====
+    // Depose tes .glb dans public/models/ avec ces noms (ou change les chemins). Le modele est ETIRE
+    // pour remplir chaque boite. Fichier absent -> la boite d'origine est gardee (aucune erreur).
+    STRUCTURE_MODELS: {
+      enabled: true,
+      hideBox: true,        // cache la boite d'origine (la collision reste active)
+      byType: {
+        container: '/models/container.glb',
+        metal:     '/models/metal.glb',
+        concrete:  '/models/concrete.glb',
+        grate:     '/models/grate.glb',
+      },
+    },
     TEXTURES: {
       sky: '/textures/moon_sky.jpg', floor: '/textures/floor.jpg',
       wall: '/textures/wall.jpg', crate: '/textures/crate.jpg',
