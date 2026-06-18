@@ -134,11 +134,19 @@
   @keyframes sbOverPulse{0%,100%{background:#ff5a5a;box-shadow:0 0 9px rgba(255,70,70,.7)}50%{background:#ff2020;box-shadow:0 0 20px rgba(255,40,40,1)}}
   #ammo.saber.over-ready .sb-charge{animation:sbOverPulse .7s ease-in-out infinite}
   #ammo.saber.over-ready .sb-wpn .sb-name{color:#ff6a6a;text-shadow:0 0 10px rgba(255,80,80,.7)}
-  /* BONUS ROUGE actif sur un FLINGUE : carte arme bord rouge + glow pulsé + chiffre rouge */
-  @keyframes redBuffPulse{0%,100%{filter:drop-shadow(0 0 7px rgba(255,60,60,.5)) drop-shadow(0 10px 26px rgba(0,0,0,.5))}50%{filter:drop-shadow(0 0 17px rgba(255,40,40,.95)) drop-shadow(0 10px 26px rgba(0,0,0,.5))}}
-  #ammo.red-active{background:linear-gradient(var(--panel),var(--panel)) padding-box,linear-gradient(135deg,#ff7a7a,#ff3030 50%,#ff7a7a) border-box;animation:redBuffPulse .7s ease-in-out infinite}
-  #ammo.red-active .mag{color:#ff5a5a}
-  #ammo.red-active #wpnname{color:#ff6a6a}
+  /* BONUS ROUGE actif sur un FLINGUE : SEULEMENT l'icône + le nom de l'arme passent rouge & pulsent (cadre inchangé) */
+  @keyframes redNamePulse{0%,100%{color:#ff6a6a;text-shadow:0 0 6px rgba(255,80,80,.45)}50%{color:#ff3636;text-shadow:0 0 14px rgba(255,50,50,.95)}}
+  #ammo.red-active #wpnname{animation:redNamePulse .7s ease-in-out infinite}
+  @keyframes redIconPulse{
+    0%,100%{filter:brightness(0) saturate(100%) invert(34%) sepia(96%) saturate(4500%) hue-rotate(345deg) brightness(98%) contrast(98%) drop-shadow(0 0 4px rgba(255,60,60,.5))}
+    50%{filter:brightness(0) saturate(100%) invert(34%) sepia(96%) saturate(4500%) hue-rotate(345deg) brightness(112%) contrast(98%) drop-shadow(0 0 12px rgba(255,40,40,.95))}
+  }
+  #ammo.red-active #wpnicon img,#ammo.red-active #wpnicon svg{animation:redIconPulse .7s ease-in-out infinite}
+  /* Embers (braises) : petites particules chaudes qui montent et s'évaporent du HUD ("truc cool débloqué") */
+  .ember{position:absolute;border-radius:50%;pointer-events:none;z-index:5;opacity:0;
+    background:radial-gradient(circle,#ffe1a6 0%,#ff8a3c 55%,rgba(255,80,30,0) 100%);
+    filter:blur(.4px);animation:emberRise 1.5s ease-out forwards}
+  @keyframes emberRise{0%{opacity:0;transform:translate(0,0) scale(.5)}18%{opacity:.85}100%{opacity:0;transform:translate(var(--dx,0),-48px) scale(1.05)}}
   /* ===== REFONTE DA : cartes HUD rétro-futuristes (coins chanfreinés, bordure fine bleue en dégradé,
      fond translucide flou + relief conservés). On garde la vibe ; juste plus "carré futuriste". ===== */
   #vitals,#ammo,#leaderboard{
@@ -3574,11 +3582,30 @@ function updateDashUI(){
   const ready = cd <= 0;
   if(ready !== ammoEl._dReady){ ammoEl.classList.toggle('dash-ready', ready); ammoEl._dReady = ready; }
 }
-// BONUS ROUGE flingue actif → la carte arme glow rouge (togglé CHAQUE frame, pas dans updateAmmoUI qui est événementiel)
+// BONUS ROUGE flingue actif → icône + nom de l'arme en rouge (togglé CHAQUE frame, pas dans updateAmmoUI qui est événementiel)
 function updateRedBuffUI(){
   const ammoEl = document.getElementById('ammo'); if(!ammoEl) return;
   const on = !!(playing && alive && !isSaber() && redActive(me.weaponIdx));
   if(on !== ammoEl._red){ ammoEl.classList.toggle('red-active', on); ammoEl._red = on; }
+  // Embers : tant qu'un état "rouge débloqué" est actif (bonus flingue OU overcharge sabre dispo) → braises qui s'évaporent
+  const redState = on || ammoEl.classList.contains('over-ready');
+  if(redState){
+    const now = performance.now();
+    if(now > (ammoEl._emberNext || 0)){ spawnEmber(ammoEl); ammoEl._emberNext = now + 110 + Math.random()*130; }
+  }
+}
+// Petite braise qui monte depuis la carte et s'évapore (effet subtil "truc cool débloqué").
+function spawnEmber(card){
+  const hud = document.getElementById('hud'); if(!hud) return;
+  const r = card.getBoundingClientRect(); if(!r.width) return;
+  const e = document.createElement('div'); e.className = 'ember';
+  const sz = (3 + Math.random()*2.4).toFixed(1);
+  e.style.width = e.style.height = sz + 'px';
+  e.style.left = (r.left + Math.random()*r.width).toFixed(0) + 'px';
+  e.style.top  = (r.top + r.height*(0.28 + Math.random()*0.55)).toFixed(0) + 'px';
+  e.style.setProperty('--dx', ((Math.random()*2-1)*14).toFixed(0) + 'px');
+  hud.appendChild(e);
+  setTimeout(()=>{ e.remove(); }, 1550);
 }
 
 const HIP_POS = new THREE.Vector3(.22,-.28,-.46); // position hanche (style Apex : bas-droite, proche)
