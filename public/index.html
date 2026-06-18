@@ -762,7 +762,7 @@ function buildScene(){
   camera = new THREE.PerspectiveCamera(GAMECFG.FOV.VIEW, innerWidth/innerHeight, 0.05, 400);
   camera.layers.enable(AO_SKIP_LAYER); // la caméra principale rend aussi les overlays (sprites/particules)
   gunCam = new THREE.PerspectiveCamera(GAMECFG.FOV.WEAPON, innerWidth/innerHeight, 0.01, 50);
-  renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
   renderer.setSize(innerWidth, innerHeight);
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
   renderer.shadowMap.enabled = true;
@@ -3840,64 +3840,88 @@ function maybeStartMenuMusic(){
 }
 // Entrée effective en partie : son de spawn + coupe la musique de menu.
 function onEnterGameAudio(){ menuMusicWanted = false; stopMenuMusic(); playSfx('spawn'); spawnSimOverlay(); }
-/* ===== Overlay de spawn facon "shader lines" (entree dans la simulation) : 2s + fade out ===== */
+/* ===== Overlay de spawn "shader lines" : 3s, et le BLANC du shader deforme le jeu ===== */
 let spawnFxActive = false;
 function spawnSimOverlay(){
   const CFG = GAMECFG.SPAWN_OVERLAY || {};
   if(CFG.ENABLED === false || spawnFxActive) return;
   try{
+    if(typeof renderer === "undefined" || !renderer || !renderer.domElement) return;
     spawnFxActive = true;
-    const dur = (CFG.duration ?? 2.0) * 1000;
-    const fade = Math.min((CFG.fade ?? 0.6) * 1000, dur);
-    const cont = document.createElement('div');
-    cont.style.cssText = 'position:fixed;inset:0;z-index:80;pointer-events:none;opacity:1;background:#000';
+    const dur = (CFG.duration ?? 3.0) * 1000;
+    const warpAmp = (CFG.warp ?? 0.06);
+    const lineInt = (CFG.intensity ?? 1.0);
+    const cont = document.createElement("div");
+    cont.style.cssText = "position:fixed;inset:0;z-index:80;pointer-events:none;background:#000";
     document.body.appendChild(cont);
-    const camera = new THREE.Camera();
-    const scene = new THREE.Scene();
+    const ovScene = new THREE.Scene();
+    const ovCam = new THREE.Camera();
     const geo = new THREE.PlaneGeometry(2, 2);
-    const uniforms = { time:{ value:1.0 }, resolution:{ value:new THREE.Vector2() }, intensity:{ value:(CFG.intensity ?? 1.0) } };
+    const gameTex = new THREE.CanvasTexture(renderer.domElement);
+    gameTex.colorSpace = THREE.NoColorSpace;
+    gameTex.minFilter = THREE.LinearFilter; gameTex.magFilter = THREE.LinearFilter;
+    gameTex.wrapS = gameTex.wrapT = THREE.ClampToEdgeWrapping;
+    gameTex.generateMipmaps = false;
+    const uniforms = {
+      time:{ value:1.0 }, resolution:{ value:new THREE.Vector2() },
+      intensity:{ value:lineInt }, warp:{ value:warpAmp }, strength:{ value:1.0 },
+      tGame:{ value:gameTex },
+    };
+    const vert = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position, 1.0); }';
     const frag = [
       'precision highp float;',
-      'uniform vec2 resolution; uniform float time; uniform float intensity;',
+      'varying vec2 vUv;',
+      'uniform vec2 resolution; uniform float time; uniform float intensity; uniform float warp; uniform float strength;',
+      'uniform sampler2D tGame;',
       'float random(in float x){ return fract(sin(x)*1e4); }',
       'void main(void){',
-      '  vec2 uv = (gl_FragCoord.xy*2.0 - resolution.xy)/min(resolution.x, resolution.y);',
+      '  vec2 suv = (gl_FragCoord.xy*2.0 - resolution.xy)/min(resolution.x, resolution.y);',
+      '  vec2 muv = suv;',
       '  vec2 fMosaicScal = vec2(4.0, 2.0);',
       '  vec2 vScreenSize = vec2(256.0, 256.0);',
-      '  uv.x = floor(uv.x*vScreenSize.x/fMosaicScal.x)/(vScreenSize.x/fMosaicScal.x);',
-      '  uv.y = floor(uv.y*vScreenSize.y/fMosaicScal.y)/(vScreenSize.y/fMosaicScal.y);',
-      '  float t = time*0.06 + random(uv.x)*0.4;',
-      '  float lineWidth = 0.0008;',
-      '  vec3 color = vec3(0.0);',
-      '  for(int j=0;j<3;j++){',
-      '    for(int i=0;i<5;i++){',
-      '      color[j] += lineWidth*float(i*i)/abs(fract(t - 0.01*float(j)+float(i)*0.01)*1.0 - length(uv));',
-      '    }',
-      '  }',
-      '  gl_FragColor = vec4(color[2], color[1], color[0], 1.0) * intensity;',
+      '  muv.x = floor(muv.x*vScreenSize.x/fMosaicScal.x)/(vScreenSize.x/fMosaicScal.x);',
+      '  muv.y = floor(muv.y*vScreenSize.y/fMosaicScal.y)/(vScreenSize.y/fMosaicScal.y);',
+      '  float t = time*0.06 + random(muv.x)*0.4;',
+      '  float lw = 0.0008;',
+      '  vec3 lines = vec3(0.0);',
+      '  for(int j=0;j<3;j++){ for(int i=0;i<5;i++){',
+      '    lines[j] += lw*float(i*i)/abs(fract(t - 0.01*float(j)+float(i)*0.01) - length(muv));',
+      '  }}',
+      '  float L = clamp(lines.x+lines.y+lines.z, 0.0, 1.0);',
+      '  vec2 c = vUv - 0.5;',
+      '  vec2 dir = length(c) > 0.001 ? normalize(c) : vec2(0.0);',
+      '  vec2 off = dir * (L * warp * strength);',
+      '  float r = texture2D(tGame, vUv + off*1.0).r;',
+      '  float g = texture2D(tGame, vUv + off*0.6).g;',
+      '  float b = texture2D(tGame, vUv + off*0.3).b;',
+      '  vec3 col = vec3(r, g, b);',
+      '  col += vec3(lines.z, lines.y, lines.x) * intensity * strength;',
+      '  gl_FragColor = vec4(col, 1.0);',
       '}'
     ].join('\n');
-    const vert = 'void main(){ gl_Position = vec4(position, 1.0); }';
     const mat = new THREE.ShaderMaterial({ uniforms, vertexShader:vert, fragmentShader:frag });
-    scene.add(new THREE.Mesh(geo, mat));
-    const renderer = new THREE.WebGLRenderer({ antialias:false, alpha:false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    cont.appendChild(renderer.domElement);
-    const resize = ()=>{ renderer.setSize(window.innerWidth, window.innerHeight); uniforms.resolution.value.set(renderer.domElement.width, renderer.domElement.height); };
-    resize(); window.addEventListener('resize', resize);
+    ovScene.add(new THREE.Mesh(geo, mat));
+    const ov = new THREE.WebGLRenderer({ antialias:false, alpha:false });
+    ov.outputColorSpace = THREE.NoColorSpace;
+    ov.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    cont.appendChild(ov.domElement);
+    const resize = ()=>{ ov.setSize(window.innerWidth, window.innerHeight); uniforms.resolution.value.set(ov.domElement.width, ov.domElement.height); };
+    resize(); window.addEventListener("resize", resize);
     const t0 = performance.now(); let raf = 0;
     const cleanup = ()=>{
-      cancelAnimationFrame(raf); window.removeEventListener('resize', resize);
-      try{ geo.dispose(); mat.dispose(); renderer.dispose(); }catch(e){}
-      try{ const gl = renderer.getContext(); const lc = gl && gl.getExtension('WEBGL_lose_context'); lc && lc.loseContext(); }catch(e){}
+      cancelAnimationFrame(raf); window.removeEventListener("resize", resize);
+      try{ geo.dispose(); mat.dispose(); gameTex.dispose(); ov.dispose(); }catch(e){}
+      try{ const gl = ov.getContext(); const lc = gl && gl.getExtension('WEBGL_lose_context'); lc && lc.loseContext(); }catch(e){}
       cont.remove(); spawnFxActive = false;
     };
     const loop = ()=>{
       const el = performance.now() - t0;
+      const p = Math.min(el/dur, 1.0);
+      let st = 1.0 - p; st = st*st*(3.0 - 2.0*st);
+      uniforms.strength.value = st;
       uniforms.time.value += 0.05;
-      renderer.render(scene, camera);
-      const fadeStart = dur - fade;
-      cont.style.opacity = el < fadeStart ? '1' : String(Math.max(0, 1 - (el - fadeStart)/fade));
+      gameTex.needsUpdate = true;
+      ov.render(ovScene, ovCam);
       if(el >= dur){ cleanup(); return; }
       raf = requestAnimationFrame(loop);
     };

@@ -612,9 +612,9 @@
     // ===== Overlay "spawn dans la simulation" (shader lines) a l'entree en partie =====
     SPAWN_OVERLAY: {
       ENABLED: true,
-      duration: 2.0,   // duree totale de l'overlay (s)
-      fade: 0.6,       // duree du fondu de sortie en fin (s)
-      intensity: 1.0,  // luminosite des lignes
+      duration: 3.0,   // duree totale de l'overlay (s)
+      warp: 0.06,      // amplitude de deformation du jeu pilotee par le BLANC du shader (fraction d'ecran)
+      intensity: 1.0,  // luminosite des lignes ajoutees
     },
     SHOT_PITCH_VAR: 0.18,
     // ===== Volume PAR SON (multiplicateur individuel) =====
