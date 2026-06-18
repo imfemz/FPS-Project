@@ -727,14 +727,15 @@ const ACTIONS = [
   ['jump','Sauter'],['crouch','Crouch / Slide'],['sprint','Sprinter'],
   ['reload','Recharger'],['shoot','Tirer'],['ads','Viser'],['holster','Sabre laser 🔥'],
   ['dash','Bonus d\'attaque'],
+  ['special','Attaque spéciale 🔴'],
   ['weapon1','Arme 1'],['weapon2','Arme 2'],
 ];
 // Le bind MANETTE de ces actions est géré par le stick droit (R3), pas rebindable séparément
 const GP_LOCKED_R3 = ['weapon1','weapon2','holster'];
 const DEFAULTS = {
   kb: { forward:'KeyW', back:'KeyS', left:'KeyA', right:'KeyD', jump:'Space',
-        crouch:'ControlLeft', sprint:'ShiftLeft', reload:'KeyR', shoot:'Mouse0', ads:'Mouse2', holster:'KeyH', dash:'KeyF', weapon1:'Digit1', weapon2:'Digit2', weapon3:'Digit3' },
-  gp: { forward:-1, back:-1, left:-1, right:-1, jump:0, crouch:1, sprint:10, reload:2, shoot:7, ads:6, holster:3, dash:5, weapon_stick:11, weapon3:-1 },
+        crouch:'ControlLeft', sprint:'ShiftLeft', reload:'KeyR', shoot:'Mouse0', ads:'Mouse2', holster:'KeyH', dash:'KeyF', special:'KeyQ', weapon1:'Digit1', weapon2:'Digit2', weapon3:'Digit3' },
+  gp: { forward:-1, back:-1, left:-1, right:-1, jump:0, crouch:1, sprint:10, reload:2, shoot:7, ads:6, holster:3, dash:5, special:6, weapon_stick:11, weapon3:-1 },
   sensKb: 1.0, sensGp: 1.0, aimAssist: true, crouchMode: 'hold', autoSprint: true, autoJump: false, fov: 0, deadzone: 0.06,
   wheelSwitch: false,            // molette souris = changer d'arme (activable en options)
   adsSpeed: 17,                  // vitesse de montée en visée (ADS)
@@ -2968,8 +2969,8 @@ function checkOverchargeUnlock(){
 function resetOvercharge(){ overReady = false; overBase = 0; if(overActive) endOvercharge(); }
 function showOverchargeReady(){
   const el = document.getElementById('overbanner'); if(!el) return;
-  const key = gpActive ? gpName(cfg.gp.shoot) : kbName(cfg.kb.shoot);
-  el.innerHTML = '<div class="ob-main">ATTAQUE SPÉCIALE</div><div class="ob-sub">Double-tap <b>'+key+'</b> pour lancer</div>';
+  const key = gpActive ? gpName(cfg.gp.special) : kbName(cfg.kb.special);
+  el.innerHTML = '<div class="ob-main">ATTAQUE SPÉCIALE</div><div class="ob-sub">Appuie sur <b>'+key+'</b></div>';
   el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   try{ if(typeof sfx==='function'){ sfx(480, 1150, 0.16, 0.06, 'sawtooth'); setTimeout(()=>sfx(880, 1500, 0.13, 0.045, 'sine'), 70); } }catch(e){}
 }
@@ -3044,12 +3045,7 @@ function meleeAttack(){
   const S = GAMECFG.MELEE || {}; const swings = S.swings || [];
   if(!swings.length || !alive) return;
   if(overActive) return;   // sabre lancé (Overcharge en cours) : pas de coup normal
-  // OVERCHARGE dispo (3 kills d'affilée) : un DOUBLE-TAP d'attaque lance l'attaque spéciale.
-  if(overReady){
-    const _n = performance.now();
-    if(_n - (melee._otap||0) < (overConfig().doubletap_ms ?? 300)){ melee._otap = 0; launchOvercharge(); return; }
-    melee._otap = _n;
-  }
+  // (lancement de l'Overcharge = bouton dedie 'special' — voir trySpecial)
   // COOLDOWN : chaque coup consomme une part de charge. Vidé → on attend que ça remonte.
   const maxHits = S.max_hits ?? 5;
   const cost = 1 / maxHits;
@@ -6314,6 +6310,13 @@ function tryDash(g, wishDir, f){
   }
   _dashPrev = held;
 }
+let _specialPrev = false;
+// Attaque speciale (Overcharge) : bouton dedie 'special' (KeyQ / LT) quand l'attaque est chargee (overReady).
+function trySpecial(g){
+  const held = actionDown('special', g);
+  if(held && !_specialPrev && overReady && !overActive && isSaber() && playing && alive){ launchOvercharge(); }
+  _specialPrev = held;
+}
 function trySuperglide(){
   const SG = GAMECFG.SUPERGLIDE;
   if(!SG.ENABLED) return;
@@ -7174,6 +7177,7 @@ function playerUpdate(dt, g){
   const wl = Math.min(1, wish.length());        // intensité analogique (stick léger → marche lente)
   const wishDir = wl > 0 ? wish.clone().normalize() : null;
   tryDash(g, wishDir, f);   // dash sabre : dans la direction d'input (wishDir), sinon le regard (f)
+  trySpecial(g);            // attaque speciale (Overcharge) : bouton dedie
   const crouching = isCrouching() && !me.slide.active;
   // En l'air, être accroupi ne freine PAS : la vélocité accumulée (sprint, slide jump)
   // se conserve jusqu'à l'atterrissage, où le slide se déclenche avec tout l'élan
