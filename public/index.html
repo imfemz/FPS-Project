@@ -395,7 +395,7 @@
   .optcol.settings .ctrlrow .bindbtn{min-width:92px;font-size:12px}
   .optcol.settings .optsec{padding:0 26px}
   /* fond du menu EN JEU : vue floutee + assombrie (au lieu du degrade plein) */
-  #pause,.screen.ingame{background:rgba(8,9,12,.5)}  /* menu in-game : voile sombre SANS flou (jeu net derriere) */
+  #pause,.screen.ingame{background:rgba(8,9,12,.5);backdrop-filter:blur(13px);-webkit-backdrop-filter:blur(13px)}  /* menu in-game : voile sombre + flou du jeu derriere */
   .pseudoinput{background:rgba(255,255,255,.05);border:1px solid var(--brd-strong);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 18px;letter-spacing:.5px;text-align:center;width:280px;margin-bottom:14px;outline:none;font-family:var(--font)}
   .pseudoinput:focus{border-color:var(--accent)}
   .pseudoinput::placeholder{color:var(--txt-faint)}
@@ -765,21 +765,29 @@ let myName = localStorage.getItem('nc_pseudo') || '';
 
 const GP_NAMES = {0:'A / ✕',1:'B / ◯',2:'X / ☐',3:'Y / △',4:'LB',5:'RB',6:'LT',7:'RT',8:'Select',9:'Start',10:'L3',11:'R3',12:'↑',13:'↓',14:'←',15:'→'};
 const KB_NAMES = {Mouse0:'Clic gauche',Mouse2:'Clic droit',Mouse1:'Clic milieu',Space:'Espace',ControlLeft:'Ctrl G',ShiftLeft:'Maj G'};
-const kbName = c => KB_NAMES[c] || c.replace('Key','').replace('Digit','');
+let _kbLayout = null;
+function kbName(c){
+  if(KB_NAMES[c]) return KB_NAMES[c];
+  if(c && c.indexOf('Digit')===0) return c.slice(5);                                  // chiffres : garder 1/2/3
+  if(_kbLayout && _kbLayout.get){ try{ const l=_kbLayout.get(c); if(l) return (''+l).toUpperCase(); }catch(e){} }  // libelle reel du layout (AZERTY -> A)
+  return c.replace('Key','').replace('Digit','');
+}
+(function loadKbLayout(){ try{ if(navigator.keyboard && navigator.keyboard.getLayoutMap){ navigator.keyboard.getLayoutMap().then(m=>{ _kbLayout=m; }).catch(()=>{}); } }catch(e){} })();
 const gpName = i => i<0 ? '—' : (GP_NAMES[i]||('Btn '+i));
 
 /* ---------- Entrées ---------- */
 const keysDown = new Set();
 let mouseDX = 0, mouseDY = 0;
-addEventListener('keydown', e=>{ keysDown.add(e.code); if(listening) captureKb(e.code);
+let inputDevice = 'kb';   // device courant pour l'affichage des touches (mis a jour en live)
+addEventListener('keydown', e=>{ keysDown.add(e.code); inputDevice='kb'; if(listening) captureKb(e.code);
   if(e.code==='KeyK' && !listening){ DEBUG_HITBOX = !DEBUG_HITBOX; if(!DEBUG_HITBOX) hitboxPool.forEach(m=>{ m.visible=false; }); }
 });
 let DEBUG_HITBOX = false, hitboxMesh = null; let hitboxPool = [];
 addEventListener('keyup', e=>keysDown.delete(e.code));
-addEventListener('mousedown', e=>{ keysDown.add('Mouse'+e.button); if(listening) captureKb('Mouse'+e.button); });
+addEventListener('mousedown', e=>{ keysDown.add('Mouse'+e.button); inputDevice='kb'; if(listening) captureKb('Mouse'+e.button); });
 addEventListener('mouseup', e=>keysDown.delete('Mouse'+e.button));
 addEventListener('contextmenu', e=>e.preventDefault());
-addEventListener('mousemove', e=>{ if(locked){ mouseDX += e.movementX; mouseDY += e.movementY; } });
+addEventListener('mousemove', e=>{ if(locked){ mouseDX += e.movementX; mouseDY += e.movementY; inputDevice='kb'; } });
 // Molette = changer d'arme (si activé en options) — cycle toutes les armes (R69 / Wingman / Sabre)
 addEventListener('wheel', e=>{
   if(!cfg.wheelSwitch || !playing || !alive || !locked) return;
@@ -810,7 +818,7 @@ function pollGamepad(){
   if(!g) return null;
   if(!_gpLogged){ _gpLogged = true; console.log('[NEON] 🎮 inputs manette ACTIFS :', g.id); }
   const any = g.buttons.some(b=>b.pressed) || g.axes.some(a=>Math.abs(a)>0.25);
-  if(any) gpActive = true;
+  if(any){ gpActive = true; inputDevice='gp'; }
   if(listening && listening.dev==='gp'){
     for(let i=0;i<g.buttons.length;i++) if(g.buttons[i].pressed && !gpPrev[i]) captureGp(i);
   }
@@ -2997,12 +3005,18 @@ function checkOverchargeUnlock(){
   if(!overReady && (localBotKills - overBase) >= need){ overReady = true; overReadyAt = performance.now(); showOverchargeReady(); }
 }
 function resetOvercharge(){ overReady = false; overBase = 0; if(overActive) endOvercharge(); }
+function specialKeyLabel(){ return inputDevice==='gp' ? gpName(cfg.gp.special) : kbName(cfg.kb.special); }
 function showOverchargeReady(){
   const el = document.getElementById('overbanner'); if(!el) return;
-  const key = gpActive ? gpName(cfg.gp.special) : kbName(cfg.kb.special);
-  el.innerHTML = '<div class="ob-main">ATTAQUE SPÉCIALE</div><div class="ob-sub">Appuie sur <b>'+key+'</b></div>';
+  el.innerHTML = '<div class="ob-main">ATTAQUE SPÉCIALE</div><div class="ob-sub">Appuie sur <b id="obKey">'+specialKeyLabel()+'</b></div>';
   el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   try{ if(typeof sfx==='function'){ sfx(480, 1150, 0.16, 0.06, 'sawtooth'); setTimeout(()=>sfx(880, 1500, 0.13, 0.045, 'sine'), 70); } }catch(e){}
+}
+// Libelle de touche du popup mis a jour EN LIVE selon le device (clavier/manette).
+function refreshOverbannerKey(){
+  const el = document.getElementById('overbanner'); if(!el || !el.classList.contains('show')) return;
+  const k = document.getElementById('obKey'); if(!k) return;
+  const lbl = specialKeyLabel(); if(k.textContent !== lbl) k.textContent = lbl;
 }
 function saberWeaponIndex(){ const W = GAMECFG.WEAPONS||[]; for(let i=0;i<W.length;i++) if(W[i].melee) return i; return -1; }
 function isSaber(){ const W = curWeapon(); return !!(W && W.melee); }
@@ -8054,6 +8068,7 @@ function animate(){
   updateMinimap();   // radar haut-gauche : ennemis rouges clignotants + orbes, rayon 10 m
   updateCompass();   // cadran de cap (haut centre)
   updateDashUI();    // jauge du dash sabre (Bonus d'attaque), bas-droite
+  refreshOverbannerKey();  // popup attaque speciale : touche affichee en live (clavier/manette)
   updateRagdolls(dt);
   updateCrosshair(dt);
   updateMomentumHUD();
