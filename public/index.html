@@ -4477,13 +4477,14 @@ function localPlayerDeath(){
     doMyRespawn({ p:[sp[0], 0, sp[2]], yaw: sp[3]||0 });
   }, 1400);
 }
-function damagePlayerLocal(dmg){
+function damagePlayerLocal(dmg, fromPos){
   if(!alive || !localBotMode) return;
   let rest = dmg;
   if(me.sh > 0){ const a = Math.min(me.sh, rest); me.sh -= a; rest -= a; }
   if(rest > 0) me.hp -= rest;
   if(me.hp < 0) me.hp = 0;
   updateHPShieldUI(); triggerDamageFeedback();
+  if(fromPos) showDamageDirection(fromPos);   // arc rouge directionnel vers le bot qui tire (comme en multi)
   if(me.hp <= 0) localPlayerDeath();
 }
 function _rR(a){ return a[0] + Math.random()*(a[1]-a[0]); }
@@ -4499,7 +4500,7 @@ function botShoot(b, tier, playerSpeed, distP){
   const distF = 1 - Math.min(1, (distP||0) / fr) * (1 - (A.far_hit_mult ?? 0.6));
   if(Math.random() < (tier.hit_chance ?? 0.7) * moveF * distF){
     const W = (GAMECFG.WEAPONS && GAMECFG.WEAPONS[b.weaponIdx||0]) || {};
-    if((LBOT.ai && LBOT.ai.damage_player) !== false) damagePlayerLocal((W.damage_body ?? 15) * (tier.dmg_mult ?? 1));
+    if((LBOT.ai && LBOT.ai.damage_player) !== false) damagePlayerLocal((W.damage_body ?? 15) * (tier.dmg_mult ?? 1), b.pos);
   }
   playSfxAt('shot', b.pos, 0.7, { refDistance: 8, maxDistance: 60, rolloff: 0.8 });
 }
@@ -4846,17 +4847,28 @@ function updateMenuGamepad(g){
     const d = cfg.deadzone ?? 0.1;
     let ax = g.axes[0]||0, ay = g.axes[1]||0;
     if(Math.abs(ax) < d) ax = 0; if(Math.abs(ay) < d) ay = 0;
+    // Sur un slider survole : le stick HORIZONTAL ajuste la valeur (curseur fige en X), D-pad = pas (2x step)
+    const onRange = _gpHover && _gpHover.tagName === 'INPUT' && _gpHover.type === 'range';
     const sp = 14; // vitesse du curseur (px/frame au stick plein)
-    gpCurX = Math.max(0, Math.min(innerWidth, gpCurX + ax*sp));
+    gpCurX = Math.max(0, Math.min(innerWidth, gpCurX + (onRange ? 0 : ax)*sp));
     gpCurY = Math.max(0, Math.min(innerHeight, gpCurY + ay*sp));
     cur.style.display = 'block'; cur.style.left = gpCurX+'px'; cur.style.top = gpCurY+'px';
+    if(onRange){
+      const r = _gpHover, mn = +r.min, mx = +r.max, st = (+r.step || 0.01);
+      let v = +r.value, changed = false;
+      if(Math.abs(ax) > d){ v += ax * (mx - mn) * 0.012; changed = true; }                 // glisse du stick gauche
+      const dl = g.buttons[14] && g.buttons[14].pressed && !_gpMenuPrev[14];
+      const dr = g.buttons[15] && g.buttons[15].pressed && !_gpMenuPrev[15];
+      if(dl || dr){ v += (dr ? 1 : -1) * st * 2; changed = true; }                          // fleches D-pad : a-coups
+      if(changed){ v = Math.max(mn, Math.min(mx, Math.round(v/st)*st)); if(v !== +r.value){ r.value = v; r.dispatchEvent(new Event('input', {bubbles:true})); } }
+    }
     const el = document.elementFromPoint(gpCurX, gpCurY);
-    const tgt = (el && el.closest) ? el.closest('.btn,.bindbtn,.diffbtn,input,select') : null;
+    const tgt = (el && el.closest) ? el.closest('.btn,.bindbtn,.diffbtn,.seg-btn,input,select') : null;
     if(_gpHover && _gpHover !== tgt) _gpHover.classList.remove('gp-hover');
     if(tgt){ tgt.classList.add('gp-hover'); cur.classList.add('over'); } else cur.classList.remove('over');
     _gpHover = tgt;
-    // A / Croix (index 0) = clic sur l'élément survolé (+ son de bouton)
-    if(g.buttons[0] && g.buttons[0].pressed && !_gpMenuPrev[0] && tgt){ if(typeof uiClick==='function') uiClick(); tgt.click(); }
+    // A / Croix = clic sur l'element survole (+ son). Sur un slider on n'agit PAS au clic (ajuste au stick/D-pad).
+    if(g.buttons[0] && g.buttons[0].pressed && !_gpMenuPrev[0] && tgt && !(tgt.tagName==='INPUT' && tgt.type==='range')){ if(typeof uiClick==='function') uiClick(); tgt.click(); }
   } else {
     if(cur.style.display !== 'none') cur.style.display = 'none';
     if(_gpHover){ _gpHover.classList.remove('gp-hover'); _gpHover = null; }
