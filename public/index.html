@@ -1421,26 +1421,47 @@ function spawnImpactParticles(point, normal){
     scene.add(m);
   }
 }
-// Étincelles BLEUES quand le sabre touche un ennemi (gerbe de sparks additives + flash).
+// Explosion de particules BLEUES quand le sabre touche un ENNEMI : burst radial (sphère) + gravité
+// (appliquée dans updateImpactEffects) + flash lumineux. "Explosif".
 function spawnSaberSparks(point){
   const col = (GAMECFG.MELEE && GAMECFG.MELEE.blade_color) || 0x36e3ff;
-  const N = (GAMECFG.MELEE && GAMECFG.MELEE.spark_count) || 20;
+  const N = (GAMECFG.MELEE && GAMECFG.MELEE.spark_count) || 28;
   for(let i=0;i<N;i++){
-    const s = 0.012 + Math.random()*0.024;
+    const s = 0.012 + Math.random()*0.03;
     const mat = new THREE.MeshBasicMaterial({ color: col, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false });
     mat.toneMapped = false;
     const m = new THREE.Mesh(new THREE.BoxGeometry(s,s,s), mat);
     m.position.copy(point);
-    const v = new THREE.Vector3(Math.random()-.5, (Math.random()-.25), Math.random()-.5).normalize()
-      .multiplyScalar(2.6 + Math.random()*4.2);
-    v.y += 1.3; // gerbe vers le haut
-    impactParticles.push({ mesh:m, vel:v, life:0.26 + Math.random()*0.18, fade:0.44 });
+    // burst RADIAL omnidirectionnel (explosion) + léger biais vers le haut → gravité les fait retomber
+    const v = new THREE.Vector3(Math.random()*2-1, Math.random()*2-1, Math.random()*2-1).normalize()
+      .multiplyScalar(3.6 + Math.random()*5.6);
+    v.y += 1.6;
+    impactParticles.push({ mesh:m, vel:v, life:0.30 + Math.random()*0.22, fade:0.5 });
     scene.add(m);
   }
-  // flash lumineux bref à l'impact
-  const light = new THREE.PointLight(col, 7, 4.5);
-  light.position.copy(point); scene.add(light);
-  impactParticles.push({ light, life:0.14 });
+  const light = new THREE.PointLight(col, 8, 5); light.position.copy(point); scene.add(light);
+  impactParticles.push({ light, life:0.16 });
+}
+// Explosion de SPARKS JAUNES quand le sabre tape une SURFACE (mur/collider) : gerbe qui rebondit
+// le long de la normale + grosse dispersion + gravité + flash jaune. Sparks légèrement allongées.
+function spawnSaberWallSparks(point, normal){
+  const col = (GAMECFG.MELEE && GAMECFG.MELEE.wall_spark_color) || 0xffcf4a;
+  const n = (normal && normal.lengthSq() > 0.01) ? normal.clone().normalize() : new THREE.Vector3(0,1,0);
+  const N = (GAMECFG.MELEE && GAMECFG.MELEE.wall_spark_count) || 24;
+  for(let i=0;i<N;i++){
+    const s = 0.01 + Math.random()*0.022;
+    const mat = new THREE.MeshBasicMaterial({ color: col, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false });
+    mat.toneMapped = false;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s*1.7), mat); // un peu allongées = étincelles
+    m.position.copy(point);
+    // base = rebond sur la normale du mur, + forte dispersion latérale + biais haut → gerbe d'étincelles
+    const v = n.clone().multiplyScalar(2.4 + Math.random()*3.0);
+    v.x += (Math.random()-.5)*5.5; v.y += Math.random()*2.4; v.z += (Math.random()-.5)*5.5;
+    impactParticles.push({ mesh:m, vel:v, life:0.26 + Math.random()*0.22, fade:0.5 });
+    scene.add(m);
+  }
+  const light = new THREE.PointLight(col, 5, 4); light.position.copy(point); scene.add(light);
+  impactParticles.push({ light, life:0.12 });
 }
 function updateImpactEffects(dt){
   for(let i=impactParticles.length-1;i>=0;i--){
@@ -2912,6 +2933,16 @@ function meleeImpact(){
     melee.flare = 1;
     saberHitSound(!!sw.finisher);
     me.dashCD = 0;   // toucher un ennemi au sabre RECHARGE instantanément le dash (Bonus d'attaque)
+  } else {
+    // WHIFF : si le sabre tape une SURFACE (mur/collider) dans la portée → explosion de sparks JAUNES
+    const o2 = camera.position, d2 = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+    mapRay.set(o2, d2); mapRay.far = (S.range ?? 3.2);
+    const wh = mapRay.intersectObjects(mapMeshes, false);
+    if(wh.length){
+      const h0 = wh[0];
+      const nrm = h0.face ? h0.face.normal.clone().transformDirection(h0.object.matrixWorld) : new THREE.Vector3(0,1,0);
+      spawnSaberWallSparks(h0.point, nrm);
+    }
   }
   if(localBotMode){ localBotMelee(); }                     // mode entraînement : coup de sabre LOCAL
   else if(ws && ws.readyState===1){
@@ -3808,7 +3839,71 @@ function maybeStartMenuMusic(){
   startMenuMusic();
 }
 // Entrée effective en partie : son de spawn + coupe la musique de menu.
-function onEnterGameAudio(){ menuMusicWanted = false; stopMenuMusic(); playSfx('spawn'); }
+function onEnterGameAudio(){ menuMusicWanted = false; stopMenuMusic(); playSfx('spawn'); spawnSimOverlay(); }
+/* ===== Overlay de spawn facon "shader lines" (entree dans la simulation) : 2s + fade out ===== */
+let spawnFxActive = false;
+function spawnSimOverlay(){
+  const CFG = GAMECFG.SPAWN_OVERLAY || {};
+  if(CFG.ENABLED === false || spawnFxActive) return;
+  try{
+    spawnFxActive = true;
+    const dur = (CFG.duration ?? 2.0) * 1000;
+    const fade = Math.min((CFG.fade ?? 0.6) * 1000, dur);
+    const cont = document.createElement('div');
+    cont.style.cssText = 'position:fixed;inset:0;z-index:80;pointer-events:none;opacity:1;background:#000';
+    document.body.appendChild(cont);
+    const camera = new THREE.Camera();
+    const scene = new THREE.Scene();
+    const geo = new THREE.PlaneGeometry(2, 2);
+    const uniforms = { time:{ value:1.0 }, resolution:{ value:new THREE.Vector2() }, intensity:{ value:(CFG.intensity ?? 1.0) } };
+    const frag = [
+      'precision highp float;',
+      'uniform vec2 resolution; uniform float time; uniform float intensity;',
+      'float random(in float x){ return fract(sin(x)*1e4); }',
+      'void main(void){',
+      '  vec2 uv = (gl_FragCoord.xy*2.0 - resolution.xy)/min(resolution.x, resolution.y);',
+      '  vec2 fMosaicScal = vec2(4.0, 2.0);',
+      '  vec2 vScreenSize = vec2(256.0, 256.0);',
+      '  uv.x = floor(uv.x*vScreenSize.x/fMosaicScal.x)/(vScreenSize.x/fMosaicScal.x);',
+      '  uv.y = floor(uv.y*vScreenSize.y/fMosaicScal.y)/(vScreenSize.y/fMosaicScal.y);',
+      '  float t = time*0.06 + random(uv.x)*0.4;',
+      '  float lineWidth = 0.0008;',
+      '  vec3 color = vec3(0.0);',
+      '  for(int j=0;j<3;j++){',
+      '    for(int i=0;i<5;i++){',
+      '      color[j] += lineWidth*float(i*i)/abs(fract(t - 0.01*float(j)+float(i)*0.01)*1.0 - length(uv));',
+      '    }',
+      '  }',
+      '  gl_FragColor = vec4(color[2], color[1], color[0], 1.0) * intensity;',
+      '}'
+    ].join('\n');
+    const vert = 'void main(){ gl_Position = vec4(position, 1.0); }';
+    const mat = new THREE.ShaderMaterial({ uniforms, vertexShader:vert, fragmentShader:frag });
+    scene.add(new THREE.Mesh(geo, mat));
+    const renderer = new THREE.WebGLRenderer({ antialias:false, alpha:false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    cont.appendChild(renderer.domElement);
+    const resize = ()=>{ renderer.setSize(window.innerWidth, window.innerHeight); uniforms.resolution.value.set(renderer.domElement.width, renderer.domElement.height); };
+    resize(); window.addEventListener('resize', resize);
+    const t0 = performance.now(); let raf = 0;
+    const cleanup = ()=>{
+      cancelAnimationFrame(raf); window.removeEventListener('resize', resize);
+      try{ geo.dispose(); mat.dispose(); renderer.dispose(); }catch(e){}
+      try{ const gl = renderer.getContext(); const lc = gl && gl.getExtension('WEBGL_lose_context'); lc && lc.loseContext(); }catch(e){}
+      cont.remove(); spawnFxActive = false;
+    };
+    const loop = ()=>{
+      const el = performance.now() - t0;
+      uniforms.time.value += 0.05;
+      renderer.render(scene, camera);
+      const fadeStart = dur - fade;
+      cont.style.opacity = el < fadeStart ? '1' : String(Math.max(0, 1 - (el - fadeStart)/fade));
+      if(el >= dur){ cleanup(); return; }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+  }catch(e){ console.warn('[spawnSimOverlay]', e); spawnFxActive = false; }
+}
 function unlockMenuAudio(){ audioUnlocked = true; ensureAudioCtx(); maybeStartMenuMusic(); }
 addEventListener('pointerdown', unlockMenuAudio, { once:true });
 addEventListener('keydown', unlockMenuAudio, { once:true });

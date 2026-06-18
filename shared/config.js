@@ -609,6 +609,13 @@
     },
     SFX_VOLUME: 0.6,
     MENU_MUSIC_VOLUME: 0.5,   // volume de la musique du menu (boucle accueil/lobby)
+    // ===== Overlay "spawn dans la simulation" (shader lines) a l'entree en partie =====
+    SPAWN_OVERLAY: {
+      ENABLED: true,
+      duration: 2.0,   // duree totale de l'overlay (s)
+      fade: 0.6,       // duree du fondu de sortie en fin (s)
+      intensity: 1.0,  // luminosite des lignes
+    },
     SHOT_PITCH_VAR: 0.18,
     // ===== Volume PAR SON (multiplicateur individuel) =====
     // Chaque valeur multiplie le volume de CE son uniquement : 1 = inchangé, 0.5 = moitié, 2 = double.
