@@ -506,10 +506,10 @@
       SLOWDOWN_MAX: 0.45,
       // Force du magnétisme rotationnel, en fraction de STRENGTH. 0 = slowdown pur (zéro rotation).
       // Garde-le bas pour rester "PC" : la rotation est ce qui se sent le plus "auto-aim".
-      ROTATION: 0.8,
+      ROTATION: 0.5,
       // Taille de la bulle autour de l'ennemi, en DEGRÉS. Le réticule doit entrer dedans pour que
       // l'assist s'active. Plus grand = s'accroche de plus loin. (Avant : ~8° en dur.)
-      BUBBLE_DEG: 8,
+      BUBBLE_DEG: 0,
       // Renforcement sur les BOTS (mode entraînement) : ils sont locaux, on peut être plus généreux
       // pour que l'assist se sente autant que sur un vrai adversaire. ×bulle et ×force.
       BOT_BUBBLE_MULT: 1,
