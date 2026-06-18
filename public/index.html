@@ -794,6 +794,7 @@ let mouseDX = 0, mouseDY = 0;
 let inputDevice = 'kb';   // device courant pour l'affichage des touches (mis a jour en live)
 addEventListener('keydown', e=>{ keysDown.add(e.code); inputDevice='kb'; if(listening) captureKb(e.code);
   if(e.code==='KeyK' && !listening){ DEBUG_HITBOX = !DEBUG_HITBOX; if(!DEBUG_HITBOX) hitboxPool.forEach(m=>{ m.visible=false; }); }
+  if(e.code==='KeyJ' && !listening){ ANIM_DEBUG = !ANIM_DEBUG; const _el=document.getElementById('animdebug'); if(_el && !ANIM_DEBUG) _el.style.display='none'; console.log('[ANIM] debug overlay', ANIM_DEBUG?'ON':'OFF'); }
 });
 let DEBUG_HITBOX = false, hitboxMesh = null; let hitboxPool = [];
 addEventListener('keyup', e=>keysDown.delete(e.code));
@@ -4267,6 +4268,7 @@ function onSnapshot(m){
     const b = ensureBot(s, entColor(s));
     b.buf.push({ at: m.ts, p: e.p, yaw: e.yaw, pitch:(e.pitch||0), anim: e.anim, dead: e.dead });
     if(b.buf.length > 45) b.buf.shift();
+    if(e.w != null) b.netW = e.w|0;   // arme reseau (3e personne) ; absent -> defaut R69 (0)
     b.dead = !!e.dead;
     if(Number.isFinite(e.hp)) b.hp = e.hp;   // hp/sh autoritaires (barre de vie)
     if(Number.isFinite(e.sh)) b.sh = e.sh;
@@ -5415,6 +5417,28 @@ function interpBuf(buf, out){
   out.anim = b.anim || {};
   return out;
 }
+// Enrichit l'anim d'un REMOTE reseau (joueur distant) pour l'anim en couches : vitesse locale
+// (deduite du delta de position interpole), grounded, arme, visee. Lisse vx/vz pour ne pas
+// jitter au tickrate. b doit avoir .pos (a jour), .yaw, .anim (reseau), .netW (arme reseau).
+const _enrTmpPos = new THREE.Vector3();
+function enrichNetAnim(b, dt){
+  if(!b || !b.anim) return;
+  const bodyYaw = (b.yaw || 0) + Math.PI;
+  const sB = Math.sin(bodyYaw), cB = Math.cos(bodyYaw);
+  // vitesse monde = delta de position interpolee / dt
+  let wvx = 0, wvz = 0;
+  if(b._velPos){ wvx = (b.pos.x - b._velPos.x) / Math.max(1e-4, dt); wvz = (b.pos.z - b._velPos.z) / Math.max(1e-4, dt); }
+  else b._velPos = new THREE.Vector3();
+  b._velPos.set(b.pos.x, b.pos.y, b.pos.z);
+  const vzL = wvx*sB + wvz*cB, vxL = wvx*cB - wvz*sB;
+  // lissage (le tickrate ~30Hz rend la vitesse bruyante)
+  b._vxS = (b._vxS != null ? b._vxS : vxL) + (vxL - (b._vxS != null ? b._vxS : vxL)) * Math.min(1, dt*10);
+  b._vzS = (b._vzS != null ? b._vzS : vzL) + (vzL - (b._vzS != null ? b._vzS : vzL)) * Math.min(1, dt*10);
+  b.anim.vx = b._vxS; b.anim.vz = b._vzS;
+  b.anim.grounded = !(b.anim.a);                 // 'a' = en l'air (inverse de grounded)
+  b.anim.wi = (b.netW != null ? b.netW : 0);     // arme reseau (champ 'w'), defaut R69
+  b.anim.aimYaw = bodyYaw;                        // remote : la visee = le facing reseau
+}
 // Entrée en jeu / promotion spectateur->joueur / relance auto après victoire.
 function onJoinGame(m){
   if(m.names){ seatNames = []; for(const k in m.names) seatNames[+k] = m.names[k]; }
@@ -5876,6 +5900,7 @@ function updateLocalBots(dt){
     const groundY = (MAP.groundHeightAt ? MAP.groundHeightAt(nx, nz) : 0);
     if(ny <= groundY){ ny = groundY; ai.vy = 0; ai.air = false; }
 
+    const _oldx = b.pos.x, _oldz = b.pos.z;
     b.pos.x = nx; b.pos.z = nz; b.pos.y = ny; b.buf.length = 0;
     if(b.knockX || b.knockZ){ const _kd = Math.exp(-dt*(LBOT.knock_decay ?? 6)); b.knockX *= _kd; b.knockZ *= _kd; if(Math.abs(b.knockX)+Math.abs(b.knockZ) < 0.05){ b.knockX = 0; b.knockZ = 0; } }
     { const _dy = (me.pos.y||0)+1.0 - ((b.pos.y||0)+1.5); b.pitch = Math.atan2(_dy, distP); }
@@ -5883,6 +5908,18 @@ function updateLocalBots(dt){
     b.anim.m = realMove > 0.002 ? (run ? 0.9 : 0.5) : 0;
     b.anim.a = ai.air ? 1 : 0; b.anim.sl = 0; b.anim.c = 0;
     b.anim.f = (inFire && ai.reactT <= 0) ? 1 : 0;
+    // --- Anim en couches : vitesse LOCALE (repere du corps), grounded, arme, visee ---
+    const _bodyYaw = b.yaw + Math.PI;                 // meme facing que le rendu (root.rotation.y)
+    const _sB = Math.sin(_bodyYaw), _cB = Math.cos(_bodyYaw);
+    const _wvx = (nx - _oldx) / Math.max(1e-4, dt), _wvz = (nz - _oldz) / Math.max(1e-4, dt); // vitesse monde (m/s)
+    const _vzL = _wvx*_sB + _wvz*_cB;                 // avant (+)
+    const _vxL = _wvx*_cB - _wvz*_sB;                 // droite (+)
+    // lissage leger (evite le jitter de collision) ; init si absent
+    b.anim.vx = (b.anim.vx != null ? b.anim.vx : _vxL) + (_vxL - (b.anim.vx != null ? b.anim.vx : _vxL)) * Math.min(1, dt*14);
+    b.anim.vz = (b.anim.vz != null ? b.anim.vz : _vzL) + (_vzL - (b.anim.vz != null ? b.anim.vz : _vzL)) * Math.min(1, dt*14);
+    b.anim.grounded = !ai.air;
+    b.anim.wi = (b.weaponIdx != null ? b.weaponIdx : 0);   // bots: pas de champ arme -> defaut R69 (0)
+    b.anim.aimYaw = Math.atan2(dxp, dzp);              // visee = direction bot -> joueur
   }
 }
 function applyLocalBotDamage(id, b, dmg, head, melee){
@@ -8476,6 +8513,9 @@ function animate(){
         sol.root.position.copy(specTmp.pos);
         sol.root.rotation.set(0, specTmp.yaw + Math.PI, 0);
         specTmp.anim.pitch = specTmp.pitch || 0;
+        // enrichit l'anim 3e personne (vitesse/visee/arme) — etat de lissage porte par 'sol'
+        sol.pos = specTmp.pos; sol.yaw = specTmp.yaw; sol.anim = specTmp.anim;
+        enrichNetAnim(sol, dt);
         animateSoldier(sol, specTmp.anim, dt, performance.now()*0.001);
       }
     }
@@ -8500,6 +8540,7 @@ function animate(){
         // perso DEBOUT : on force l'axe vertical (sinon un reste de ragdoll/anim le laisse penché)
         remote.soldier.root.rotation.set(0, remote.yaw + Math.PI, 0);
         remote.anim.pitch = remote.pitch || 0;
+        enrichNetAnim(remote, dt);   // vitesse/visee/arme 3e personne (wi par defaut 0 : pas de champ arme sur le remote 1v1)
         animateSoldier(remote.soldier, remote.anim, dt, performance.now()*0.001);
       } else if(remote.dead && remote.soldier.rigged && remote.soldier.mixer){
         remote.soldier.mixer.update(dt); // laisse jouer l'animation de mort
@@ -8516,7 +8557,8 @@ function animate(){
         else continue;
       }
       if(!b.dead && !b.soldier.ragdolling){
-        if(interpBuf(b.buf, tmp)){ b.pos.copy(tmp.pos); b.yaw = tmp.yaw; b.pitch = tmp.pitch; b.anim = tmp.anim; }
+        if(interpBuf(b.buf, tmp)){ b.pos.copy(tmp.pos); b.yaw = tmp.yaw; b.pitch = tmp.pitch; b.anim = tmp.anim;
+          enrichNetAnim(b, dt); }   // joueur RESEAU : vitesse/visee/arme deduites (local bot: buf vide -> deja enrichi)
         b.soldier.root.position.set(b.pos.x, b.pos.y, b.pos.z);
         b.soldier.root.rotation.set(0, b.yaw + Math.PI, 0);
         b.anim.pitch = b.pitch || 0;

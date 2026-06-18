@@ -101,6 +101,7 @@ function snapshotPlayers() {
       yaw: Math.round(p.yaw * 1000) / 1000,
       pitch: Math.round((p.pitch || 0) * 1000) / 1000,
       anim: p.anim, hp: p.hp, sh: p.sh, dead: p.dead ? 1 : 0,
+      w: p.weaponIdx | 0,   // arme tenue -> anim 3e personne (couches) + modele d'arme attache
     };
   }
   return o;

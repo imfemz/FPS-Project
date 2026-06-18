@@ -584,6 +584,12 @@
       // Visee haut-du-corps de l'adversaire : la colonne suit le pitch (regard haut/bas).
       // sign: -1 si ca penche a l'envers ; pitch_gain: amplitude ; bones: vertebres concernees.
       spine_aim: { enabled: true, pitch_gain: 0.65, sign: 1, axis: 'x', bones: ['Abdomen','Torso','Chest'], max: 1.3 },
+      // ===== ANIM EN COUCHES (third-person bots & remotes) =====
+      // Visee CORPS (twist procedural Hips/Abdomen/Torso vers la cible) : le perso ne tourne plus
+      // le dos en tirant. max_deg = torsion max avant que le corps pivote ; smooth = lissage.
+      body_aim: { enabled: true, max_deg: 58, smooth: 12, dist: { Hips: 0.45, Abdomen: 0.35, Torso: 0.20 } },
+      // Seuils de vitesse LOCALE (m/s) pour le choix du clip de jambes (course/marche/idle).
+      layer_anim: { run_thresh: 0.6, walk_thresh: 0.2 },
       // Saut : pose procedurale (plus de roulade). euler [x,y,z] rad par bone. sign: -1 si jambes a l'envers.
       jump_pose: { enabled: true, blend: 12, sign: 1, upperleg: [0.85, 0, 0.08], lowerleg: [-0.95, 0, 0] },
       // Accroupi : flexion procedurale des jambes (squat), MEME convention que jump_pose.
