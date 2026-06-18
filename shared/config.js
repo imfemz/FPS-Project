@@ -170,7 +170,7 @@
         name: 'R-69',
         model: '/models/R69_hands.glb',
         icon: '/textures/hud/weapon.png',
-        mag: 30, fire_rate: 0.048, reload_t: 1.9,
+        mag: 30, fire_rate: 0.078, reload_t: 1.9,
         damage_body: 13, damage_head: 19,
         spread_hip: 0.050, spread_ads: 0.002,
         recoil_mult: 1.0,
