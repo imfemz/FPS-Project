@@ -5698,7 +5698,7 @@ function updateMenuGamepad(g){
       if(changed){ v = Math.max(mn, Math.min(mx, Math.round(v/st)*st)); if(v !== +r.value){ r.value = v; r.dispatchEvent(new Event('input', {bubbles:true})); } }
     }
     const el = document.elementFromPoint(gpCurX, gpCurY);
-    const tgt = (el && el.closest) ? el.closest('.btn,.bindbtn,.diffbtn,.seg-btn,input,select') : null;
+    const tgt = (el && el.closest) ? el.closest('.btn,.bindbtn,.diffbtn,.seg-btn,.fr-btn,.fr-launch,input,select') : null;
     if(_gpHover && _gpHover !== tgt) _gpHover.classList.remove('gp-hover');
     if(tgt){ tgt.classList.add('gp-hover'); cur.classList.add('over'); } else cur.classList.remove('over');
     _gpHover = tgt;
