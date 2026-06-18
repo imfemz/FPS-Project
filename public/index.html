@@ -4067,6 +4067,11 @@ function onHit(m){
   // --- Dégâts que JE SUBIS ---
   if(m.target === myId){
     me.hp = m.hp; me.sh = m.sh; updateHPShieldUI(); triggerDamageFeedback();
+    // Touché au SABRE (multi) : étourdissement (gros camera shake) + on est REPOUSSÉ (knockback envoyé par le serveur)
+    if(m.melee){
+      meleeShake = Math.min(3.2, meleeShake + ((GAMECFG.MELEE||{}).stun_shake ?? 2.0));
+      if(m.kb && alive){ me.vel.x += m.kb[0]; me.vel.z += m.kb[1]; me.vel.y = Math.max(me.vel.y, 2.6); me.onGround = false; }
+    }
     const dEl = document.getElementById('damage');
     dEl.style.opacity=1; setTimeout(()=>dEl.style.opacity=0,230);
     // indicateur directionnel rouge vers le tireur (m.by)
@@ -4464,6 +4469,7 @@ function onBotRespawn(m){
 let localBotMode = false, localBotKills = 0;
 const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist: 12,
   separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4, spawn_sep: 15, MAX_BOTS: 8, waveMode: false, wave: 1,
+  knock_dist: 3, knock_decay: 6,   // knockback au coup de sabre : ~knock_dist mètres ; knock_decay = vitesse de retombée du recul
   ai: {
     difficulty: 'medium',     // 'easy' | 'medium' | 'hard'
     fire_range: 15,           // portee de tir des bots (m) -- ils ouvrent le feu en rafale des 15 m
@@ -4715,7 +4721,7 @@ function updateLocalBots(dt){
 
     // Horizontale + collision
     const spd = run ? (LBOT.run_speed ?? 4.6) : LBOT.speed;
-    _botTmp.set(b.pos.x + vx*spd*dt, 0, b.pos.z + vz*spd*dt);
+    _botTmp.set(b.pos.x + (vx*spd + (b.knockX||0))*dt, 0, b.pos.z + (vz*spd + (b.knockZ||0))*dt); // + recul sabre (knockback)
     collide(_botTmp, LBOT.radius ?? 0.5, b.pos.y||0);
     const brad = LBOT.radius ?? 0.5;
     for(const r of (MAP.ramps || [])){
@@ -4735,6 +4741,7 @@ function updateLocalBots(dt){
     if(ny <= groundY){ ny = groundY; ai.vy = 0; ai.air = false; }
 
     b.pos.x = nx; b.pos.z = nz; b.pos.y = ny; b.buf.length = 0;
+    if(b.knockX || b.knockZ){ const _kd = Math.exp(-dt*(LBOT.knock_decay ?? 6)); b.knockX *= _kd; b.knockZ *= _kd; if(Math.abs(b.knockX)+Math.abs(b.knockZ) < 0.05){ b.knockX = 0; b.knockZ = 0; } }
     { const _dy = (me.pos.y||0)+1.0 - ((b.pos.y||0)+1.5); b.pitch = Math.atan2(_dy, distP); }
     b.anim = b.anim || {};
     b.anim.m = realMove > 0.002 ? (run ? 0.9 : 0.5) : 0;
@@ -4748,6 +4755,14 @@ function applyLocalBotDamage(id, b, dmg, head, melee){
   if(b.sh > 0){ const a = Math.min(b.sh, rest); b.sh -= a; rest -= a; }
   if(rest > 0) b.hp -= rest;
   onBotHit({ id, dmg, head: !!head, hp: Math.max(0,b.hp), sh: Math.max(0,b.sh), melee: !!melee });
+  // Coup de SABRE : l'ennemi est REPOUSSÉ (~knock_dist m) loin du joueur. Vélocité de recul décroissante
+  // intégrée dans updateLocalBots (passe par collide → ne traverse pas les murs).
+  if(melee && b.pos){
+    const dx = b.pos.x - me.pos.x, dz = b.pos.z - me.pos.z, d = Math.hypot(dx,dz) || 1;
+    const kd = (LBOT.knock_decay ?? 6), kdist = (LBOT.knock_dist ?? 3);
+    b.knockX = (dx/d) * kdist * kd;   // v0 = distance × taux de décroissance → intègre à ~kdist mètres
+    b.knockZ = (dz/d) * kdist * kd;
+  }
   if(b.ai && b.hp > 0){ b.ai.evadeT = Math.max(b.ai.evadeT||0, 0.7); const _A=LBOT.ai||{}; const _now=performance.now();
     if(Math.random() < (_A.evade_jump_chance ?? 0.3) && !b.ai.air && _now > (b.ai._evadeJumpAt||0)){ b.ai.jumpQueued = true; b.ai._evadeJumpAt = _now + (_A.evade_jump_cd ?? 1200); }
     if(b.mv && Math.random()<0.6) b.mv.strafeDir *= -1; }

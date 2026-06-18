@@ -37,6 +37,7 @@ const CONFIG = {
     range: (GAMECFG.MELEE && GAMECFG.MELEE.range) || 3.2,
     cos: Math.cos((((GAMECFG.MELEE && GAMECFG.MELEE.cone_deg) || 75) * Math.PI / 180) / 2),
     interval: (GAMECFG.MELEE && GAMECFG.MELEE.interval_ms) || 240,
+    knockback: (GAMECFG.MELEE && GAMECFG.MELEE.knockback) || 11, // impulsion (m/s) de recul envoyée à la victime touchée au sabre
   },
   RESPAWN_MS: 3200,        // mort -> deathcam courte -> respawn
   RESET_MS: 6000,          // durée de l'écran de victoire avant relance auto
@@ -441,7 +442,12 @@ wss.on('connection', (ws) => {
       }
       if (!best) return;
       applyDamage(best.tgt, dmg);
-      broadcast({ t: 'hit', target: best.seat, by: c.seat, dmg, head: false, melee: true,
+      // Knockback : la victime est repoussée dans la direction du coup (horizontale). Le mouvement
+      // étant client-autoritatif, on envoie l'impulsion à la victime qui l'applique elle-même à sa vélocité.
+      const _hkl = Math.hypot(dir[0], dir[2]) || 1;
+      const _KBF = CONFIG.MELEE.knockback;
+      const kb = [ (dir[0] / _hkl) * _KBF, (dir[2] / _hkl) * _KBF ];
+      broadcast({ t: 'hit', target: best.seat, by: c.seat, dmg, head: false, melee: true, kb,
         hp: Math.max(0, best.tgt.hp), sh: Math.max(0, best.tgt.sh) });
       if (best.tgt.hp <= 0) onKill(best.seat, c.seat, false);
       return;
