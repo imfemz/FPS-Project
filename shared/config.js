@@ -191,7 +191,7 @@
         name: 'WINGMAN',
         model: '/models/wingman_hand.glb',
         icon: '/textures/hud/wingman.png',
-        mag: 5, fire_rate: 0.445, reload_t: 1.04,
+        mag: 3, fire_rate: 0.545, reload_t: 1.04,
         damage_body: 70, damage_head: 175,
         spread_hip: 0.028, spread_ads: 0.0003,
         recoil_mult: 1.4,
