@@ -3150,7 +3150,7 @@ function applyOverchargeDamage(){
   return victims.length > 0;
 }
 function launchOvercharge(){
-  if(overActive || !alive) return;
+  if(overActive || !alive || !isSaber()) return;   // securite : l'attaque speciale ne part QUE sabre en main
   overActive = true;            // NB : on ne consomme PAS au lancer — seulement si on TOUCHE (cf. applyOverchargeDamage)
   const O = overConfig(), cp = Math.cos(me.pitch);
   overState.dir.set(-Math.sin(me.yaw)*cp, Math.sin(me.pitch), -Math.cos(me.yaw)*cp).normalize();
