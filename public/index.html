@@ -214,8 +214,54 @@
             mask-image:radial-gradient(ellipse at 50% 45%, #000 36%, transparent 90%);
     animation:fallPattern 90s linear infinite}
   /* fond video boucle — ECRAN D ACCUEIL uniquement : flou leger + blancs assombris (lisibilite) */
-  #menu .menu-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-3;pointer-events:none;filter:blur(3px) brightness(.6) contrast(1.05) saturate(1.04);transform:scale(1.08)}
+  #menu .menu-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-3;pointer-events:none;filter:blur(3px) brightness(.6) contrast(1.05) saturate(1.04);transform:scale(1.08);opacity:.7}
   #menu .menu-scrim{position:absolute;inset:0;z-index:-2;pointer-events:none;background:radial-gradient(ellipse at 50% 44%, rgba(7,8,10,.40) 0%, rgba(7,8,10,.66) 100%)}
+  /* ===== MENU FRACTURE — refonte minimaliste (logo, apercu 3D, modes, tiroir) ===== */
+  .fr-menu{position:relative;z-index:1;width:100%;max-width:1180px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:32px;padding:0 28px}
+  .fr-top{display:flex;flex-direction:column;align-items:center;gap:4px;animation:frFade .8s ease both}
+  .fr-sub{font-family:var(--mono);font-size:12px;letter-spacing:7px;color:var(--txt-faint);text-transform:uppercase}
+  .fr-logo{width:min(440px,60vw);height:auto;filter:drop-shadow(0 6px 26px rgba(0,0,0,.6));animation:frLogo 6s ease-in-out infinite}
+  @keyframes frLogo{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+  @keyframes frFade{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+  .fr-main{width:100%;display:grid;grid-template-columns:1fr 360px;gap:48px;align-items:center;justify-items:center}
+  @media(max-width:900px){.fr-main{grid-template-columns:1fr;gap:24px}.fr-preview{order:2}}
+  .fr-nav{width:100%;max-width:360px;display:flex;flex-direction:column;gap:14px}
+  .fr-nav>*{animation:frBtnIn .55s cubic-bezier(.2,.8,.2,1) both}
+  .fr-nav>*:nth-child(1){animation-delay:.04s}
+  .fr-nav>*:nth-child(2){animation-delay:.11s}
+  .fr-nav>*:nth-child(3){animation-delay:.18s}
+  .fr-nav>*:nth-child(4){animation-delay:.25s}
+  @keyframes frBtnIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+  .fr-btn{position:relative;width:100%;padding:17px 24px;background:rgba(255,255,255,.025);border:1px solid var(--brd-strong);border-radius:11px;color:var(--txt-dim);font:600 16px/1 var(--font);letter-spacing:2.5px;text-transform:uppercase;cursor:pointer;text-align:center;transition:color .18s,border-color .18s,background .18s,transform .14s,box-shadow .25s}
+  .fr-btn:hover{color:var(--txt);border-color:rgba(255,255,255,.45);background:rgba(255,255,255,.06);transform:translateY(-1px)}
+  .fr-btn:active{transform:translateY(0)}
+  .fr-btn.sel{color:#fff;border-color:#fff;background:rgba(255,255,255,.07);box-shadow:0 0 0 1px rgba(255,255,255,.22),0 10px 34px rgba(0,0,0,.45)}
+  .fr-pseudo{position:relative}
+  .fr-pseudo-btn{display:flex;align-items:center;justify-content:center;gap:10px}
+  .fr-pseudo-btn .fr-k{transition:font-size .18s,opacity .18s}
+  .fr-pseudo-btn.has .fr-k{font-size:11px;letter-spacing:2px;opacity:.55}
+  .fr-pseudo-btn .fr-v{color:#fff;font-weight:700;letter-spacing:1px;text-transform:none}
+  .fr-pseudo-input{width:100%;padding:17px 24px;background:rgba(255,255,255,.06);border:1px solid var(--accent);border-radius:11px;color:#fff;font:600 16px/1 var(--font);letter-spacing:1px;text-align:center;outline:none;box-shadow:0 0 0 3px rgba(92,224,255,.12)}
+  .fr-preview{width:100%;max-width:560px;opacity:0;transform:translateX(-16px) scale(.99);transition:opacity .4s ease,transform .45s cubic-bezier(.2,.8,.2,1);pointer-events:none}
+  .fr-preview.show{opacity:1;transform:none;pointer-events:auto}
+  .fr-screen{position:relative;width:100%;aspect-ratio:16/9;border:1px solid var(--brd-strong);border-radius:13px;overflow:hidden;background:#08090c;box-shadow:var(--shadow)}
+  .fr-canvas{position:absolute;inset:0}
+  .fr-canvas canvas{display:block;width:100%!important;height:100%!important}
+  .fr-live{position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:6px;font:700 11px/1 var(--mono);letter-spacing:2px;color:#fff;text-shadow:0 1px 4px #000}
+  .fr-live::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red);animation:frBlink 1.4s ease-in-out infinite}
+  @keyframes frBlink{0%,100%{opacity:1}50%{opacity:.25}}
+  .fr-rules{margin:16px 2px 0;color:var(--txt-dim);font-size:14px;line-height:1.65;text-align:left}
+  .fr-rules b{color:var(--txt)}
+  .fr-launch{width:100%;margin-top:16px;padding:16px;background:var(--txt);color:#0a0a0b;border:none;border-radius:11px;font:800 16px/1 var(--font);letter-spacing:4px;text-transform:uppercase;cursor:pointer;transition:transform .12s ease,box-shadow .25s}
+  .fr-launch:hover{transform:translateY(-2px);box-shadow:0 12px 34px rgba(92,224,255,.22)}
+  .fr-launch:active{transform:translateY(0)}
+  .fr-drawer{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;padding:0 16px 24px;transform:translateY(150%);opacity:0;transition:transform .45s cubic-bezier(.2,.85,.2,1),opacity .35s;pointer-events:none;z-index:3}
+  .fr-drawer.show{transform:none;opacity:1;pointer-events:auto}
+  .fr-drawer-inner{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;background:var(--panel-2);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--brd-strong);border-radius:14px;padding:11px 18px;box-shadow:var(--shadow)}
+  .fr-drawer-lbl{font:600 13px/1.3 var(--font);letter-spacing:1px;color:var(--txt-dim);text-transform:uppercase}
+  .fr-drawer-lbl b{color:var(--txt)}
+  .fr-seg{display:flex;gap:8px}
+  .fr-legacy{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);left:-9999px;pointer-events:none}
   @keyframes fallPattern{
     from{background-position:0 0,0 0,0 0,0 0, 0 0,0 0,0 0,0 0}
     to{background-position:0 6400px,0 6240px,0 6440px,0 6400px, 0 6400px,0 6240px,0 6440px,0 6400px}}
@@ -372,21 +418,53 @@
   <div class="falling-bg"></div>
   <video class="menu-video" autoplay loop muted playsinline preload="auto"><source src="/menu_bg.mp4" type="video/mp4"></video>
   <div class="menu-scrim"></div>
-  <div style="font-family:var(--mono);font-size:13px;letter-spacing:6px;color:var(--txt-faint);margin-bottom:16px">FEMZ FPS</div>
-  <h1 class="liquid-title">FPS Movement Prototype<span class="tp-sub">by Femz</span></h1>
-  <p style="max-width:480px">Mêlée générale jusqu'à <b style="color:var(--txt)">6 joueurs</b>. Premier à <b style="color:var(--txt)">10 éliminations</b>.<br>
-  Mouvement rapide : slide, slide jump, wall bounce, grimpe, superglide.</p>
-  <input class="pseudoinput" id="pseudo" maxlength="16" placeholder="Votre pseudo"><br>
-  <button class="btn" id="playbtn">Mêlée Générale</button>
-  <button class="btn ghost" id="botbtnmenu">Mode Bots</button>
-  <div class="diffrow">Difficulté bots :
-    <button class="diffbtn" data-diff="easy">Easy</button>
-    <button class="diffbtn" data-diff="medium">Medium</button>
-    <button class="diffbtn" data-diff="hard">Hard</button>
-    <button class="diffbtn" data-diff="insane">Insane</button>
+
+  <div class="fr-menu">
+    <header class="fr-top">
+      <div class="fr-sub">Game Prototype — by Femz</div>
+      <img class="fr-logo" src="/menu_logo.png" alt="FRACTURE">
+    </header>
+
+    <div class="fr-main">
+      <section class="fr-preview" id="frPreview">
+        <div class="fr-screen"><div class="fr-canvas" id="menuPreview"></div><span class="fr-live">LIVE</span></div>
+        <p class="fr-rules" id="frRules"></p>
+        <button class="fr-launch" id="menuLaunch">Lancer</button>
+      </section>
+
+      <nav class="fr-nav">
+        <div class="fr-pseudo" id="frPseudoWrap">
+          <button class="fr-btn fr-pseudo-btn" id="frPseudoBtn"><span class="fr-k">Pseudo</span><span class="fr-v" id="frPseudoVal"></span></button>
+          <input class="fr-pseudo-input" id="pseudo" maxlength="16" placeholder="Votre pseudo" style="display:none">
+        </div>
+        <button class="fr-btn fr-mode" id="mode-melee" data-mode="melee">Mêlée Général</button>
+        <button class="fr-btn" id="optbtn">Options</button>
+        <button class="fr-btn fr-mode" id="mode-bots" data-mode="bots">Entraînement</button>
+      </nav>
+    </div>
+
+    <div class="fr-drawer" id="frDrawer">
+      <div class="fr-drawer-inner">
+        <div class="fr-drawer-row" id="frDrawerBots">
+          <span class="fr-drawer-lbl">Difficulté bots</span>
+          <div class="fr-seg">
+            <button class="diffbtn" data-diff="easy">Easy</button>
+            <button class="diffbtn" data-diff="medium">Medium</button>
+            <button class="diffbtn" data-diff="hard">Hard</button>
+            <button class="diffbtn" data-diff="insane">Insane</button>
+          </div>
+        </div>
+        <div class="fr-drawer-row" id="frDrawerMelee" style="display:none">
+          <span class="fr-drawer-lbl">Mêlée en ligne · jusqu'à <b>6 joueurs</b> · premier à <b>10 éliminations</b></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="fr-legacy" aria-hidden="true">
+      <button class="btn" id="playbtn">Mêlée Générale</button>
+      <button class="btn ghost" id="botbtnmenu">Mode Bots</button>
+    </div>
   </div>
-  <button class="btn ghost" id="optbtn">Options</button>
-  <p style="margin-top:16px;font-size:14px;color:var(--txt-faint);max-width:520px">Au-delà de 6 joueurs vous êtes spectateur, et entrez automatiquement dès qu'une place se libère.<br>Le <b style="color:var(--txt-dim)">Mode Bots</b> se joue hors-ligne contre des bots.</p>
 </div>
 
 <div class="screen view-kb" id="options">
@@ -5110,9 +5188,9 @@ function killFeed(txt){
 }
 
 /* ---------- Écrans ---------- */
-function show(id){ document.getElementById(id).classList.add('show'); }
+function show(id){ document.getElementById(id).classList.add('show'); if(id==='menu'&&window.__frPvRestore)window.__frPvRestore(); }
 function hide(id){ document.getElementById(id).classList.remove('show'); }
-function hideAll(){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('show')); document.getElementById('hud').style.display='none'; }
+function hideAll(){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('show')); document.getElementById('hud').style.display='none'; if(window.__frPvStop)window.__frPvStop(); }
 function toMenu(msg){
   stopSpectate();
   clearBots();
@@ -5176,6 +5254,70 @@ document.getElementById('botbtnmenu').onclick = ()=>{
   const refresh = ()=> btns.forEach(b=> b.classList.toggle('sel', b.dataset.diff === LBOT.ai.difficulty));
   btns.forEach(b=> b.onclick = ()=>{ LBOT.ai.difficulty = b.dataset.diff; localStorage.setItem('nc_botdiff', b.dataset.diff); refresh(); });
   refresh();
+})();
+// ===== MENU FRACTURE : apercu 3D live + selection de mode + pseudo editable =====
+(function initFractureMenu(){
+  var RULES={
+    melee:"<b>Mêlée générale</b> jusqu'à <b>6 joueurs</b>. Premier à <b>10 éliminations</b>.<br>Mouvement rapide : slide, slide jump, wall bounce, grimpe, superglide.",
+    bots:"<b>Entraînement</b> hors-ligne contre des bots.<br>Choisis la difficulté (Easy → Insane). Idéal pour t'échauffer et tester le mouvement."
+  };
+  var mode=null, $=function(id){return document.getElementById(id);};
+  var pv=null;
+  var ANGLES={
+    melee:{px:36,py:27,pz:42,lx:0,ly:4,lz:0,orbit:0.045,fov:48},
+    bots:{px:-7,py:12,pz:33,lx:0,ly:3,lz:-6,orbit:0.06,fov:52}
+  };
+  function pvInit(){
+    if(pv||typeof scene==='undefined'||!scene) return;
+    var host=$('menuPreview'); if(!host) return;
+    var r=new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:'low-power'});
+    r.setPixelRatio(Math.min(devicePixelRatio,2));
+    try{r.outputColorSpace=THREE.SRGBColorSpace;r.toneMapping=THREE.ACESFilmicToneMapping;r.toneMappingExposure=((GAMECFG.GRAPHICS&&GAMECFG.GRAPHICS.exposure)||1.05);}catch(e){}
+    r.shadowMap.enabled=false;
+    host.appendChild(r.domElement);
+    pv={r:r,cam:new THREE.PerspectiveCamera(50,16/9,0.05,400),host:host,t:0,running:false,raf:0};
+    addEventListener('resize',pvResize);
+  }
+  function pvResize(){ if(!pv)return; var e=pv.host,w=Math.max(2,e.clientWidth||640),h=Math.max(2,e.clientHeight||360); pv.r.setSize(w,h,false); pv.cam.aspect=w/h; pv.cam.updateProjectionMatrix(); }
+  function pvStart(){
+    pvInit(); if(!pv||pv.running||!scene) return; pvResize(); pv.running=true; var last=performance.now();
+    (function loop(){
+      if(!pv||!pv.running) return; pv.raf=requestAnimationFrame(loop);
+      var now=performance.now(),dt=Math.min(.05,(now-last)/1000); last=now; pv.t+=dt;
+      var a=ANGLES[mode]||ANGLES.melee, ang=pv.t*a.orbit, ca=Math.cos(ang),sa=Math.sin(ang);
+      pv.cam.position.set(a.px*ca-a.pz*sa,a.py,a.px*sa+a.pz*ca);
+      pv.cam.fov=a.fov; pv.cam.updateProjectionMatrix(); pv.cam.lookAt(a.lx,a.ly,a.lz);
+      try{pv.r.render(scene,pv.cam);}catch(e){pv.running=false;}
+    })();
+  }
+  function pvStop(){ if(pv){pv.running=false; if(pv.raf)cancelAnimationFrame(pv.raf);} }
+  function pvDispose(){ pvStop(); if(pv){try{pv.r.dispose();pv.r.domElement.remove();}catch(e){} pv=null;} }
+  window.__frPvStop=pvStop; window.__frPvRestore=function(){ if(mode) pvStart(); };
+
+  var pBtn=$('frPseudoBtn'),pInp=$('pseudo'),pVal=$('frPseudoVal');
+  function pSync(){ if(pVal)pVal.textContent=myName||''; if(pBtn)pBtn.classList.toggle('has',!!myName); }
+  if(pBtn)pBtn.onclick=function(){ pBtn.style.display='none'; pInp.style.display=''; pInp.value=myName||''; pInp.focus(); try{pInp.select();}catch(e){} };
+  function pCommit(){ myName=(pInp.value||'').trim().slice(0,16); if(myName)localStorage.setItem('nc_pseudo',myName); pInp.style.display='none'; if(pBtn)pBtn.style.display=''; pSync(); }
+  if(pInp){ pInp.addEventListener('blur',pCommit); pInp.addEventListener('keydown',function(e){ if(e.key==='Enter'){e.preventDefault();pInp.blur();} }); }
+  pSync();
+
+  function select(m){
+    mode=m;
+    $('mode-melee').classList.toggle('sel',m==='melee');
+    $('mode-bots').classList.toggle('sel',m==='bots');
+    $('frRules').innerHTML=RULES[m]||'';
+    $('frDrawerBots').style.display=(m==='bots')?'':'none';
+    $('frDrawerMelee').style.display=(m==='melee')?'':'none';
+    $('frPreview').classList.add('show');
+    $('frDrawer').classList.add('show');
+    if(pv)pv.t=0; pvStart();
+  }
+  var mM=$('mode-melee'),mB=$('mode-bots');
+  if(mM)mM.onclick=function(){select('melee');};
+  if(mB)mB.onclick=function(){select('bots');};
+
+  var L=$('menuLaunch');
+  if(L)L.onclick=function(){ if(!mode)return; pvDispose(); if(mode==='melee'){L.textContent='Connexion…';$('playbtn').click();} else {$('botbtnmenu').click();} };
 })();
 // ===== Navigation MANETTE des menus : petit curseur blanc (stick gauche) + bouton OPTIONS = Échap =====
 let gpCurX = innerWidth/2, gpCurY = innerHeight/2, _gpMenuPrev = [], _gpHover = null;
