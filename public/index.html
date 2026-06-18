@@ -7155,7 +7155,9 @@ function animate(){
   // cible pourtant centree dans le viseur.
   if(localBotMode) updateLocalBots(dt);   // IA des bots d'entrainement -> b.pos a jour
   else if(!spec.active && remote.exists && remote.buf && remote.buf.length >= 2) interpRemote(); // remote.pos a jour
-  if(playing && alive) playerUpdate(dt, g);
+  // Quand on navigue dans un MENU à la manette (pause/options en jeu), on COUPE l'input manette du
+  // jeu (sinon le stick déplace le joueur et A = tir pendant qu'on clique). g=null = comme sans manette.
+  if(playing && alive) playerUpdate(dt, aMenuIsOpen() ? null : g);
   if(playing && alive) applySaberMagnet(dt);   // aimant de visée quand le sabre est sorti près d'un ennemi
   // mes propres pas, réactifs à la vitesse (cadence + volume + pitch)
   if(playing && alive && me.onGround && !me.slide.active && !me.mantle.active){
