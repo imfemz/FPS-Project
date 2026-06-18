@@ -537,7 +537,7 @@ const CONFIG = {
   EYE_STAND: 1.62, EYE_CROUCH: 1.02, EYE_SLIDE: 0.88,
   ADS_FOV: 56, BASE_FOV: 75,
   CROUCH_GUN_TILT: 0.14,
-  CROUCH_SWAY_DAMP: 0.7, // en crouch, réduit le SWAY de l'arme de ce facteur (0 = sway normal, 1 = aucun sway en crouch). Anti "arme qui passe au milieu de l'écran" en crouch, SANS toucher à la pose crouch.
+  CROUCH_SWAY_DAMP: 0.85, // en crouch, réduit TOUT le ballant de l'arme de ce facteur — look-sway + oscillation crouch-saut + sway airborne (0 = ballant normal, 1 = arme figée). N'affecte PAS la pose crouch.
   SLIDE_CAM_ROLL: 0.05,
   MAX_BULLET_HOLES: 80, BULLET_HOLE_LIFE: 15,  // les impacts disparaissent (fondu sur les 3 dernières s)
   INTERP_DELAY: 110,            // marge d'interpolation (horloge serveur + extrapolation 120 ms)
@@ -5716,6 +5716,9 @@ function updateWeaponAnimation(dt, sprinting, moving){
   const _CP = ((typeof curWeapon === 'function' && curWeapon().crouch_pose) || GAMECFG.CROUCH_POSE) || {};
   const crouchPoseTarget = (_CP.ENABLED !== false && (me.slide.active || (isCrouching() && allowCrouchTilt))) ? 1 : 0;
   crouchPoseW += (crouchPoseTarget - crouchPoseW) * Math.min(1, dt*(_CP.speed ?? 10));
+  // Stabilité de l'arme en CROUCH : réduit TOUT le ballant (look-sway + oscillation crouch-saut + sway airborne)
+  // SANS toucher à la pose crouch. 1 = pas accroupi (ballant normal), ~0.3 = accroupi à fond (ballant réduit).
+  const _crStable = 1 - crouchPoseW * (CONFIG.CROUCH_SWAY_DAMP ?? 0.7);
   // mantle ET grimpe de mur cachent l'arme + déclenchent le shake ; la grimpe la cache PLUS VITE.
   mantlePose += (((me.mantle.active||me.climb.active)?1:0) - mantlePose) * Math.min(1, dt*(me.climb.active?16:9));
   // v5 : l'arme accompagne le saut (inertie) et encaisse l'atterrissage
@@ -5727,10 +5730,10 @@ function updateWeaponAnimation(dt, sprinting, moving){
   const inCrouchAir = (!me.onGround && isCrouching()) ? 1 : 0;
   crouchAirW += (inCrouchAir - crouchAirW) * Math.min(1, dt*(_ca.ramp ?? 6)); // montée/descente douce
   crouchAirT += dt * (_ca.speed ?? 3.2);
-  const crouchAirX = Math.sin(crouchAirT) * (_ca.amount ?? 0.03) * crouchAirW;
-  const crouchAirY = Math.sin(crouchAirT*0.7 + 1.0) * (_ca.amount ?? 0.03) * 0.6 * crouchAirW;
-  const crouchAirRz = Math.sin(crouchAirT*0.85 + 0.5) * (_ca.rot ?? 0.05) * crouchAirW;
-  const crouchAirRx = Math.cos(crouchAirT*0.6) * (_ca.rot ?? 0.05) * 0.5 * crouchAirW;
+  const crouchAirX = Math.sin(crouchAirT) * (_ca.amount ?? 0.03) * crouchAirW * _crStable;
+  const crouchAirY = Math.sin(crouchAirT*0.7 + 1.0) * (_ca.amount ?? 0.03) * 0.6 * crouchAirW * _crStable;
+  const crouchAirRz = Math.sin(crouchAirT*0.85 + 0.5) * (_ca.rot ?? 0.05) * crouchAirW * _crStable;
+  const crouchAirRx = Math.cos(crouchAirT*0.6) * (_ca.rot ?? 0.05) * 0.5 * crouchAirW * _crStable;
   // ----- Pose AIRBORNE (saut / bunny hop) : arme stable + rebond, jamais le cycle de course -----
   const _ab = (GAMECFG.WEAPON_ANIM_BLEND && GAMECFG.WEAPON_ANIM_BLEND.airborne) || {};
   const airTargetW = !me.onGround ? 1 : 0;
@@ -5752,12 +5755,12 @@ function updateWeaponAnimation(dt, sprinting, moving){
   const adsRecenter = 1 - adsAmount * _abAds;   // ≈0.08 en ADS plein → airborne quasi annulé
   // ADS réduit fortement le sway airborne (visée stable)
   const abDamp = (1 - adsAmount*0.8) * adsRecenter;
-  const airborneX = (abPos[0] + abSway) * airborneW * abDamp;
-  const airborneY = (abPos[1] + abBounce - abVel) * airborneW * adsRecenter;
-  const airborneZ = abPos[2] * airborneW * adsRecenter;
-  const airborneRx = abRot[0] * airborneW * abDamp;
-  const airborneRy = (abRot[1] + abSway*0.5) * airborneW * abDamp;
-  const airborneRz = abRot[2] * airborneW * abDamp;
+  const airborneX = (abPos[0] + abSway) * airborneW * abDamp * _crStable;
+  const airborneY = (abPos[1] + abBounce - abVel) * airborneW * adsRecenter * _crStable;
+  const airborneZ = abPos[2] * airborneW * adsRecenter * _crStable;
+  const airborneRx = abRot[0] * airborneW * abDamp * _crStable;
+  const airborneRy = (abRot[1] + abSway*0.5) * airborneW * abDamp * _crStable;
+  const airborneRz = abRot[2] * airborneW * abDamp * _crStable;
   // ----- Nez qui pique au décollage : impulsion pitch qui monte vite puis se stabilise -----
   const _abN = (GAMECFG.WEAPON_ANIM_BLEND && GAMECFG.WEAPON_ANIM_BLEND.airborne) || {};
   // l'impulsion monte vite vers la cible (snappy au saut) puis la cible redescend (stabilisation)
@@ -5897,14 +5900,13 @@ function updateWeaponAnimation(dt, sprinting, moving){
 
   // Facteur du sway HORIZONTAL : 1 en hip, fortement réduit en ADS (ads_sway_h).
   // En ADS plein : (1-0.8)=0.2 de base, ENCORE multiplié par ads_sway_h → arme bien plus stable latéralement.
-  // En CROUCH on réduit le SWAY de l'arme (sans toucher à la pose crouch elle-même) : c'est ce sway
-  // qui faisait passer l'arme au milieu de l'écran quand on bouge accroupi. Lissé via crouchPoseW.
-  const _crSway = 1 - crouchPoseW * (CONFIG.CROUCH_SWAY_DAMP ?? 0.7);
+  // En CROUCH on réduit aussi le look-sway de l'arme (via _crStable, défini plus haut) — même facteur
+  // que pour l'oscillation crouch-saut et l'airborne, pour que tout le ballant baisse ensemble.
   const _adsSwayH = (GAMECFG.WEAPON_ANIM_BLEND && GAMECFG.WEAPON_ANIM_BLEND.ads_sway_h) ?? 0.30;
-  const swayHFactor = (1 - adsAmount*0.8) * (1 - adsAmount*(1 - _adsSwayH)) * _crSway;
+  const swayHFactor = (1 - adsAmount*0.8) * (1 - adsAmount*(1 - _adsSwayH)) * _crStable;
   // Facteur du sway VERTICAL en ADS (saut/atterrissage stables) — symétrique de l'horizontal.
   const _adsSwayV = (GAMECFG.WEAPON_ANIM_BLEND && GAMECFG.WEAPON_ANIM_BLEND.ads_sway_v) ?? 0.30;
-  const swayVFactor = (1 - adsAmount*0.8) * (1 - adsAmount*(1 - _adsSwayV)) * _crSway;
+  const swayVFactor = (1 - adsAmount*0.8) * (1 - adsAmount*(1 - _adsSwayV)) * _crStable;
   // ===== Pose CROUCH renforcée : pitch (montre le dessus) + roll (incline) + position, lissée.
   // Réduite en ADS (garde la visée propre) et atténuée pendant le reload (le reload reste prioritaire).
   // Léger sway humain en plus (sans tremblement). Pilotée par shared/config.js > CROUCH_POSE.
@@ -6438,7 +6440,7 @@ function playerUpdate(dt, g){
   if(me.slide.active){
     updateSlide(dt, crouchPressed, wishDir);
     /* Slide jump : conserve l'élan ×1.35 (le contrôle aérien réduit le préserve ensuite) */
-    if(jumpEdge && me.slide.active){
+    if((jumpGround || jumpEdge) && me.slide.active){
       const boosted = me.slide.speed * CONFIG.SLIDE_JUMP_BOOST;
       me.vel.x = me.slide.dir.x * boosted;
       me.vel.z = me.slide.dir.z * boosted;
