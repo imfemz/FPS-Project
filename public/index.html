@@ -549,6 +549,8 @@ const CONFIG = {
   ADS_FOV: 56, BASE_FOV: 75,
   CROUCH_GUN_TILT: 0.14,
   CROUCH_JUMP_Y_DAMP: 0.6, // en l'air + accroupi, réduit de ce facteur la MONTÉE en Y de la pose crouch (l'arme se lève moins). 0 = montée pleine (comme au sol), 1 = aucune montée Y en crouch-saut.
+  HIPFIRE_BACK: 0.06,         // R-69 AU JUGÉ (hipfire) : recul arrière (axe z, m) ajouté ∝ recul. S'annule en ADS. 0 = off.
+  WINGMAN_ADS_TURN_ROLL: 9,   // Wingman en ADS : roll (lean) de l'arme ∝ vitesse de rotation gauche/droite → sway visible. Le point rouge reste centré (compensé par le fire-roll). 0 = off.
   SLIDE_CAM_ROLL: 0.05,
   MAX_BULLET_HOLES: 80, BULLET_HOLE_LIFE: 15,  // les impacts disparaissent (fondu sur les 3 dernières s)
   INTERP_DELAY: 110,            // marge d'interpolation (horloge serveur + extrapolation 120 ms)
@@ -5950,6 +5952,7 @@ function updateWeaponAnimation(dt, sprinting, moving){
     target.x + bobX + sprintBobX + swayX*2.2*swayHFactor*(GAMECFG.SWAY_AMOUNT ?? 1) + crouchAirX*adsRecenter + airborneX + cpX + wbX,
     target.y + bobY + sprintBobY + swayY*1.6*swayVFactor*(GAMECFG.SWAY_AMOUNT ?? 1) - 0.035*airPose*adsRecenter - 0.06*landKick*adsRecenter - rotKick*vmRot*0.7 + vibeY + crouchAirY*adsRecenter + airborneY + landBounce*adsRecenter + jumpNoseLift*adsRecenter + cpY,
     target.z + Math.min(recoil*vmBack, (GAMECFG.RECOIL.VM_MAX ?? 999)) + vibeZ + airborneZ + cpZ
+      + (me.weaponIdx === 0 ? recoil * (CONFIG.HIPFIRE_BACK ?? 0.06) * (1 - adsAmount) : 0)  // R-69 au jugé : recul arrière ∝ recul, annulé en ADS
   );
   // rotation de base interpolée entre l'état HIP et l'état ADS de l'arme courante
   const _hr = (_W.hip && _W.hip.rot) || [0,0,0];
@@ -5968,7 +5971,14 @@ function updateWeaponAnimation(dt, sprinting, moving){
   // Roll de tir autour du centre ADS : on ajoute le roll puis on compense la position pour que
   // le point rouge / axe du canon reste au même endroit à l'écran quand l'ADS est presque centré.
   const FRollCfg = GAMECFG.FIRE_ROLL || {};
-  const rollExtra = (FRollCfg.ENABLED !== false) ? fireRoll : 0;
+  // Wingman en ADS : roll proportionnel au taux de rotation gauche/droite (swayX) → l'arme s'incline
+  // dans les virages (sway bien visible). Routé dans rollExtra → le center-protect ci-dessous garde
+  // le point rouge PILE au centre malgré le roll.
+  let _turnRoll = 0;
+  if(me.weaponIdx === 1 && adsAmount > 0.01){
+    _turnRoll = Math.max(-0.32, Math.min(0.32, -swayX * (CONFIG.WINGMAN_ADS_TURN_ROLL ?? 9) * adsAmount));
+  }
+  const rollExtra = ((FRollCfg.ENABLED !== false) ? fireRoll : 0) + _turnRoll;
   const finalRz = baseFinalRz + rollExtra;
   let finalPos = gunBasePos.clone();
   const adsStart = FRollCfg.CENTER_ADS_START ?? 0.55;
