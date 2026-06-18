@@ -5669,6 +5669,22 @@ function aMenuIsOpen(){
   if(document.pointerLockElement) return false;
   return ['menu','options','lobby','pause'].some(id=>{ const e = document.getElementById(id); return e && e.classList.contains('show'); });
 }
+function gpButtonAt(x, y){
+  // Hit-test DIRECT par rectangles (insensible aux overlays qui intercepteraient elementFromPoint)
+  const sel = '.btn,.bindbtn,.diffbtn,.seg-btn,.fr-btn,.fr-launch,input,select';
+  let found = null;
+  document.querySelectorAll('.screen.show').forEach(scr=>{
+    scr.querySelectorAll(sel).forEach(el=>{
+      if(found || el.disabled) return;
+      const cs = getComputedStyle(el);
+      if(cs.pointerEvents==='none' || cs.visibility==='hidden' || cs.display==='none') return;
+      const r = el.getBoundingClientRect();
+      if(r.width<1 || r.height<1) return;
+      if(x>=r.left && x<=r.right && y>=r.top && y<=r.bottom) found = el;
+    });
+  });
+  return found;
+}
 function updateMenuGamepad(g){
   const cur = document.getElementById('gpcursor'); if(!cur) return;
   // Bouton OPTIONS / START (index 9) = Échap : fait apparaître le menu pause pendant le jeu
@@ -5693,8 +5709,7 @@ function updateMenuGamepad(g){
       if(dl || dr){ v += (dr ? 1 : -1) * st * 2; changed = true; }                          // fleches D-pad : a-coups
       if(changed){ v = Math.max(mn, Math.min(mx, Math.round(v/st)*st)); if(v !== +r.value){ r.value = v; r.dispatchEvent(new Event('input', {bubbles:true})); } }
     }
-    const el = document.elementFromPoint(gpCurX, gpCurY);
-    const tgt = (el && el.closest) ? el.closest('.btn,.bindbtn,.diffbtn,.seg-btn,.fr-btn,.fr-launch,input,select') : null;
+    const tgt = gpButtonAt(gpCurX, gpCurY);
     if(_gpHover && _gpHover !== tgt) _gpHover.classList.remove('gp-hover');
     if(tgt){ tgt.classList.add('gp-hover'); cur.classList.add('over'); } else cur.classList.remove('over');
     _gpHover = tgt;
