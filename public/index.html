@@ -2925,6 +2925,7 @@ let switchShake = 0, switchShakePhase = 0, switchShakeT = 0; // vibration au cha
 let fireShake = 0, fireShakePhase = 0, fireShakeT = 0, fireShakeCfg = null; // secousse de tir lourde (ex: Wingman)
 let saberTrail = null; const saberTrailSamples = [];
 let saberGlowTube = null, saberParticles = null, _saberPtcl = null;  // halo + particules électriques permanentes
+let saberBladeSamples = [];
 // ===== OVERCHARGE (attaque spéciale sabre, dispo à 3 kills d'affilée) =====
 let overReady = false, overBase = 0, overActive = false;
 const overState = { t:0, group:null, origin:new THREE.Vector3(), dir:new THREE.Vector3(), right:new THREE.Vector3(), apex:new THREE.Vector3(), light:null };
@@ -2979,6 +2980,19 @@ function setupSaberBlade(obj, w){
       mm.toneMapped = false;   // lame qui reste éclatante (effet bloom) malgré le tone mapping
       bladeMats.push(mm);
     });
+  });
+  // Echantillonne la SURFACE reelle de la lame -> les arcs electriques en emettent (emission depuis la geo).
+  saberBladeSamples = [];
+  obj.traverse(ch=>{
+    if(!ch.isMesh) return;
+    const nm2 = (ch.name||'').toLowerCase();
+    const isB = (w.blade_meshes||[]).some(k=>nm2.includes(k)) && !(w.blade_exclude||[]).some(k=>nm2.includes(k));
+    if(!isB) return;
+    const pa = ch.geometry && ch.geometry.attributes && ch.geometry.attributes.position;
+    if(!pa || !pa.count) return;
+    const verts = []; const step = Math.max(1, Math.floor(pa.count/160));
+    for(let i=0;i<pa.count;i+=step) verts.push(new THREE.Vector3(pa.getX(i), pa.getY(i), pa.getZ(i)));
+    if(verts.length) saberBladeSamples.push({ mesh: ch, verts });
   });
   const light = new THREE.PointLight(col, (S.blade_light ?? 2.2), (S.blade_light_dist ?? 4));
   light.position.set(0, 0, 0);
@@ -3274,35 +3288,52 @@ function ensureSaberFX(){
   if(!gunScene || saberParticles) return;
   const S = GAMECFG.MELEE || {};
   const tip = -(S.trail_len ?? 0.95), base = (S.trail_base ?? -0.12);
-  // Halo : tube additif le long de l'axe -Z du gun (orientation de la lame), un peu plus large.
+  // Halo : tube additif le long de l'axe -Z (orientation de la lame).
   const L = Math.abs(tip - base), r = (S.glow_radius ?? 0.055);
   const tg = new THREE.CylinderGeometry(r, r*0.7, L, 14, 1, true);
-  tg.rotateX(-Math.PI/2);                 // axe Y -> Z
-  tg.translate(0, 0, (tip + base)/2);     // centre de la lame
+  tg.rotateX(-Math.PI/2); tg.translate(0, 0, (tip + base)/2);
   saberGlowTube = new THREE.Mesh(tg, new THREE.MeshBasicMaterial({
     color:(S.blade_color ?? 0x36e3ff), transparent:true, opacity:(S.glow_opacity ?? 0.30),
     blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, toneMapped:false }));
   saberGlowTube.frustumCulled = false; saberGlowTube.matrixAutoUpdate = false; saberGlowTube.visible = false;
   gunScene.add(saberGlowTube);
-  // Particules : Points additifs, couleur par sommet (dégradé bleu->violet), fade par la couleur.
-  const MAX = (S.particle_count ?? 120);
+  // ===== ARCS ELECTRIQUES (LineSegments) emis depuis la SURFACE de la lame =====
+  const MAXA = (S.arc_count ?? 22), K = (S.arc_points ?? 6), SEG = K - 1;
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX*3), 3));
-  geo.setAttribute('color',    new THREE.BufferAttribute(new Float32Array(MAX*3), 3));
-  saberParticles = new THREE.Points(geo, new THREE.PointsMaterial({
-    size:(S.particle_size ?? 0.055), map:_saberSparkTex(), vertexColors:true, transparent:true,
-    blending:THREE.AdditiveBlending, depthWrite:false, sizeAttenuation:true, toneMapped:false }));
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAXA*SEG*2*3), 3));
+  geo.setAttribute('color',    new THREE.BufferAttribute(new Float32Array(MAXA*SEG*2*3), 3));
+  saberParticles = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+    vertexColors:true, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, toneMapped:false }));
   saberParticles.frustumCulled = false; saberParticles.visible = true;
+  saberParticles.userData = { K, SEG, MAXA };
   gunScene.add(saberParticles);
-  _saberPtcl = []; for(let i=0;i<MAX;i++) _saberPtcl.push({ life:0, max:1, pos:new THREE.Vector3(), vel:new THREE.Vector3(), col:new THREE.Color() });
+  _saberPtcl = [];
+  for(let i=0;i<MAXA;i++) _saberPtcl.push({ life:0, max:1,
+    start:new THREE.Vector3(), end:new THREE.Vector3(), p1:new THREE.Vector3(), p2:new THREE.Vector3(),
+    amp:0, col:new THREE.Color() });
 }
-const _sbTmpV = new THREE.Vector3();
+const _sbP = new THREE.Vector3(), _sbAxis = new THREE.Vector3(), _sbRnd = new THREE.Vector3(), _sbUp = new THREE.Vector3(0,1,0);
+// Choisit un point sur la SURFACE REELLE de la lame (echantillonnee dans setupSaberBlade) -> monde.
+function _saberBladePoint(out){
+  const sets = saberBladeSamples;
+  if(sets && sets.length){
+    const s = sets[(Math.random()*sets.length)|0];
+    s.mesh.updateWorldMatrix(true, false);
+    out.copy(s.verts[(Math.random()*s.verts.length)|0]).applyMatrix4(s.mesh.matrixWorld);
+    return true;
+  }
+  // fallback : axe parametrique de la lame (si la geo n'a pas pu etre echantillonnee)
+  const S = GAMECFG.MELEE || {}; const tip=-(S.trail_len??0.95), base=(S.trail_base??-0.12);
+  const jr=(S.glow_radius ?? 0.055)*0.6, t=Math.random();
+  out.set((Math.random()*2-1)*jr, (Math.random()*2-1)*jr, tip+(base-tip)*t).applyMatrix4(gun.matrixWorld);
+  return true;
+}
 function updateSaberFX(dt, active){
   ensureSaberFX();
   if(!saberParticles) return;
   const S = GAMECFG.MELEE || {};
   gun.updateMatrixWorld(true);
-  // --- Halo glow tube : suit exactement le gun (matrice copiée), pulse avec la lame ---
+  // --- Halo glow tube : suit le gun, pulse avec la lame ---
   if(saberGlowTube){
     saberGlowTube.visible = active;
     if(active){
@@ -3311,34 +3342,55 @@ function updateSaberFX(dt, active){
       saberGlowTube.material.opacity = (S.glow_opacity ?? 0.30) * (0.7 + 0.3*pulse) * (1 + melee.flare*1.2);
     }
   }
-  // --- Particules électriques émises le long de la lame ---
-  const tip = -(S.trail_len ?? 0.95), base = (S.trail_base ?? -0.12);
+  // --- Arcs electriques : filaments jagged emis de la surface de la lame, re-randomises (crepitement) ---
+  const ud = saberParticles.userData, SEG = ud.SEG;
   const cA = new THREE.Color(S.particle_color_a ?? 0x4db8ff), cB = new THREE.Color(S.particle_color_b ?? 0xa35cff);
-  const jr = (S.particle_jitter ?? 0.015), sp = (S.particle_speed ?? 0.55), rise = (S.particle_rise ?? 0.12);
   const posA = saberParticles.geometry.attributes.position.array;
   const colA = saberParticles.geometry.attributes.color.array;
-  let toSpawn = active ? Math.round((S.particle_rate ?? 210) * dt) : 0;
+  _sbAxis.set(0,0,-1).transformDirection(gun.matrixWorld).normalize();  // axe de la lame (monde)
+  let toSpawn = active ? Math.max(1, Math.round((S.arc_rate ?? 95) * dt)) : 0;
+  const vstride = SEG*6;
   for(let i=0;i<_saberPtcl.length;i++){
-    const p = _saberPtcl[i], b = i*3;
-    if(p.life <= 0 && toSpawn > 0){
-      // spawn sur la lame (z entre tip et base, jitter radial) -> monde via gun.matrixWorld
-      const t = Math.random();
-      _sbTmpV.set((Math.random()*2-1)*jr, (Math.random()*2-1)*jr, tip + (base - tip)*t).applyMatrix4(gun.matrixWorld);
-      p.pos.copy(_sbTmpV);
-      p.vel.set((Math.random()*2-1)*sp, (Math.random()*2-1)*sp + rise, (Math.random()*2-1)*sp);
-      p.max = (S.particle_life ?? 0.42) * (0.6 + Math.random()*0.8); p.life = p.max;
-      p.col.copy(cA).lerp(cB, Math.random());   // dégradé bleu -> violet par particule
+    const a = _saberPtcl[i], vbase = i*vstride;
+    if(a.life <= 0 && toSpawn > 0 && _saberBladePoint(_sbP)){
+      a.start.copy(_sbP);
+      _sbRnd.set(Math.random()*2-1, Math.random()*2-1, Math.random()*2-1);
+      _sbRnd.addScaledVector(_sbAxis, (S.arc_along ?? 0.7)*(Math.random()*2-1));
+      if(_sbRnd.lengthSq() < 1e-6) _sbRnd.copy(_sbAxis);
+      _sbRnd.normalize();
+      const len = (S.arc_len_min ?? 0.05) + Math.random()*(S.arc_len_var ?? 0.13);
+      a.end.copy(_sbP).addScaledVector(_sbRnd, len);
+      a.p1.copy(_sbRnd).cross(_sbUp); if(a.p1.lengthSq() < 1e-6) a.p1.set(1,0,0); a.p1.normalize();
+      a.p2.copy(_sbRnd).cross(a.p1).normalize();
+      a.amp = (S.arc_jag ?? 0.012) + Math.random()*(S.arc_jag_var ?? 0.022);
+      a.col.copy(cA).lerp(cB, Math.random());
+      a.max = (S.arc_life ?? 0.10) * (0.5 + Math.random()); a.life = a.max;
       toSpawn--;
     }
-    if(p.life > 0){
-      p.life -= dt;
-      p.pos.addScaledVector(p.vel, dt);
-      p.vel.multiplyScalar(0.90);                // friction : crackle qui s'éteint
-      const f = Math.max(0, p.life / p.max), fade = f*f;   // additif : couleur->0 = fade out
-      posA[b]=p.pos.x; posA[b+1]=p.pos.y; posA[b+2]=p.pos.z;
-      colA[b]=p.col.r*fade; colA[b+1]=p.col.g*fade; colA[b+2]=p.col.b*fade;
+    if(a.life > 0){
+      a.life -= dt;
+      const fade = Math.max(0, a.life/a.max);
+      let px = a.start.x, py = a.start.y, pz = a.start.z, qx, qy, qz;
+      for(let k=0;k<SEG;k++){
+        const t1 = (k+1)/SEG;
+        if(k === SEG-1){ qx=a.end.x; qy=a.end.y; qz=a.end.z; }
+        else {
+          const env = Math.sin(Math.PI*t1) * a.amp;
+          const r1=(Math.random()*2-1)*env, r2=(Math.random()*2-1)*env;
+          qx = a.start.x+(a.end.x-a.start.x)*t1 + a.p1.x*r1 + a.p2.x*r2;
+          qy = a.start.y+(a.end.y-a.start.y)*t1 + a.p1.y*r1 + a.p2.y*r2;
+          qz = a.start.z+(a.end.z-a.start.z)*t1 + a.p1.z*r1 + a.p2.z*r2;
+        }
+        const o = vbase + k*6;
+        posA[o]=px; posA[o+1]=py; posA[o+2]=pz;
+        posA[o+3]=qx; posA[o+4]=qy; posA[o+5]=qz;
+        const fl = fade * (0.55 + Math.random()*0.45);   // flicker du coeur
+        colA[o]=a.col.r*fl;   colA[o+1]=a.col.g*fl;   colA[o+2]=a.col.b*fl;
+        colA[o+3]=a.col.r*fl; colA[o+4]=a.col.g*fl;   colA[o+5]=a.col.b*fl;
+        px=qx; py=qy; pz=qz;
+      }
     } else {
-      colA[b]=colA[b+1]=colA[b+2]=0;             // mort = invisible (additif)
+      for(let k=0;k<vstride;k++) colA[vbase+k] = 0;   // mort = invisible (additif)
     }
   }
   saberParticles.geometry.attributes.position.needsUpdate = true;
