@@ -86,9 +86,11 @@
   #vitals .vlabel{font-family:var(--mono);font-size:9px;letter-spacing:3px;color:var(--txt-faint)}
   #healthbar{height:4px;border-radius:3px;background:rgba(255,255,255,.10);overflow:hidden}
   #healthfill{height:100%;width:100%;background:var(--hp);border-radius:3px;transition:width .25s cubic-bezier(.2,.8,.2,1)}
-  #shieldsegs{display:flex;gap:4px;margin-bottom:5px}
-  #shieldsegs .seg{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.10);overflow:hidden}
-  #shieldsegs .segfill{height:100%;width:100%;background:var(--shield);border-radius:2px;box-shadow:0 0 7px rgba(77,184,255,.65);transition:width .2s ease}
+  #shieldsegs{display:flex;gap:4px;margin-bottom:6px}
+  #shieldsegs .seg{flex:1;height:7px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden}
+  #shieldsegs .segfill{height:100%;width:100%;border-radius:3px;
+    background:linear-gradient(180deg,#7fd0ff 0%,var(--shield) 60%,#2f9ae8 100%);
+    box-shadow:0 0 9px rgba(77,184,255,.85),inset 0 0 4px rgba(255,255,255,.35);transition:width .2s ease}
 
   /* ===== Carte MUNITIONS / ARME (bas droite) ===== */
   #ammo{position:absolute;right:26px;bottom:30px;width:240px;min-height:96px;display:flex;align-items:center;justify-content:space-between;gap:16px;
@@ -124,12 +126,12 @@
   #ammo.saber.dash-ready .sb-dash .sb-name,#ammo.saber.dash-ready .sb-dash .sb-glyph{color:#46e88f;text-shadow:0 0 10px rgba(70,232,143,.7)}
   #reloadmsg{position:absolute;left:50%;bottom:24%;transform:translateX(-50%);font-family:var(--mono);color:var(--txt);font-size:11px;letter-spacing:4px;display:none;
     background:var(--panel);border:1px solid var(--brd);border-radius:999px;padding:6px 16px;backdrop-filter:blur(var(--blur));box-shadow:var(--shadow-sm)}
-  #score{position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center}
+  #score{position:absolute;top:18px;right:312px;display:flex;gap:10px;align-items:center}  /* bloc score : a gauche du logo top-droite, aligne */
   .scorebox{font-family:var(--mono);padding:6px 16px;font-size:22px;font-weight:700;background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius-sm);backdrop-filter:blur(var(--blur))}
   #pscore{color:var(--txt)}#escore{color:var(--txt-dim)}
   #scoremid{font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--txt-faint);text-align:center}
-  /* ===== Tableau des scores FFA (haut centre) — carte flottante ===== */
-  #leaderboard{position:absolute;top:18px;left:50%;transform:translateX(-50%);min-width:230px;
+  /* ===== Tableau des scores FFA — carte flottante, a GAUCHE du logo top-droite (aligne) ===== */
+  #leaderboard{position:absolute;top:18px;right:312px;min-width:230px;
     background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius-sm);padding:9px 12px 10px;
     backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));box-shadow:var(--shadow-sm)}
   #leaderboard .lbtitle{font-family:var(--mono);font-size:9px;letter-spacing:3px;color:var(--txt-faint);text-align:center;margin-bottom:7px;text-transform:uppercase}
@@ -4773,6 +4775,24 @@ const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist:
       insane: { react: 0.10, hit_chance: 0.99, move_pen: 0.45, burst:[5,18], gap:[0.15,0.35], reload: 1.0, evade: 0.85, dmg_mult: 1.3 }
     }
   } };  // séparation = distance mini entre bots ; radius = collision joueur ; hit_pad = hitbox bien généreuse pour bien toucher
+// ===== INSANE : courbe de difficulte EXPONENTIELLE par vague (baseline V1 douce -> plafond) =====
+// stat(v) = base + (cap - base) * (1 - r^(v-1)) ; r = vitesse de montee (plus petit = monte plus vite).
+LBOT.ai.insaneCurve = {
+  r: 0.78,
+  base: { react:0.34, hit_chance:0.45, move_pen:0.50, burst:[2,4],  gap:[0.50,0.90], reload:1.6, evade:0.40, dmg_mult:0.70 },
+  cap:  { react:0.12, hit_chance:0.92, move_pen:0.42, burst:[4,12], gap:[0.18,0.40], reload:1.0, evade:0.85, dmg_mult:1.20 }
+};
+function applyInsaneWave(v){
+  const C = LBOT.ai.insaneCurve, k = 1 - Math.pow(C.r, Math.max(0, (v||1) - 1));
+  const lp = (a,b)=> a + (b - a) * k, B = C.base, P = C.cap;
+  LBOT.ai.tiers.insane = {
+    react: lp(B.react,P.react), hit_chance: lp(B.hit_chance,P.hit_chance), move_pen: lp(B.move_pen,P.move_pen),
+    burst: [Math.round(lp(B.burst[0],P.burst[0])), Math.round(lp(B.burst[1],P.burst[1]))],
+    gap: [lp(B.gap[0],P.gap[0]), lp(B.gap[1],P.gap[1])],
+    reload: lp(B.reload,P.reload), evade: lp(B.evade,P.evade), dmg_mult: lp(B.dmg_mult,P.dmg_mult)
+  };
+}
+applyInsaneWave(1); // etat initial = vague 1 (doux)
 const _botTmp = new THREE.Vector3();
 // IA simple mais vivante : chaque bot erre vers une destination, se rapproche du joueur,
 // et strafe quand il est proche. b.anim.m anime les jambes (marche/course).
@@ -4813,6 +4833,7 @@ function startLocalBotMode(){
   if(ws){ try{ ws.onclose = null; ws.close(); }catch(e){} ws = null; }
   spec.active = false; localBotMode = true; localBotKills = 0;
   LBOT.waveMode = (LBOT.ai.difficulty === 'insane'); LBOT.wave = 1;   // INSANE = survie par vagues
+  if(LBOT.waveMode) applyInsaneWave(1);
   const _startCount = LBOT.waveMode ? botsForWave(1) : LBOT.count;
   const bots = []; const _placed = [];
   for(let i=0;i<_startCount;i++){ const _p = lbotSpawnPoint(i, _startCount, _placed); _placed.push([_p[0], _p[2]]); bots.push({ id: i+1, p: _p, yaw: Math.random()*Math.PI*2 }); }
@@ -4831,8 +4852,9 @@ function startLocalBotMode(){
   }
 }
 // ===== Mode INSANE : survie par VAGUES (3 bots au depart, +1/vague, plafonne a MAX_BOTS) =====
-function botsForWave(w){ return Math.min(LBOT.MAX_BOTS ?? 8, 2 + w); }
+function botsForWave(w){ return Math.min(LBOT.MAX_BOTS ?? 8, Math.max(1, Math.round(3 * Math.pow(1.25, (w||1) - 1)))); }
 function spawnBotWave(n){
+  for(const _id of Array.from(botMgr.keys())){ if(_id > n) removeEntity(_id); }  // anti sur-spawn : jamais plus que l'effectif de la vague
   const _placed = [];
   for(let i=0;i<n;i++){
     const id = i+1;
@@ -4853,6 +4875,7 @@ function checkWaveClear(){
   setTimeout(()=>{ _wavePending = false;
     if(!localBotMode || !LBOT.waveMode) return;
     LBOT.wave = (LBOT.wave||1) + 1;
+    applyInsaneWave(LBOT.wave);
     spawnBotWave(botsForWave(LBOT.wave));
     showWaveBanner(LBOT.wave);
   }, 1800);
@@ -4886,7 +4909,7 @@ function localPlayerDeath(){
   setTimeout(()=>{ if(!localBotMode) return;
     const sps = MAP.spawns || [[0,0,0,0]]; const sp = sps[Math.floor(Math.random()*sps.length)];
     doMyRespawn({ p:[sp[0], 0, sp[2]], yaw: sp[3]||0 });
-    if(LBOT.waveMode){ LBOT.wave = 1; spawnBotWave(botsForWave(1)); showWaveBanner(1); }
+    if(LBOT.waveMode){ LBOT.wave = 1; applyInsaneWave(1); spawnBotWave(botsForWave(1)); showWaveBanner(1); }
   }, 1400);
 }
 function damagePlayerLocal(dmg, fromPos){

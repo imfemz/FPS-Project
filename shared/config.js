@@ -769,7 +769,7 @@
     TEXTURE_REPEAT: { floor: 10, wall: 3, crate: 1, platform: 2, ramp: 2 },
     HUD: {
       images: [
-        { file: '/textures/hud/logo.png', anchor: 'top-right', x: 24, y: 18, w: 220, opacity: 0.9 },
+        { file: '/textures/hud/game-logo.png', anchor: 'top-right', x: 18, y: 18, w: 280, opacity: 0.95 }, // logo top-droite, meme taille que la mini-map (280)
       ],
       colors: { shield: '#4db8ff', health: '#ff5a5a', name: '#eef2f6' },
       name_size: 14, hide: [], ammo_scale: 1.7, score_scale: 1.2,
