@@ -294,7 +294,7 @@
       // Pose ADDITIVE appliquée à l'arme : rot [x,y,z] rad (x+ =pointe bas, y+ =droite, z+ =roll
       // horaire), pos [x,y,z] m (x+ =droite, y+ =haut, z+ =vers soi).
       combo_reset_ms: 750,   // au-delà de ce délai sans coup, le combo repart au 1er
-      wind_end: 0.28,        // fin de l'armé / début de la frappe (fraction du coup)
+      wind_end: 1.28,        // fin de l'armé / début de la frappe (fraction du coup)
       impact_at: 0.46,       // instant exact de l'impact (fraction du coup)
       swings: [
         // 1) tranche diagonale : haut-droite → bas-gauche
@@ -302,12 +302,12 @@
           windup: { rot: [0.45, 0.70, -0.90], pos: [0.18, 0.15, 0.10] },
           strike: { rot: [-0.55, -1.10, 1.00], pos: [-0.22, -0.16, -0.14] } },
         // 2) revers : bas-gauche → haut-droite
-        { dur: 0.46, lock: 0.30, shake: 1.0,
-          windup: { rot: [0.45, -0.70, 0.90], pos: [-0.18, 0.15, 0.10] },
+        { dur: 0.36, lock: 0.30, shake: 4.0,
+          windup: { rot: [0.45, -10.70, 0.90], pos: [-0.18, 0.15, 0.10] },
           strike: { rot: [-0.55, 1.10, -1.00], pos: [0.22, -0.14, -0.14] } },
         // 3) coup vertical en cloche (finisher, plus lourd)
-        { dur: 0.56, lock: 0.40, shake: 1.5, finisher: true,
-          windup: { rot: [1.10, 0.05, 0.12], pos: [0.0, 0.24, 0.14] },
+        { dur: 0.66, lock: 0.30, shake: 3.5, finisher: true,
+          windup: { rot: [1.10, 0.05, 10.12], pos: [0.0, 0.24, 0.14] },
           strike: { rot: [-1.40, -0.05, -0.10], pos: [0.0, -0.24, -0.22] } },
       ],
     },
