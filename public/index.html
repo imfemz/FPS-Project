@@ -126,6 +126,10 @@
   #ammo.saber.charge-empty .sb-charge{background:#ff7a7a;box-shadow:0 0 8px rgba(255,120,120,.55)}
   #ammo.saber.dash-ready .sb-dashfill{background:#46e88f;box-shadow:0 0 13px rgba(70,232,143,.95)}
   #ammo.saber.dash-ready .sb-dash .sb-name,#ammo.saber.dash-ready .sb-dash .sb-glyph{color:#46e88f;text-shadow:0 0 10px rgba(70,232,143,.7)}
+  /* OVERCHARGE dispo (3 kills d'affilée) : la barre de charge sabre GLOW ROUGE pulsé → revient au bleu une fois lancée */
+  @keyframes sbOverPulse{0%,100%{background:#ff5a5a;box-shadow:0 0 9px rgba(255,70,70,.7)}50%{background:#ff2020;box-shadow:0 0 20px rgba(255,40,40,1)}}
+  #ammo.saber.over-ready .sb-charge{animation:sbOverPulse .7s ease-in-out infinite}
+  #ammo.saber.over-ready .sb-wpn .sb-name{color:#ff6a6a;text-shadow:0 0 10px rgba(255,80,80,.7)}
   #reloadmsg{position:absolute;left:50%;bottom:24%;transform:translateX(-50%);font-family:var(--mono);color:var(--txt);font-size:11px;letter-spacing:4px;display:none;
     background:var(--panel);border:1px solid var(--brd);border-radius:999px;padding:6px 16px;backdrop-filter:blur(var(--blur));box-shadow:var(--shadow-sm)}
   #score{position:absolute;top:18px;right:312px;display:flex;gap:10px;align-items:center}  /* bloc score : a gauche du logo top-droite, aligne */
@@ -2976,6 +2980,13 @@ function setupSaberBlade(obj, w){
 function meleeAttack(){
   const S = GAMECFG.MELEE || {}; const swings = S.swings || [];
   if(!swings.length || !alive) return;
+  if(overActive) return;   // sabre lancé (Overcharge en cours) : pas de coup normal
+  // OVERCHARGE dispo (3 kills d'affilée) : un DOUBLE-TAP d'attaque lance l'attaque spéciale.
+  if(overReady){
+    const _n = performance.now();
+    if(_n - (melee._otap||0) < (overConfig().doubletap_ms ?? 300)){ melee._otap = 0; launchOvercharge(); return; }
+    melee._otap = _n;
+  }
   // COOLDOWN : chaque coup consomme une part de charge. Vidé → on attend que ça remonte.
   const maxHits = S.max_hits ?? 5;
   const cost = 1 / maxHits;
@@ -2994,6 +3005,83 @@ function meleeAttack(){
   melee.dur = sw.dur ?? 0.46;
   me.fireT = sw.lock ?? 0.30;   // cadence (autorise un léger chaînage avant la fin du coup)
   saberWhoosh(melee.step);
+}
+
+// ===== OVERCHARGE : sabre lancé en avant (rotation violente), hit multi dans un rayon, retour boomerang =====
+// Crée le sabre LANCÉ (lame émissive + halo additif + manche + lumière) dans la scène monde.
+function spawnThrownSaber(){
+  const O = overConfig(), col = new THREE.Color(O.color ?? 0x4db8ff), L = O.blade_len ?? 1.15;
+  const g = new THREE.Group();
+  const blade = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.02, L, 12),
+    new THREE.MeshStandardMaterial({ color:col, emissive:col, emissiveIntensity:3.6, roughness:0.3, metalness:0, toneMapped:false }));
+  g.add(blade);
+  const glow = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.055, L*1.02, 12, 1, true),
+    new THREE.MeshBasicMaterial({ color:col, transparent:true, opacity:0.4, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, toneMapped:false }));
+  g.add(glow);
+  const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.24, 10),
+    new THREE.MeshStandardMaterial({ color:0x16191e, roughness:0.5, metalness:0.6 }));
+  hilt.position.y = -L/2 - 0.08; g.add(hilt);
+  const light = new THREE.PointLight(col, 2.8, 6.5); g.add(light); overState.light = light;
+  scene.add(g);
+  return g;
+}
+// Balayage de dégâts (une fois) : bots dans le rayon devant → frontal (cône) = dmg_front, côtés = dmg_side.
+function applyOverchargeDamage(){
+  if(!localBotMode) return;   // (online = autorité serveur, viendra ensuite)
+  const O = overConfig(), R = O.radius ?? 5;
+  const frontCos = Math.cos(((O.front_cone_deg ?? 70)*Math.PI/180)/2);
+  const ox = me.pos.x, oy = me.pos.y + (me.eye || 1.62), oz = me.pos.z, dir = overState.dir;
+  const victims = [];
+  for(const [id,b] of botMgr){
+    if(b.dead || !b.pos) continue;
+    const dx=b.pos.x-ox, dy=(b.pos.y+1.0)-oy, dz=b.pos.z-oz, d=Math.hypot(dx,dy,dz);
+    if(d > R || d < 0.001) continue;
+    const dot = (dx*dir.x+dy*dir.y+dz*dir.z)/d;
+    if(dot <= 0) continue;                              // seulement les ennemis DEVANT
+    victims.push({ id, b, dmg: (dot >= frontCos) ? (O.dmg_front ?? 140) : (O.dmg_side ?? 100) });
+  }
+  for(const v of victims) applyLocalBotDamage(v.id, v.b, v.dmg, false, true);
+}
+function launchOvercharge(){
+  if(overActive || !alive) return;
+  overActive = true; overReady = false;
+  const O = overConfig(), cp = Math.cos(me.pitch);
+  overState.dir.set(-Math.sin(me.yaw)*cp, Math.sin(me.pitch), -Math.cos(me.yaw)*cp).normalize();
+  overState.right.set(Math.cos(me.yaw), 0, -Math.sin(me.yaw)).normalize();   // axe de la rotation (tumble avant)
+  overState.origin.copy(camera.position);
+  overState.apex.copy(overState.origin).addScaledVector(overState.dir, O.radius ?? 5);
+  overState.t = 0;
+  overState.group = spawnThrownSaber();
+  overState.group.position.copy(overState.origin);
+  gun.visible = false;                 // la lame quitte la main
+  applyOverchargeDamage();             // un seul balayage à l'envoi (pas de hit = pas de dégât)
+  overBase = localBotKills;            // les kills de l'overcharge comptent pour la prochaine charge
+  saberWhoosh(); meleeShake = Math.min(2.6, meleeShake + 1.6);
+  if(typeof sfx === 'function'){ sfx(180, 280, 0.22, 0.05, 'sawtooth'); sfx(540, 200, 0.16, 0.04, 'square'); }
+}
+function endOvercharge(){
+  if(overState.group){
+    scene.remove(overState.group);
+    overState.group.traverse(o=>{ if(o.geometry) o.geometry.dispose(); if(o.material && o.material.dispose) o.material.dispose(); });
+    overState.group = null;
+  }
+  overState.light = null; overActive = false;
+  gun.visible = true;                  // le sabre revient en main
+}
+function updateOvercharge(dt){
+  if(!overActive || !overState.group) return;
+  const O = overConfig(), tOut = O.throw_out ?? 0.26, tBack = O.throw_back ?? 0.34, total = tOut + tBack;
+  overState.t += dt;
+  const g = overState.group;
+  if(overState.t <= tOut){                         // ALLER : jusqu'à l'apex, ralentit en arrivant
+    const k = overState.t/tOut, e = 1 - Math.pow(1-k,2);
+    g.position.copy(overState.origin).lerp(overState.apex, e);
+  } else {                                          // RETOUR boomerang : revient vers la main ACTUELLE
+    const k = Math.min(1, (overState.t-tOut)/tBack), e = k*k;
+    g.position.copy(overState.apex).lerp(camera.position, e);
+  }
+  g.rotateOnWorldAxis(overState.right, (O.spin ?? 42) * dt);   // rotation violente (tumble avant)
+  if(overState.t >= total) endOvercharge();
 }
 
 // Prédiction CLIENT du toucher (pour le shake/hit-stop immédiat). Le serveur reste autoritaire.
@@ -3249,7 +3337,8 @@ function updateSaberFX(dt, active){
 function updateMelee(dt){
   const saber = isSaber();
   updateSaberGlow(dt, saber);
-  updateSaberFX(dt, saber && playing && alive);   // halo + particules électriques permanentes (sabre sorti)
+  updateSaberFX(dt, saber && playing && alive && !overActive);   // halo + particules (sabre en main, pas pendant le throw)
+  updateOvercharge(dt);   // sabre lancé : aller / hit / retour boomerang
   if(!saber){ if(saberTrail) saberTrail.visible = false; melee.active = false; melee.trailOn = false; updateCooldownBar(); return; }
   const S = GAMECFG.MELEE || {};
   // COOLDOWN sabre : la charge se recharge avec le temps ; la barre bleue se vide/remonte.
@@ -4943,7 +5032,7 @@ function lbotSpawnPoint(i, n, extra){ // >= MIN du joueur ET >= spawn_sep des au
 function startLocalBotMode(){
   // Mode solo : on coupe le réseau proprement (pas de message "connexion perdue")
   if(ws){ try{ ws.onclose = null; ws.close(); }catch(e){} ws = null; }
-  spec.active = false; localBotMode = true; localBotKills = 0;
+  spec.active = false; localBotMode = true; localBotKills = 0; resetOvercharge();
   LBOT.waveMode = (LBOT.ai.difficulty === 'insane'); LBOT.wave = 1;   // INSANE = survie par vagues
   if(LBOT.waveMode) applyInsaneWave(1);
   const _startCount = LBOT.waveMode ? botsForWave(1) : LBOT.count;
@@ -5016,7 +5105,7 @@ function localPlayerDeath(){
   alive = false; playSfx('death');
   const _inMenu = (typeof aMenuIsOpen === 'function' && aMenuIsOpen()); // mort en plein menu → on y reste
   if(!_inMenu) show('deathscreen');
-  localBotKills = 0; { const ps = document.getElementById('pscore'); if(ps) ps.textContent = '0'; }   // reset des kills a la mort
+  localBotKills = 0; resetOvercharge(); { const ps = document.getElementById('pscore'); if(ps) ps.textContent = '0'; }   // reset des kills + overcharge a la mort
   if(!_inMenu) document.exitPointerLock && document.exitPointerLock();
   setTimeout(()=>{ if(!localBotMode) return;
     const sps = MAP.spawns || [[0,0,0,0]]; const sp = sps[Math.floor(Math.random()*sps.length)];
@@ -5190,6 +5279,7 @@ function applyLocalBotDamage(id, b, dmg, head, melee){
     showKillBanner(reloadedSinceKill ? 'NICE SHOTS !' : 'PERFECT KILL !', !!head);
     reloadedSinceKill = false;
     localBotKills++; const ps = document.getElementById('pscore'); if(ps) ps.textContent = localBotKills;
+    checkOverchargeUnlock();   // 3 kills d'affilée → Overcharge dispo
     if(LBOT.waveMode){ checkWaveClear(); }
     else setTimeout(()=>{
       if(!localBotMode) return; const bb = botMgr.get(id); if(!bb) return;
@@ -5276,7 +5366,8 @@ function updateAmmoUI(){
   const ammoEl = document.getElementById('ammo');
   const max = W.mag || CONFIG.MAG_SIZE || 30;
   const low = !isMelee && !holstered && me.mag <= Math.ceil(max*0.25);
-  if(ammoEl){ ammoEl.classList.toggle('low', low); ammoEl.classList.toggle('saber', isMelee && !holstered); }
+  if(ammoEl){ ammoEl.classList.toggle('low', low); ammoEl.classList.toggle('saber', isMelee && !holstered);
+    ammoEl.classList.toggle('over-ready', isMelee && !holstered && overReady); }  // Overcharge dispo → barre sabre glow rouge pulsé
 }
 // Pulse de la carte munitions à chaque tir.
 function triggerAmmoPulse(){
