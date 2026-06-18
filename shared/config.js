@@ -518,7 +518,7 @@
       HIP_MULT: 1.6,
       // En hipfire la bulle est agrandie de ce facteur (0.6 = +60%) pour que l'assist s'accroche même
       // quand on vise grossièrement (sans ADS). 0 = même bulle qu'en ADS.
-      HIP_BUBBLE_EXTRA: 0.2,
+      HIP_BUBBLE_EXTRA: 0.5,
       // Douceur de l'entrée/sortie de la bulle (constante de temps, s). C'EST le réglage qui enlève
       // le côté "brutal" : plus grand = transition plus molle. 0 = entrée instantanée (à éviter).
       SMOOTH: 0.08,
