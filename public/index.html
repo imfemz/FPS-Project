@@ -134,6 +134,11 @@
   @keyframes sbOverPulse{0%,100%{background:#ff5a5a;box-shadow:0 0 9px rgba(255,70,70,.7)}50%{background:#ff2020;box-shadow:0 0 20px rgba(255,40,40,1)}}
   #ammo.saber.over-ready .sb-charge{animation:sbOverPulse .7s ease-in-out infinite}
   #ammo.saber.over-ready .sb-wpn .sb-name{color:#ff6a6a;text-shadow:0 0 10px rgba(255,80,80,.7)}
+  /* BONUS ROUGE actif sur un FLINGUE : carte arme bord rouge + glow pulsé + chiffre rouge */
+  @keyframes redBuffPulse{0%,100%{filter:drop-shadow(0 0 7px rgba(255,60,60,.5)) drop-shadow(0 10px 26px rgba(0,0,0,.5))}50%{filter:drop-shadow(0 0 17px rgba(255,40,40,.95)) drop-shadow(0 10px 26px rgba(0,0,0,.5))}}
+  #ammo.red-active{background:linear-gradient(var(--panel),var(--panel)) padding-box,linear-gradient(135deg,#ff7a7a,#ff3030 50%,#ff7a7a) border-box;animation:redBuffPulse .7s ease-in-out infinite}
+  #ammo.red-active .mag{color:#ff5a5a}
+  #ammo.red-active #wpnname{color:#ff6a6a}
   /* ===== REFONTE DA : cartes HUD rétro-futuristes (coins chanfreinés, bordure fine bleue en dégradé,
      fond translucide flou + relief conservés). On garde la vibe ; juste plus "carré futuriste". ===== */
   #vitals,#ammo,#leaderboard{
@@ -3002,12 +3007,30 @@ let saberBladeSamples = [];
 let overReady = false, overBase = 0, overActive = false, overReadyAt = 0;
 const overState = { t:0, group:null, origin:new THREE.Vector3(), dir:new THREE.Vector3(), right:new THREE.Vector3(), apex:new THREE.Vector3(), light:null };
 function overConfig(){ return (GAMECFG.MELEE||{}).overcharge || {}; }
-// Débloque l'Overcharge dès que la série atteint le palier (appelé après chaque kill local).
-function checkOverchargeUnlock(){
-  const need = overConfig().streak ?? 3;
-  if(!overReady && (localBotKills - overBase) >= need){ overReady = true; overReadyAt = performance.now(); showOverchargeReady(); }
+// ===== BONUS ROUGE flingues (R-69 / Wingman) : 3 kills (compteur GLOBAL partagé) → l'arme EN MAIN
+// passe "rouge" : +dégâts & spread réduit pendant RED_DURATION s, puis retour normal (mode bot). =====
+let redUntil = [0, 0, 0];   // timestamp de fin du bonus rouge, par index d'arme
+function redActive(idx){ return performance.now() < (redUntil[idx] || 0); }
+function activateGunRed(idx){
+  redUntil[idx] = performance.now() + ((GAMECFG.RED_BONUS && GAMECFG.RED_BONUS.duration) ?? 10) * 1000;
+  if(typeof showHUDToast === 'function') showHUDToast('BONUS ROUGE', 'bad', 2200);
+  if(typeof sfx === 'function'){ sfx(230, 180, 0.16, 0.05, 'square'); sfx(110, 260, 0.20, 0.05, 'sawtooth'); }
 }
-function resetOvercharge(){ overReady = false; overBase = 0; if(overActive) endOvercharge(); }
+// À chaque kill : 3 kills (toutes armes confondues) → arme l'arme EN MAIN
+// (sabre = overcharge dispo, flingue = bonus rouge 10 s auto).
+function checkOverchargeUnlock(){
+  const need = (GAMECFG.RED_BONUS && GAMECFG.RED_BONUS.streak) ?? overConfig().streak ?? 3;
+  if((localBotKills - overBase) < need) return;
+  const W = curWeapon();
+  if(W && W.melee){
+    if(overReady || overActive) return;                 // déjà dispo/en cours : on attend qu'elle soit utilisée/expirée
+    overReady = true; overReadyAt = performance.now(); showOverchargeReady();
+  } else if(W && W.red){
+    activateGunRed(me.weaponIdx);
+  } else return;                                          // arme sans bonus → ne consomme pas la série
+  overBase = localBotKills;                               // CONSOMME la série (refaire 3) + corrige le re-arm après expiration
+}
+function resetOvercharge(){ overReady = false; overBase = 0; redUntil[0]=redUntil[1]=redUntil[2]=0; if(overActive) endOvercharge(); }
 function specialKeyLabel(){ return inputDevice==='gp' ? gpName(cfg.gp.special) : kbName(cfg.kb.special); }
 function showOverchargeReady(){
   const el = document.getElementById('overbanner'); if(!el) return;
@@ -3469,7 +3492,7 @@ function updateMelee(dt){
   updateSaberFX(dt, saber && playing && alive && !overActive);   // halo + particules (sabre en main, pas pendant le throw)
   updateOvercharge(dt);   // sabre lancé : aller / hit / retour boomerang
   // Cooldown : Overcharge armée mais aucun HIT dans le délai (15 s) → reset, il faut refaire 3 kills.
-  if(overReady && !overActive && performance.now() - overReadyAt > (overConfig().window_ms ?? 15000)) resetOvercharge();
+  if(overReady && !overActive && performance.now() - overReadyAt > (overConfig().window_ms ?? 15000)) overReady = false;  // expiré : la série reste consommée (pas de re-arm instantané)
   if(!saber){ if(saberTrail) saberTrail.visible = false; melee.active = false; melee.trailOn = false; updateCooldownBar(); return; }
   const S = GAMECFG.MELEE || {};
   // COOLDOWN sabre : la charge se recharge avec le temps ; la barre bleue se vide/remonte.
@@ -3550,6 +3573,12 @@ function updateDashUI(){
   if(pct !== f._p){ f.style.width = pct + '%'; f._p = pct; }
   const ready = cd <= 0;
   if(ready !== ammoEl._dReady){ ammoEl.classList.toggle('dash-ready', ready); ammoEl._dReady = ready; }
+}
+// BONUS ROUGE flingue actif → la carte arme glow rouge (togglé CHAQUE frame, pas dans updateAmmoUI qui est événementiel)
+function updateRedBuffUI(){
+  const ammoEl = document.getElementById('ammo'); if(!ammoEl) return;
+  const on = !!(playing && alive && !isSaber() && redActive(me.weaponIdx));
+  if(on !== ammoEl._red){ ammoEl.classList.toggle('red-active', on); ammoEl._red = on; }
 }
 
 const HIP_POS = new THREE.Vector3(.22,-.28,-.46); // position hanche (style Apex : bas-droite, proche)
@@ -4173,6 +4202,19 @@ function playShotSfx(name){
     }
   } else { playSfx(name); }
 }
+// Tir en BONUS ROUGE : joue le fichier dédié (W.red.sfx, ex 'shot_red') quand il est chargé ;
+// sinon fallback = tir normal + couche grave "lourde" (pour différencier en attendant le fichier).
+function playRedShot(W){
+  const name = (W && W.red && W.red.sfx) || (GAMECFG.RED_BONUS && GAMECFG.RED_BONUS.shot_sfx) || 'shot_red';
+  if(audioBuffers[name]){ playShotSfx(name); return; }
+  playShotSfx((W && W.sfx_shot) || 'shot');
+  if(audioCtx){ try{
+    const now = audioCtx.currentTime, o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(150, now); o.frequency.exponentialRampToValueAtTime(46, now + 0.17);
+    g.gain.setValueAtTime((GAMECFG.SFX_VOLUME || 0.6) * 0.55, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.19);
+    o.connect(g).connect(audioCtx.destination); o.start(now); o.stop(now + 0.22);
+  }catch(e){} }
+}
 let ambientStarted = false;
 function startAmbient(){
   if(ambientStarted) return; ambientStarted = true;
@@ -4217,6 +4259,9 @@ function initAudio(){
   for(const [name, url] of Object.entries(GAMECFG.SFX_FILES)){
     loadAudioBuffer(url, buf=>{ audioBuffers[name] = buf; if(name==='menu_audio') maybeStartMenuMusic(); });
   }
+  // Son des tirs en BONUS ROUGE — chargé À PART (hors compteur de préchargement) : si le fichier
+  // n'existe pas encore, ça échoue en silence et on garde le fallback procédural (pas de timeout).
+  loadAudioBuffer((GAMECFG.RED_BONUS && GAMECFG.RED_BONUS.shot_file) || '/audio/shot_red.mp3', buf=>{ audioBuffers['shot_red'] = buf; });
   // Sons d'impact par surface (optionnels) : chargés seulement si use_files. Absent → fallback synthèse.
   const IMP = GAMECFG.IMPACT_SFX || {};
   if(IMP.use_files && IMP.surfaces){
@@ -4587,9 +4632,10 @@ function shoot(){
   updateAmmoUI();
   triggerAmmoPulse();
   triggerMuzzleFlash();
-  playShotSfx(W.sfx_shot || 'shot');
+  const _red = (W.red && redActive(me.weaponIdx)) ? W.red : null;   // BONUS ROUGE actif sur cette arme ?
+  if(_red) playRedShot(W); else playShotSfx(W.sfx_shot || 'shot');   // son différent en rouge
   const S = GAMECFG.SPREAD;
-  const hipSpread = (W.spread_hip ?? S.HIP), adsSpread = (W.spread_ads ?? S.ADS);
+  const hipSpread = ((_red && _red.spread_hip != null) ? _red.spread_hip : (W.spread_hip ?? S.HIP)), adsSpread = (W.spread_ads ?? S.ADS);
   const spread = adsAmount>0.7 ? adsSpread : (me.slide.active ? S.SLIDE : hipSpread);
   const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
   dir.x += (Math.random()-.5)*spread; dir.y += (Math.random()-.5)*spread; dir.normalize();
@@ -5439,7 +5485,11 @@ function localBotShoot(o, dir, end){
   const lowered = !!(best.b.anim && best.b.anim.c);
   const top = (best.b.pos.y||0) + ((lowered ? (HB.top_crouch??1.15) : (HB.top??1.80)) * sc);
   const head = (o.y + dir.y*bestT) > (top - (HB.head??0.30)*sc);
-  applyLocalBotDamage(best.id, best.b, head ? (W.damage_head ?? 25) : (W.damage_body ?? 19), head, false);
+  // BONUS ROUGE : si l'arme en main est "rouge", on applique les dégâts boostés.
+  const _r = (W.red && redActive(me.weaponIdx)) ? W.red : null;
+  const dHead = _r ? (_r.damage_head ?? W.damage_head ?? 25) : (W.damage_head ?? 25);
+  const dBody = _r ? (_r.damage_body ?? W.damage_body ?? 19) : (W.damage_body ?? 19);
+  applyLocalBotDamage(best.id, best.b, head ? dHead : dBody, head, false);
 }
 function localBotMelee(){
   if(!localBotMode) return;
@@ -8071,6 +8121,7 @@ function animate(){
   updateMinimap();   // radar haut-gauche : ennemis rouges clignotants + orbes, rayon 10 m
   updateCompass();   // cadran de cap (haut centre)
   updateDashUI();    // jauge du dash sabre (Bonus d'attaque), bas-droite
+  updateRedBuffUI(); // BONUS ROUGE flingue actif → carte arme glow rouge (chaque frame)
   refreshOverbannerKey();  // popup attaque speciale : touche affichee en live (clavier/manette)
   updateRagdolls(dt);
   updateCrosshair(dt);

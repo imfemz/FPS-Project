@@ -41,6 +41,10 @@
       bloom: { strength: 0.55, radius: 0.8, threshold: 0.72 }, // ↑strength = plus de glow ; threshold = seuil de brillance
     },
     DAMAGE: { BODY: 15, HEAD: 20 },
+    // ===== BONUS ROUGE : 3 kills (compteur GLOBAL partagé) → l'arme en main passe "rouge" =====
+    // Sabre = overcharge (touche spéciale). Flingues (R-69/Wingman) = +dégâts & spread réduit pendant `duration` s.
+    // Les dégâts/spread "rouge" sont dans chaque WEAPON.red. Son dédié = WEAPON.red.sfx (fichier /audio/shot_red.mp3).
+    RED_BONUS: { streak: 3, duration: 10, shot_sfx: 'shot_red', shot_file: '/audio/shot_red.mp3' },
     ADS_SPEED: 12,   // vitesse de montée en visée (ADS) plus rapide (réglable en jeu : "Vitesse de visée")
     MOMENTUM_FOV: 12, // élargissement FOV max (°) quand le momentum est au max (0 = off) — sensation de vitesse
     // À la mort, le corps se dissout en PARTICULES qui tombent au sol et fade out (false = ancien fondu).
@@ -823,7 +827,7 @@
     // ===== Numéros de dégâts (au-dessus de l'ennemi/bot) =====
     // TAILLE CONSTANTE À L'ÉCRAN : le chiffre garde la même taille quelle que soit la distance.
     DAMAGE_NUMBERS: {
-      screen_size: 0.055,    // hauteur du chiffre = fraction de la hauteur d'écran (constante)
+      screen_size: 0.072,    // hauteur du chiffre = fraction de la hauteur d'écran (constante) — agrandi pour visibilité
       head_mult: 1.25,       // headshots un peu plus gros
       color_shield: '#7fd4ff', // dégâts au BOUCLIER (bleu, image 1)
       color_health: '#ffe9c0', // dégâts aux PV (crème, image 2)
