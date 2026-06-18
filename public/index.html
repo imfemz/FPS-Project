@@ -94,6 +94,13 @@
     background:rgba(255,255,255,.10);overflow:hidden;display:none}
   #cooldownbar .cdfill{height:100%;width:100%;background:var(--accent);border-radius:3px;box-shadow:0 0 8px rgba(92,224,255,.5)}
   #cooldownbar.empty .cdfill{background:#ff7a7a;box-shadow:0 0 8px rgba(255,120,120,.55)}
+  /* Dash sabre ("Bonus d'attaque") : icône + mini jauge grise qui se remplit en bleu à la recharge */
+  #dashbar{position:absolute;right:26px;bottom:30px;display:none;flex-direction:column;align-items:flex-end;gap:5px;z-index:5;pointer-events:none}
+  #dashbar .dash-lbl{font-family:var(--mono);font-size:11px;letter-spacing:3px;color:var(--txt-faint);transition:color .2s,text-shadow .2s}
+  #dashbar.ready .dash-lbl{color:var(--accent);text-shadow:0 0 10px rgba(92,224,255,.7)}
+  #dashbar .dash-track{width:130px;height:6px;border-radius:3px;background:rgba(255,255,255,.13);overflow:hidden}
+  #dashbar .dash-fill{height:100%;width:0%;background:var(--accent);border-radius:3px;box-shadow:0 0 8px rgba(92,224,255,.5);transition:width .08s linear}
+  #dashbar.ready .dash-fill{box-shadow:0 0 13px rgba(92,224,255,.95)}
   #reloadmsg{position:absolute;left:50%;bottom:24%;transform:translateX(-50%);font-family:var(--mono);color:var(--txt);font-size:11px;letter-spacing:4px;display:none;
     background:var(--panel);border:1px solid var(--brd);border-radius:999px;padding:6px 16px;backdrop-filter:blur(var(--blur));box-shadow:var(--shadow-sm)}
   #score{position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center}
@@ -303,6 +310,7 @@
     <div class="magwrap"><div class="mag" id="magcount">30</div><div class="res" id="ammosub">/ ∞</div></div>
   </div>
   <div id="cooldownbar"><div class="cdfill"></div></div>
+  <div id="dashbar"><span class="dash-lbl">&#10218;&#10218; DASH</span><div class="dash-track"><div class="dash-fill"></div></div></div>
   <div id="momentum"><div class="mdots"></div><div class="mlabel">MOMENTUM</div></div>
   <div id="toasts"></div>
   <div id="killbanner"></div>
@@ -517,14 +525,15 @@ const ACTIONS = [
   ['forward','Avancer'],['back','Reculer'],['left','Gauche'],['right','Droite'],
   ['jump','Sauter'],['crouch','Crouch / Slide'],['sprint','Sprinter'],
   ['reload','Recharger'],['shoot','Tirer'],['ads','Viser'],['holster','Sabre laser 🔥'],
+  ['dash','Bonus d\'attaque'],
   ['weapon1','Arme 1'],['weapon2','Arme 2'],
 ];
 // Le bind MANETTE de ces actions est géré par le stick droit (R3), pas rebindable séparément
 const GP_LOCKED_R3 = ['weapon1','weapon2','holster'];
 const DEFAULTS = {
   kb: { forward:'KeyW', back:'KeyS', left:'KeyA', right:'KeyD', jump:'Space',
-        crouch:'ControlLeft', sprint:'ShiftLeft', reload:'KeyR', shoot:'Mouse0', ads:'Mouse2', holster:'KeyH', weapon1:'Digit1', weapon2:'Digit2', weapon3:'Digit3' },
-  gp: { forward:-1, back:-1, left:-1, right:-1, jump:0, crouch:1, sprint:10, reload:2, shoot:7, ads:6, holster:3, weapon_stick:11, weapon3:-1 },
+        crouch:'ControlLeft', sprint:'ShiftLeft', reload:'KeyR', shoot:'Mouse0', ads:'Mouse2', holster:'KeyH', dash:'KeyF', weapon1:'Digit1', weapon2:'Digit2', weapon3:'Digit3' },
+  gp: { forward:-1, back:-1, left:-1, right:-1, jump:0, crouch:1, sprint:10, reload:2, shoot:7, ads:6, holster:3, dash:5, weapon_stick:11, weapon3:-1 },
   sensKb: 1.0, sensGp: 1.0, aimAssist: true, crouchMode: 'hold', autoSprint: true, fov: 0, deadzone: 0.06,
   wheelSwitch: false,            // molette souris = changer d'arme (activable en options)
   adsSpeed: 17,                  // vitesse de montée en visée (ADS)
@@ -2844,6 +2853,7 @@ function meleeImpact(){
     melee.hitStop = sw.finisher ? (S.hitstop_finisher ?? 0.11) : (S.hitstop_hit ?? 0.075);
     melee.flare = 1;
     saberHitSound(!!sw.finisher);
+    me.dashCD = 0;   // toucher un ennemi au sabre RECHARGE instantanément le dash (Bonus d'attaque)
   }
   if(localBotMode){ localBotMelee(); }                     // mode entraînement : coup de sabre LOCAL
   else if(ws && ws.readyState===1){
@@ -3005,6 +3015,19 @@ function updateCooldownBar(){
   if(p !== cb._p){ const f = cb.firstElementChild; if(f) f.style.width = p + '%'; cb._p = p; }
   const empty = melee.charge < 1/((GAMECFG.MELEE||{}).max_hits ?? 5) - 1e-4;
   if(empty !== cb._empty){ cb.classList.toggle('empty', empty); cb._empty = empty; }
+}
+// Jauge du DASH sabre ("Bonus d'attaque") : grise → se remplit en bleu pendant la recharge (6 s),
+// pleine = prête. Rechargée d'un coup au hit sabre. Affichée seulement quand le sabre est sorti.
+function updateDashUI(){
+  const el = document.getElementById('dashbar'); if(!el) return;
+  const show = isSaber() && playing && alive;
+  if(el._shown !== show){ el.style.display = show ? 'flex' : 'none'; el._shown = show; }
+  if(!show) return;
+  const cd = me.dashCD || 0;
+  const pct = Math.max(0, Math.min(100, Math.round((1 - cd/DASH_CD)*100)));
+  if(pct !== el._p){ const f = el.querySelector('.dash-fill'); if(f) f.style.width = pct + '%'; el._p = pct; }
+  const ready = cd <= 0;
+  if(ready !== el._ready){ el.classList.toggle('ready', ready); el._ready = ready; }
 }
 
 const HIP_POS = new THREE.Vector3(.22,-.28,-.46); // position hanche (style Apex : bas-droite, proche)
@@ -4412,7 +4435,7 @@ const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist:
       easy:   { react: 0.55, hit_chance: 0.50, move_pen: 0.65, burst:[1,4],  gap:[0.7,1.3], reload: 2.0, evade: 0.20, dmg_mult: 0.7 },
       medium: { react: 0.32, hit_chance: 0.72, move_pen: 0.50, burst:[2,7],  gap:[0.4,0.8], reload: 1.6, evade: 0.45, dmg_mult: 1.0 },
       hard:   { react: 0.16, hit_chance: 0.90, move_pen: 0.35, burst:[3,12], gap:[0.25,0.5], reload: 1.3, evade: 0.75, dmg_mult: 1.15 },
-      insane: { react: 0.10, hit_chance: 0.99, move_pen: 0.05, burst:[5,18], gap:[0.15,0.35], reload: 1.0, evade: 0.85, dmg_mult: 1.3 }
+      insane: { react: 0.10, hit_chance: 0.99, move_pen: 0.45, burst:[5,18], gap:[0.15,0.35], reload: 1.0, evade: 0.85, dmg_mult: 1.3 }
     }
   } };  // séparation = distance mini entre bots ; radius = collision joueur ; hit_pad = hitbox bien généreuse pour bien toucher
 const _botTmp = new THREE.Vector3();
@@ -5468,6 +5491,18 @@ function doSuperglide(){
   triggerSpeedFx(GAMECFG.SPEED_FX_DURATION ?? 1.8); // overlay vitesse
   playSfx('superglide');
 }
+// ===== DASH SABRE "Bonus d'attaque" : bond avant (superglide) sans avoir à grimper.
+// Cooldown 6 s, RECHARGÉ instantanément quand on touche un ennemi au sabre. Touche F (PC) / R1 (manette). =====
+const DASH_CD = 6;
+let _dashPrev = false;
+function tryDash(g){
+  const held = actionDown('dash', g);
+  if(held && !_dashPrev && isSaber() && playing && alive && (me.dashCD||0) <= 0){
+    doSuperglide();            // même bond que le superglide, mais déclenché directement (pas besoin de grimper)
+    me.dashCD = DASH_CD;
+  }
+  _dashPrev = held;
+}
 function trySuperglide(){
   const SG = GAMECFG.SUPERGLIDE;
   if(!SG.ENABLED) return;
@@ -6296,6 +6331,8 @@ function playerUpdate(dt, g){
   }
   me.crouchHeld = crouchPressed;
   me.slide.cooldown = Math.max(0, me.slide.cooldown - dt);
+  if(me.dashCD > 0) me.dashCD = Math.max(0, me.dashCD - dt);   // recharge du dash sabre (Bonus d'attaque)
+  tryDash(g);                                                  // déclenche le dash si touche pressée + dispo
 
   /* --- Déplacement analogique + course auto manette --- */
   const f = new THREE.Vector3(-Math.sin(me.yaw),0,-Math.cos(me.yaw));
@@ -7135,6 +7172,7 @@ function animate(){
   updateOrbs(dt);
   updateMinimap();   // radar haut-gauche : ennemis rouges clignotants + orbes, rayon 10 m
   updateCompass();   // cadran de cap (haut centre)
+  updateDashUI();    // jauge du dash sabre (Bonus d'attaque), bas-droite
   updateRagdolls(dt);
   updateCrosshair(dt);
   updateMomentumHUD();

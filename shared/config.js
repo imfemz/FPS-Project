@@ -506,7 +506,7 @@
       SLOWDOWN_MAX: 0.45,
       // Force du magnétisme rotationnel, en fraction de STRENGTH. 0 = slowdown pur (zéro rotation).
       // Garde-le bas pour rester "PC" : la rotation est ce qui se sent le plus "auto-aim".
-      ROTATION: 0.5,
+      ROTATION: 0.8,
       // Taille de la bulle autour de l'ennemi, en DEGRÉS. Le réticule doit entrer dedans pour que
       // l'assist s'active. Plus grand = s'accroche de plus loin. (Avant : ~8° en dur.)
       BUBBLE_DEG: 8,
@@ -771,7 +771,7 @@
       glow_shield:  '#1f9dff', // halo bleu autour du chiffre quand on touche le bouclier (image 1)
       glow_health:  '#e62121', // halo orangé autour du chiffre quand on touche les PV (image 2)
       glow_head:    '#ff3030', // halo rouge sur headshot
-      glow_strength: 1,       // intensité du halo (px de flou). 0 = pas de glow
+      glow_strength: 0.1,       // intensité du halo (px de flou). 0 = pas de glow
       stack_window: 0.7,       // s : tant qu'on retape la cible dans cette fenêtre, les dégâts s'empilent
     },
     // ===== Barre d'info SHIELD / PV au-dessus de l'ennemi (image 3) =====
