@@ -299,8 +299,8 @@
       swings: [
         // 1) tranche diagonale : haut-droite → bas-gauche
         { dur: 0.46, lock: 0.30, shake: 3.0,
-          windup: { rot: [0.45, 0.70, -0.90], pos: [0.18, 0.15, 0.10] },
-          strike: { rot: [-10.55, -1.10, 1.00], pos: [-0.22, -0.16, -0.14] } },
+          windup: { rot: [1.45, 10.70, -0.90], pos: [-1.08, 0.15, 0.10] },
+          strike: { rot: [-1.55, -1.10, 1.00], pos: [-0.22, -0.16, -0.14] } },
         // 2) revers : bas-gauche → haut-droite
         { dur: 0.36, lock: 0.30, shake: 4.0,
           windup: { rot: [0.45, -0.70, 10.90], pos: [-0.18, 0.15, 0.10] },
