@@ -2853,12 +2853,20 @@ function applyBodyAim(s, anim, dt){
   }
   const twist = Math.max(-maxOff, Math.min(maxOff, delta));
   s.twistYaw = (s.twistYaw || 0) + (twist - (s.twistYaw || 0)) * Math.min(1, dt * smooth);
-  // repartition du twist (rotation autour de Y local) a partir de qRest
+  // Repartition du twist (rotation autour de Y local). IMPORTANT : applySpineAim a deja ecrit
+  // le PITCH sur Abdomen/Torso (= qRest*pitch). Pour ces bones partages on MULTIPLIE le twist
+  // par-dessus (conserve le pitch) ; pour Hips (non touche par le pitch) on part de qRest.
+  const SA = (GAMECFG.MODELS && GAMECFG.MODELS.spine_aim) || {};
+  const spineSet = (SA.bones || ['Abdomen','Torso','Chest']);
   const dist = AB.dist || { Hips:0.45, Abdomen:0.35, Torso:0.20 };
   for(const name in dist){
     const b = s.aim[name]; if(!b || !b.userData.qRest) continue;
     _aimQ.setFromAxisAngle(_aimY, s.twistYaw * dist[name]);
-    b.quaternion.copy(b.userData.qRest).multiply(_aimQ);
+    if(spineSet.indexOf(name) !== -1 && SA.enabled !== false){
+      b.quaternion.multiply(_aimQ);                       // pitch deja applique -> compose le twist
+    } else {
+      b.quaternion.copy(b.userData.qRest).multiply(_aimQ); // Hips : qRest * twist
+    }
   }
 }
 
@@ -4964,6 +4972,43 @@ function updateHitboxDebug(){
   if(remote && remote.soldier && !remote.dead && remote.pos) place(remote.pos, !!(remote.anim && (remote.anim.c || remote.anim.sl)), 1);
   if(botMgr) for(const b of botMgr.values()){ if(b && !b.dead && b.pos && b.soldier) place(b.pos, !!(b.anim && b.anim.c), (typeof LBOT!=='undefined' ? (LBOT.hit_pad ?? 1.4) : 1.4)); }
   for(; i < hitboxPool.length; i++) hitboxPool[i].visible = false;
+}
+// ===== Overlay debug anim en couches (toggle KeyJ) : 1er bot/remote vivant =====
+let _animDbgEl = null;
+function updateAnimDebug(){
+  if(!ANIM_DEBUG){ if(_animDbgEl) _animDbgEl.style.display = 'none'; return; }
+  if(!_animDbgEl){
+    _animDbgEl = document.getElementById('animdebug');
+    if(!_animDbgEl){
+      _animDbgEl = document.createElement('div'); _animDbgEl.id = 'animdebug';
+      _animDbgEl.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99999;background:rgba(6,10,16,.82);'+
+        'color:#9fe;font:11px/1.4 monospace;padding:8px 10px;border:1px solid rgba(120,200,255,.35);'+
+        'border-radius:6px;white-space:pre;pointer-events:none;max-width:340px;';
+      document.body.appendChild(_animDbgEl);
+    }
+  }
+  _animDbgEl.style.display = 'block';
+  const now = performance.now();
+  if(now - (_animDbgEl._last||0) < 200) return;   // throttle ~5/s
+  _animDbgEl._last = now;
+  let s = null, who = '-', b = null;
+  if(botMgr) for(const [id,bb] of botMgr){ if(bb && !bb.dead && bb.soldier){ s = bb.soldier; b = bb; who = 'seat#'+id; break; } }
+  if(!s && remote && remote.soldier && !remote.dead){ s = remote.soldier; b = remote; who = 'remote'; }
+  if(!s){ _animDbgEl.textContent = 'ANIM DEBUG (KeyJ)\naucun bot/remote vivant'; return; }
+  const a = (b && b.anim) || {};
+  const fmt = v => (v==null?'-':(typeof v==='number'?v.toFixed(2):String(v)));
+  const idx1 = s.index1R ? 'oui' : 'NON';
+  const watt = (s.weapons && Object.keys(s.weapons).length) ? Object.keys(s.weapons).join('+') : 'AUCUNE';
+  _animDbgEl.textContent =
+    'ANIM DEBUG (KeyJ) - ' + who + '\n' +
+    'lower : ' + (s.lowerKey||'-') + '\n' +
+    'upper : ' + (s.upperKey||'-') + (s.upperOneShot?' (1shot)':'') + '\n' +
+    'weapon: idx ' + fmt(s.weaponIdx) + ' / wi ' + fmt(a.wi) + '\n' +
+    'firing: ' + (a.f?'OUI':'non') + '   grounded: ' + (a.grounded===false?'NON':(a.grounded?'oui':'?')) + '\n' +
+    'localVel vx,vz: ' + fmt(a.vx) + ', ' + fmt(a.vz) + '\n' +
+    'aimYaw: ' + fmt(a.aimYaw) + '  bodyYaw: ' + fmt(s.bodyYaw) + '  twist: ' + fmt(s.twistYaw) + '\n' +
+    'Index1.R: ' + idx1 + '   armes: ' + watt + '\n' +
+    'layered: ' + (s.layered?'OUI':'non');
 }
 let recoilAccum = 0, recoilYawAccum = 0, burstDir = 1, shotsInBurst = 0; // recul caméra à recentrer (vertical + horizontal)
 let aimVel = 0; // vitesse angulaire de visée lissée (rad/s) — pilote le recoil smoothing
@@ -8630,6 +8675,7 @@ function animate(){
     gtaoCam.fov = camera.fov; gtaoCam.aspect = camera.aspect; gtaoCam.near = camera.near; gtaoCam.far = camera.far;
     gtaoCam.updateProjectionMatrix(); gtaoCam.updateMatrixWorld(true);
   }
+  if(ANIM_DEBUG) updateAnimDebug(); else if(_animDbgEl && _animDbgEl.style.display!=='none') _animDbgEl.style.display='none';
   if(composer && (GAMECFG.GRAPHICS||{}).POSTFX !== false){
     try { composer.render(); worldDrawn = true; }
     catch(e){ console.warn('[NEON] post-FX render erreur → rendu standard', e); composer = null; }
