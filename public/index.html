@@ -240,7 +240,7 @@
   /* ===== Options : 2 colonnes + toggle clavier/manette ===== */
   .optcols{display:flex;gap:42px;align-items:flex-start;justify-content:center;flex-wrap:wrap;text-align:left;margin:6px 0 2px}
   .optcol{display:flex;flex-direction:column;align-items:center}
-  .optcol.settings{min-width:360px;align-items:flex-start}
+  .optcol.settings{min-width:540px;max-width:96vw;align-items:stretch}
   .seg{position:relative;display:flex;width:330px;max-width:100%;background:rgba(255,255,255,.05);border:1px solid var(--brd-strong);border-radius:999px;padding:4px;margin:0 auto 12px}
   .seg-btn{flex:1;position:relative;z-index:1;cursor:pointer;background:none;border:none;color:var(--txt-dim);font-size:13px;font-weight:600;padding:9px 8px;border-radius:999px;display:flex;align-items:center;justify-content:center;gap:7px;transition:color .2s;font-family:var(--font)}
   .seg-btn.sel{color:#04222b}
@@ -255,7 +255,13 @@
   #options.view-gp .opt-mouse{display:none}
   .optsec{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--txt-faint);margin:16px 0 4px;text-align:center;width:100%}
   .optlbl{width:200px;text-align:right;flex:0 0 auto}
-  .optcol.settings .optrow{font-size:16px;color:var(--txt)}
+  .optcol.settings .optrow{display:grid;grid-template-columns:1fr 180px 48px;align-items:center;gap:16px;font-size:16px;font-weight:500;color:var(--txt);margin:6px 0;padding:0 26px}
+  .optcol.settings .optlbl{width:auto;text-align:left}
+  .optcol.settings .optrow > input{justify-self:start}
+  .optcol.settings .optrow > span:last-child{text-align:right;color:var(--txt);font-variant-numeric:tabular-nums}
+  .optcol.settings .optrow input[type=color]{width:100%;height:26px}
+  .optcard{background:rgba(255,255,255,.03);border:1px solid var(--brd-strong);border-radius:18px;padding:14px 0;margin-bottom:8px}
+  .optcol.settings .optsec{padding:0 26px}
   /* fond du menu EN JEU : vue floutee + assombrie (au lieu du degrade plein) */
   #pause,.screen.ingame{background:rgba(8,9,12,.5);backdrop-filter:blur(13px);-webkit-backdrop-filter:blur(13px)}
   .pseudoinput{background:rgba(255,255,255,.05);border:1px solid var(--brd-strong);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 18px;letter-spacing:.5px;text-align:center;width:280px;margin-bottom:14px;outline:none;font-family:var(--font)}
@@ -371,6 +377,7 @@
       </div>
     </div>
     <div class="optcol settings">
+      <div class="optcard">
       <div class="optrow opt-mouse"><span class="optlbl">Sensibilité souris</span><input type="range" id="senskb" min="0.5" max="3" step="0.1"><span id="senskbv"></span></div>
       <div class="optrow opt-gp"><span class="optlbl">Sensibilité manette</span><input type="range" id="sensgp" min="0.5" max="3" step="0.1"><span id="sensgpv"></span></div>
       <div class="optrow opt-gp"><span class="optlbl">Aim assist</span><input type="checkbox" id="aimassist"></div>
@@ -379,11 +386,12 @@
       <div class="optrow"><span class="optlbl">Champ de vision (FOV)</span><input type="range" id="fov" min="50" max="100" step="1"><span id="fovv"></span></div>
       <div class="optrow"><span class="optlbl">Vitesse de visée (ADS)</span><input type="range" id="adsspeed" min="10" max="17" step="1"><span id="adsspeedv"></span></div>
       <div class="optrow opt-mouse"><span class="optlbl">Molette = changer d'arme</span><input type="checkbox" id="wheelswitch"></div>
+      </div>
       <div class="optsec">VISEUR</div>
       <div class="optrow"><span class="optlbl">Taille</span><input type="range" id="chsize" min="2" max="30" step="1"><span id="chsizev"></span></div>
       <div class="optrow"><span class="optlbl">Écart</span><input type="range" id="chgap" min="0" max="40" step="1"><span id="chgapv"></span></div>
       <div class="optrow"><span class="optlbl">Épaisseur</span><input type="range" id="chthick" min="1" max="8" step="1"><span id="chthickv"></span></div>
-      <div class="optrow"><span class="optlbl">Couleur</span><input type="color" id="chcolor" style="width:44px;height:26px;background:none;border:1px solid var(--brd-strong);border-radius:6px;cursor:pointer"></div>
+      <div class="optrow"><span class="optlbl">Couleur</span><input type="color" id="chcolor" style="width:100%;height:26px;background:none;border:1px solid var(--brd-strong);border-radius:6px;cursor:pointer"></div>
       <div class="optrow"><span class="optlbl">Point central</span><input type="checkbox" id="chdot"></div>
     </div>
   </div>
