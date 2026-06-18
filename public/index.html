@@ -538,6 +538,7 @@ const CONFIG = {
   ADS_FOV: 56, BASE_FOV: 75,
   CROUCH_GUN_TILT: 0.14,
   CROUCH_SWAY_DAMP: 0.85, // en crouch, réduit TOUT le ballant de l'arme de ce facteur — look-sway + oscillation crouch-saut + sway airborne (0 = ballant normal, 1 = arme figée). N'affecte PAS la pose crouch.
+  CROUCH_MID_PULL: 0.12, // recul (m) de l'arme AU MILIEU de la transition de crouch : éloigne le modèle de la caméra pile quand il passerait trop près (pivot). 0 = off. Monte si le modèle frôle encore la caméra.
   SLIDE_CAM_ROLL: 0.05,
   MAX_BULLET_HOLES: 80, BULLET_HOLE_LIFE: 15,  // les impacts disparaissent (fondu sur les 3 dernières s)
   INTERP_DELAY: 110,            // marge d'interpolation (horloge serveur + extrapolation 120 ms)
@@ -5719,6 +5720,10 @@ function updateWeaponAnimation(dt, sprinting, moving){
   // Stabilité de l'arme en CROUCH : réduit TOUT le ballant (look-sway + oscillation crouch-saut + sway airborne)
   // SANS toucher à la pose crouch. 1 = pas accroupi (ballant normal), ~0.3 = accroupi à fond (ballant réduit).
   const _crStable = 1 - crouchPoseW * (CONFIG.CROUCH_SWAY_DAMP ?? 0.7);
+  // FIX pivot crouch : au MILIEU de la transition idle→crouch, le modèle (roll ~60° autour de son pivot)
+  // trace un arc qui le rapproche trop de la caméra. cpBump vaut 0 au début ET à la fin du crouch, max
+  // au milieu → on s'en sert pour repousser l'arme loin de la caméra pile pendant ce passage.
+  const cpBump = 4 * crouchPoseW * (1 - crouchPoseW);
   // mantle ET grimpe de mur cachent l'arme + déclenchent le shake ; la grimpe la cache PLUS VITE.
   mantlePose += (((me.mantle.active||me.climb.active)?1:0) - mantlePose) * Math.min(1, dt*(me.climb.active?16:9));
   // v5 : l'arme accompagne le saut (inertie) et encaisse l'atterrissage
@@ -5937,7 +5942,7 @@ function updateWeaponAnimation(dt, sprinting, moving){
   const gunBasePos = new THREE.Vector3(
     target.x + bobX + sprintBobX + swayX*2.2*swayHFactor*(GAMECFG.SWAY_AMOUNT ?? 1) + crouchAirX*adsRecenter + airborneX + cpX + wbX,
     target.y + bobY + sprintBobY + swayY*1.6*swayVFactor*(GAMECFG.SWAY_AMOUNT ?? 1) - 0.035*airPose*adsRecenter - 0.06*landKick*adsRecenter - rotKick*vmRot*0.7 + vibeY + crouchAirY*adsRecenter + airborneY + landBounce*adsRecenter + jumpNoseLift*adsRecenter + cpY,
-    target.z + Math.min(recoil*vmBack, (GAMECFG.RECOIL.VM_MAX ?? 999)) + vibeZ + airborneZ + cpZ
+    target.z + Math.min(recoil*vmBack, (GAMECFG.RECOIL.VM_MAX ?? 999)) + vibeZ + airborneZ + cpZ - cpBump*(CONFIG.CROUCH_MID_PULL ?? 0.12)
   );
   // rotation de base interpolée entre l'état HIP et l'état ADS de l'arme courante
   const _hr = (_W.hip && _W.hip.rot) || [0,0,0];
