@@ -791,7 +791,7 @@
     AMBIENT_FILE: '/audio/ambient.mp3',
     AMBIENT_VOLUME: 0.55,
     TEXTURES: {
-      sky: '/textures/sky.jpg', floor: '/textures/floor.jpg',
+      sky: '/textures/moon_sky.jpg', floor: '/textures/floor.jpg',
       wall: '/textures/wall.jpg', crate: '/textures/crate.jpg',
       platform: '/textures/platform.jpg', ramp: '/textures/ramp.jpg',
     },
