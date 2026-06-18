@@ -195,6 +195,12 @@
     color:#ff8a2c;text-shadow:0 2px 22px rgba(255,120,30,.55),0 0 2px rgba(0,0,0,.4);opacity:0;white-space:nowrap}
   #killbanner.headshot{color:#ff3535;text-shadow:0 2px 22px rgba(255,40,40,.6),0 0 2px rgba(0,0,0,.45)}
   #killbanner.show{animation:killpop 2s cubic-bezier(.18,.9,.2,1) forwards}
+  #overbanner{position:absolute;left:50%;top:55%;transform:translate(-50%,-50%);z-index:7;pointer-events:none;text-align:center;opacity:0;white-space:nowrap}
+  #overbanner .ob-main{font-family:var(--font);font-weight:900;font-style:italic;font-size:clamp(24px,3.4vw,46px);letter-spacing:-.5px;color:#ff3535;text-shadow:0 2px 22px rgba(255,40,40,.6),0 0 2px rgba(0,0,0,.5)}
+  #overbanner .ob-sub{margin-top:7px;font-family:var(--mono);font-size:clamp(11px,1.2vw,15px);letter-spacing:2px;color:#ff8a8a;text-transform:uppercase;text-shadow:0 1px 8px rgba(255,40,40,.5)}
+  #overbanner .ob-sub b{color:#fff}
+  #overbanner.show{animation:obpop 2.6s cubic-bezier(.18,.9,.2,1) forwards}
+  @keyframes obpop{0%{opacity:0;transform:translate(-50%,-40%) scale(.82)}10%{opacity:1;transform:translate(-50%,-50%) scale(1.06)}18%{transform:translate(-50%,-50%) scale(1)}82%{opacity:1}100%{opacity:0;transform:translate(-50%,-56%) scale(1)}}
   @keyframes killpop{
     0%{opacity:0;transform:translate(-50%,-50%) scale(.55) rotate(-5deg)}
     10%{opacity:1;transform:translate(-50%,-50%) scale(1.14) rotate(-3deg)}
@@ -460,6 +466,7 @@
   <div id="momentum"><div class="mvel"><span id="mvelnum">0.0</span><span class="mu">M/S</span></div><div class="mbar"><div class="mbar-fill" id="mbarfill"></div><span class="mbar-max">MAX</span></div></div>
   <div id="toasts"></div>
   <div id="killbanner"></div>
+  <div id="overbanner"></div>
   <div id="reloadmsg">RECHARGEMENT</div>
   <div id="score" style="display:none"><div class="scorebox" id="pscore">0</div><div id="scoremid"></div><div class="scorebox" id="escore">0</div></div>
   <div id="wavebanner"><div class="wv-n">VAGUE 1</div><div class="wv-s">3 ENNEMIS</div></div>
@@ -2956,9 +2963,16 @@ function overConfig(){ return (GAMECFG.MELEE||{}).overcharge || {}; }
 // Débloque l'Overcharge dès que la série atteint le palier (appelé après chaque kill local).
 function checkOverchargeUnlock(){
   const need = overConfig().streak ?? 3;
-  if(!overReady && (localBotKills - overBase) >= need){ overReady = true; overReadyAt = performance.now(); }
+  if(!overReady && (localBotKills - overBase) >= need){ overReady = true; overReadyAt = performance.now(); showOverchargeReady(); }
 }
 function resetOvercharge(){ overReady = false; overBase = 0; if(overActive) endOvercharge(); }
+function showOverchargeReady(){
+  const el = document.getElementById('overbanner'); if(!el) return;
+  const key = gpActive ? gpName(cfg.gp.shoot) : kbName(cfg.kb.shoot);
+  el.innerHTML = '<div class="ob-main">ATTAQUE SPÉCIALE</div><div class="ob-sub">Double-tap <b>'+key+'</b> pour lancer</div>';
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  try{ if(typeof sfx==='function'){ sfx(480, 1150, 0.16, 0.06, 'sawtooth'); setTimeout(()=>sfx(880, 1500, 0.13, 0.045, 'sine'), 70); } }catch(e){}
+}
 function saberWeaponIndex(){ const W = GAMECFG.WEAPONS||[]; for(let i=0;i<W.length;i++) if(W[i].melee) return i; return -1; }
 function isSaber(){ const W = curWeapon(); return !!(W && W.melee); }
 // Prochaine arme À FEU (saute le sabre) — pour le cycle clic-bref manette.
@@ -3313,16 +3327,7 @@ function _saberSparkTex(){
 function ensureSaberFX(){
   if(!gunScene || saberParticles) return;
   const S = GAMECFG.MELEE || {};
-  const tip = -(S.trail_len ?? 0.95), base = (S.trail_base ?? -0.12);
-  // Halo : tube additif le long de l'axe -Z (orientation de la lame).
-  const L = Math.abs(tip - base), r = (S.glow_radius ?? 0.055);
-  const tg = new THREE.CylinderGeometry(r, r*0.7, L, 14, 1, true);
-  tg.rotateX(-Math.PI/2); tg.translate(0, 0, (tip + base)/2);
-  saberGlowTube = new THREE.Mesh(tg, new THREE.MeshBasicMaterial({
-    color:(S.blade_color ?? 0x36e3ff), transparent:true, opacity:(S.glow_opacity ?? 0.30),
-    blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, toneMapped:false }));
-  saberGlowTube.frustumCulled = false; saberGlowTube.matrixAutoUpdate = false; saberGlowTube.visible = false;
-  gunScene.add(saberGlowTube);
+  // (halo cylindrique retire — le glow vient desormais des arcs electriques)
   // ===== ARCS ELECTRIQUES (LineSegments) emis depuis la SURFACE de la lame =====
   const MAXA = (S.arc_count ?? 22), K = (S.arc_points ?? 6), SEG = K - 1;
   const geo = new THREE.BufferGeometry();
@@ -3359,15 +3364,6 @@ function updateSaberFX(dt, active){
   if(!saberParticles) return;
   const S = GAMECFG.MELEE || {};
   gun.updateMatrixWorld(true);
-  // --- Halo glow tube : suit le gun, pulse avec la lame ---
-  if(saberGlowTube){
-    saberGlowTube.visible = active;
-    if(active){
-      saberGlowTube.matrix.copy(gun.matrixWorld); saberGlowTube.matrixWorldNeedsUpdate = true;
-      const pulse = 1 + Math.sin(performance.now()*0.012) * (S.blade_pulse ?? 0.12);
-      saberGlowTube.material.opacity = (S.glow_opacity ?? 0.30) * (0.7 + 0.3*pulse) * (1 + melee.flare*1.2);
-    }
-  }
   // --- Arcs electriques : filaments jagged emis de la surface de la lame, re-randomises (crepitement) ---
   const ud = saberParticles.userData, SEG = ud.SEG;
   const cA = new THREE.Color(S.particle_color_a ?? 0x4db8ff), cB = new THREE.Color(S.particle_color_b ?? 0xa35cff);

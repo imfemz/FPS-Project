@@ -293,7 +293,7 @@
         streak: 3,             // kills d'affilée requis pour débloquer
         window_ms: 15000,      // une fois dispo : si aucun HIT dans ce délai (15 s) → reset (refaire 3 kills)
         doubletap_ms: 300,     // fenêtre du double-tap d'attaque pour la lancer (quand dispo)
-        radius: 5,             // rayon de touche (m)
+        radius: 10,            // rayon de touche (m)
         dmg_front: 140,        // dégâts en frontal (cône avant)
         dmg_side: 100,         // dégâts sur les côtés (dans le rayon, hors cône frontal)
         front_cone_deg: 70,    // ouverture du cône "frontal" (au-delà = côtés)
