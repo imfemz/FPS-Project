@@ -590,7 +590,7 @@
       hit_head: '/audio/hit_head.mp3', shield_crack: '/audio/shield_crack.mp3',
       slide: '/audio/slide.mp3', slide_jump: '/audio/slide_jump.mp3',
       wallbounce: '/audio/wallbounce.mp3', mantle: '/audio/mantle.mp3',
-      superglide: '/audio/superglide.mp3', reload: '/audio/reload.mp3',
+      superglide: '/audio/superglide.mp3', dash: '/audio/dash.mp3', reload: '/audio/reload.mp3',
       holster: '/audio/holster.mp3', equip: '/audio/equip.mp3',
       footstep: '/audio/footstep.mp3', death: '/audio/death.mp3',
       orb_pickup: '/audio/orb_pickup.mp3', crouch: '/audio/crouch.mp3',

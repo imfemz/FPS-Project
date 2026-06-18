@@ -328,6 +328,7 @@
   .optrow{display:flex;align-items:center;gap:14px;margin:8px 0;font-size:14px;color:var(--txt-dim)}
   .optrow input[type=range]{width:180px;accent-color:var(--accent)}
   .optrow input[type=checkbox]{accent-color:var(--accent);width:17px;height:17px}
+  .optic{vertical-align:-3px;margin-right:8px;opacity:.85;color:var(--accent)}  /* petite icone audio dans le label */
   /* ===== Options : 2 colonnes + toggle clavier/manette ===== */
   .optcols{display:flex;gap:42px;align-items:flex-start;justify-content:center;flex-wrap:wrap;text-align:left;margin:6px 0 2px}
   .optcol{display:flex;flex-direction:column;align-items:center}
@@ -532,6 +533,8 @@
       <div class="optrow ctrlrow"><span class="optlbl">Saut</span>
         <div class="segpair"><button class="bindbtn" id="jmanual">Manuel</button><button class="bindbtn" id="jauto">Auto</button></div>
       </div>
+      <div class="optsec">AUDIO</div>
+      <div class="optrow"><span class="optlbl"><svg class="optic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h3l5 4V5L7 9H4z" fill="currentColor" stroke="none"/><path d="M15.5 8.5a4 4 0 0 1 0 7"/><path d="M18 6a7 7 0 0 1 0 12"/></svg>Volume musique</span><input type="range" id="musicvol" min="0" max="1" step="0.05"><span id="musicvolv"></span></div>
     </div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px">
@@ -554,7 +557,7 @@
 
 <div class="screen" id="pause">
   <h1 style="font-size:34px">Pause</h1>
-  <p>La partie continue en arrière-plan.</p>
+  <p id="pausesub">La partie continue en arrière-plan.</p>
   <button class="btn" id="resumebtn">Reprendre</button>
   <button class="btn ghost" id="pauseopt">Options</button>
   <button class="btn ghost" id="pausequit">Quitter vers le salon</button>
@@ -701,6 +704,7 @@ const DEFAULTS = {
   sensKb: 1.0, sensGp: 1.0, aimAssist: true, crouchMode: 'hold', autoSprint: true, autoJump: false, fov: 0, deadzone: 0.06,
   wheelSwitch: false,            // molette souris = changer d'arme (activable en options)
   adsSpeed: 17,                  // vitesse de montée en visée (ADS)
+  musicVol: 0.5,                 // volume de la musique (menu) — réglable dans les options
   crosshair: { size: 13, gap: 17, thickness: 2, color: '#ffffff', dot: false }, // viseur perso
 };
 let cfg = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('nc_cfg')||'{}'));
@@ -3928,15 +3932,21 @@ function playSfx(name, pitch){
 }
 
 /* ===== Audio UI : musique de menu (boucle) + clics boutons + son de spawn ===== */
-let menuMusicSrc = null, menuMusicWanted = true, audioUnlocked = false;
+let menuMusicSrc = null, menuMusicGain = null, menuMusicWanted = true, audioUnlocked = false;
+function musicVol(){ return (cfg.musicVol != null ? cfg.musicVol : (GAMECFG.MENU_MUSIC_VOLUME ?? 0.5)); }
 function startMenuMusic(){
   if(menuMusicSrc || !audioUnlocked) return;
   const buf = audioBuffers['menu_audio']; if(!buf) return;
   const ctx = ensureAudioCtx(); if(!ctx) return;
   const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true;
-  const g = ctx.createGain(); g.gain.value = GAMECFG.MENU_MUSIC_VOLUME ?? 0.5;
+  const g = ctx.createGain(); g.gain.value = musicVol();
   s.connect(g).connect(ctx.destination); s.start();
-  menuMusicSrc = s;
+  menuMusicSrc = s; menuMusicGain = g;
+}
+// Volume musique réglé en live depuis les options (persiste dans cfg).
+function setMusicVolume(v){
+  v = Math.max(0, Math.min(1, v)); cfg.musicVol = v; saveCfg();
+  if(menuMusicGain){ try{ menuMusicGain.gain.value = v; }catch(e){} }
 }
 function stopMenuMusic(){ if(menuMusicSrc){ try{ menuMusicSrc.stop(); }catch(e){} menuMusicSrc = null; } }
 // Lance la musique si souhaitée ET qu'un écran front-end est ouvert (accueil/lobby/options), hors partie.
@@ -5272,6 +5282,8 @@ function lock(){
 document.addEventListener('pointerlockchange', ()=>{
   locked = document.pointerLockElement === gameEl;
   if(!locked && ((playing && alive) || spec.active) && !document.getElementById('options').classList.contains('show')){
+    const ps = document.getElementById('pausesub');
+    if(ps) ps.textContent = localBotMode ? 'Partie en pause — les bots sont figés.' : 'La partie continue en arrière-plan.';
     show('pause');
   }
 });
@@ -5563,6 +5575,11 @@ function buildOptions(){
   // Molette = changer d'arme
   const ws = document.getElementById('wheelswitch');
   if(ws){ ws.checked = !!cfg.wheelSwitch; ws.onchange = ()=>{ cfg.wheelSwitch = ws.checked; saveCfg(); }; }
+  // Volume musique (live + persiste)
+  const mv = document.getElementById('musicvol');
+  if(mv){ const cur = musicVol(); mv.value = cur;
+    document.getElementById('musicvolv').textContent = Math.round(cur*100)+'%';
+    mv.oninput = ()=>{ const v=+mv.value; document.getElementById('musicvolv').textContent=Math.round(v*100)+'%'; setMusicVolume(v); }; }
   // Viseur personnalisable (taille / écart / épaisseur / couleur / point)
   const cc = cfg.crosshair;
   const bindCh = (id, key, valId)=>{ const el=document.getElementById(id); if(!el) return;
@@ -5989,7 +6006,8 @@ function tryDash(g, wishDir, f){
     sgFiredAt = performance.now();
     sgFovKick = SG.FOV_KICK || 0;
     triggerSpeedFx(GAMECFG.SPEED_FX_DURATION ?? 1.8);
-    playSfx('superglide');
+    playSfx('dash');
+    wbShake = 0.4; wbShakeT = 0;   // leger camera shake au dash sabre
     me.dashCD = DASH_CD;
   }
   _dashPrev = held;
@@ -6540,7 +6558,7 @@ function applyCamera(dt){
     wbShakeT += dt;
     const atk = 0.04, dec = 0.22;
     const env = wbShakeT < atk ? (wbShakeT/atk) : Math.exp(-(wbShakeT-atk)/dec);
-    const amp = (GAMECFG.WALLBOUNCE_SHAKE ?? 0) * env;
+    const amp = (GAMECFG.WALLBOUNCE_SHAKE ?? 0) * env * wbShake;
     wbShakePhase += dt * 26;                  // basse fréquence = naturel (pas un buzz)
     camera.rotateZ(Math.sin(wbShakePhase) * amp);
     camera.rotateX(Math.cos(wbShakePhase*1.27) * amp * 0.8);
@@ -7576,12 +7594,15 @@ function animate(){
   // que la detection touche exactement ce qui est a l'ecran. Sinon le tir testait la position
   // d'1 frame en arriere alors que le mesh est rendu a la nouvelle position -> tirs rates sur
   // cible pourtant centree dans le viseur.
-  if(localBotMode) updateLocalBots(dt);   // IA des bots d'entrainement -> b.pos a jour
+  // FREEZE en mode bot quand un menu (pause/options) est ouvert : les bots ne bougent plus,
+  // ne tirent plus, ne font plus de dégâts -> on ne peut plus se faire tuer dans les réglages.
+  const botFrozen = localBotMode && aMenuIsOpen();
+  if(localBotMode && !botFrozen) updateLocalBots(dt);   // IA des bots d'entrainement -> b.pos a jour
   else if(!spec.active && remote.exists && remote.buf && remote.buf.length >= 2) interpRemote(); // remote.pos a jour
   // Quand on navigue dans un MENU à la manette (pause/options en jeu), on COUPE l'input manette du
   // jeu (sinon le stick déplace le joueur et A = tir pendant qu'on clique). g=null = comme sans manette.
-  if(playing && alive) playerUpdate(dt, aMenuIsOpen() ? null : g);
-  if(playing && alive) applySaberMagnet(dt);   // aimant de visée quand le sabre est sorti près d'un ennemi
+  if(playing && alive && !botFrozen) playerUpdate(dt, aMenuIsOpen() ? null : g);
+  if(playing && alive && !botFrozen) applySaberMagnet(dt);   // aimant de visée quand le sabre est sorti près d'un ennemi
   // mes propres pas, réactifs à la vitesse (cadence + volume + pitch)
   if(playing && alive && me.onGround && !me.slide.active && !me.mantle.active){
     const sp2 = Math.hypot(me.vel.x, me.vel.z);
