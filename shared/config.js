@@ -539,7 +539,7 @@
       SLOWDOWN_MAX: 0.45,
       // Force du magnétisme rotationnel, en fraction de STRENGTH. 0 = slowdown pur (zéro rotation).
       // Garde-le bas pour rester "PC" : la rotation est ce qui se sent le plus "auto-aim".
-      ROTATION: 0.8,
+      ROTATION: 1.2,
       // Taille de la bulle autour de l'ennemi, en DEGRÉS. Le réticule doit entrer dedans pour que
       // l'assist s'active. Plus grand = s'accroche de plus loin. (Avant : ~8° en dur.)
       BUBBLE_DEG: 0,
