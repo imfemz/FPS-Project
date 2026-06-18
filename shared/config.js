@@ -290,6 +290,7 @@
       // puis revient en boomerang dans la main. Pas de hit = pas de dégât, le sabre revient quand même.
       overcharge: {
         streak: 3,             // kills d'affilée requis pour débloquer
+        window_ms: 15000,      // une fois dispo : si aucun HIT dans ce délai (15 s) → reset (refaire 3 kills)
         doubletap_ms: 300,     // fenêtre du double-tap d'attaque pour la lancer (quand dispo)
         radius: 5,             // rayon de touche (m)
         dmg_front: 140,        // dégâts en frontal (cône avant)

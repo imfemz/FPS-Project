@@ -2927,13 +2927,13 @@ let saberTrail = null; const saberTrailSamples = [];
 let saberGlowTube = null, saberParticles = null, _saberPtcl = null;  // halo + particules électriques permanentes
 let saberBladeSamples = [];
 // ===== OVERCHARGE (attaque spéciale sabre, dispo à 3 kills d'affilée) =====
-let overReady = false, overBase = 0, overActive = false;
+let overReady = false, overBase = 0, overActive = false, overReadyAt = 0;
 const overState = { t:0, group:null, origin:new THREE.Vector3(), dir:new THREE.Vector3(), right:new THREE.Vector3(), apex:new THREE.Vector3(), light:null };
 function overConfig(){ return (GAMECFG.MELEE||{}).overcharge || {}; }
 // Débloque l'Overcharge dès que la série atteint le palier (appelé après chaque kill local).
 function checkOverchargeUnlock(){
   const need = overConfig().streak ?? 3;
-  if(!overReady && (localBotKills - overBase) >= need) overReady = true;
+  if(!overReady && (localBotKills - overBase) >= need){ overReady = true; overReadyAt = performance.now(); }
 }
 function resetOvercharge(){ overReady = false; overBase = 0; if(overActive) endOvercharge(); }
 function saberWeaponIndex(){ const W = GAMECFG.WEAPONS||[]; for(let i=0;i<W.length;i++) if(W[i].melee) return i; return -1; }
@@ -3053,7 +3053,7 @@ function spawnThrownSaber(){
 }
 // Balayage de dégâts (une fois) : bots dans le rayon devant → frontal (cône) = dmg_front, côtés = dmg_side.
 function applyOverchargeDamage(){
-  if(!localBotMode) return;   // (online = autorité serveur, viendra ensuite)
+  if(!localBotMode) return false;   // (online = autorité serveur, viendra ensuite)
   const O = overConfig(), R = O.radius ?? 5;
   const frontCos = Math.cos(((O.front_cone_deg ?? 70)*Math.PI/180)/2);
   const ox = me.pos.x, oy = me.pos.y + (me.eye || 1.62), oz = me.pos.z, dir = overState.dir;
@@ -3067,10 +3067,14 @@ function applyOverchargeDamage(){
     victims.push({ id, b, dmg: (dot >= frontCos) ? (O.dmg_front ?? 140) : (O.dmg_side ?? 100) });
   }
   for(const v of victims) applyLocalBotDamage(v.id, v.b, v.dmg, false, true);
+  if(victims.length){           // au moins une cible touchée → l'Overcharge est CONSOMMÉE (refaire 3 kills)
+    overReady = false; overBase = localBotKills;   // les kills de l'overcharge comptent pour la prochaine charge
+  }
+  return victims.length > 0;
 }
 function launchOvercharge(){
   if(overActive || !alive) return;
-  overActive = true; overReady = false;
+  overActive = true;            // NB : on ne consomme PAS au lancer — seulement si on TOUCHE (cf. applyOverchargeDamage)
   const O = overConfig(), cp = Math.cos(me.pitch);
   overState.dir.set(-Math.sin(me.yaw)*cp, Math.sin(me.pitch), -Math.cos(me.yaw)*cp).normalize();
   overState.right.set(Math.cos(me.yaw), 0, -Math.sin(me.yaw)).normalize();   // axe de la rotation (tumble avant)
@@ -3080,8 +3084,7 @@ function launchOvercharge(){
   overState.group = spawnThrownSaber();
   overState.group.position.copy(overState.origin);
   gun.visible = false;                 // la lame quitte la main
-  applyOverchargeDamage();             // un seul balayage à l'envoi (pas de hit = pas de dégât)
-  overBase = localBotKills;            // les kills de l'overcharge comptent pour la prochaine charge
+  applyOverchargeDamage();             // balayage à l'envoi — consomme l'overcharge SEULEMENT si ça touche (sinon reste chargé)
   saberWhoosh(); meleeShake = Math.min(2.6, meleeShake + 1.6);
   if(typeof sfx === 'function'){ sfx(180, 280, 0.22, 0.05, 'sawtooth'); sfx(540, 200, 0.16, 0.04, 'square'); }
 }
@@ -3403,6 +3406,8 @@ function updateMelee(dt){
   updateSaberGlow(dt, saber);
   updateSaberFX(dt, saber && playing && alive && !overActive);   // halo + particules (sabre en main, pas pendant le throw)
   updateOvercharge(dt);   // sabre lancé : aller / hit / retour boomerang
+  // Cooldown : Overcharge armée mais aucun HIT dans le délai (15 s) → reset, il faut refaire 3 kills.
+  if(overReady && !overActive && performance.now() - overReadyAt > (overConfig().window_ms ?? 15000)) resetOvercharge();
   if(!saber){ if(saberTrail) saberTrail.visible = false; melee.active = false; melee.trailOn = false; updateCooldownBar(); return; }
   const S = GAMECFG.MELEE || {};
   // COOLDOWN sabre : la charge se recharge avec le temps ; la barre bleue se vide/remonte.
@@ -3469,6 +3474,8 @@ function updateCooldownBar(){
   if(p !== f._p){ f.style.width = p + '%'; f._p = p; }
   const empty = melee.charge < 1/((GAMECFG.MELEE||{}).max_hits ?? 5) - 1e-4;
   if(empty !== ammoEl._cEmpty){ ammoEl.classList.toggle('charge-empty', empty); ammoEl._cEmpty = empty; }
+  // OVERCHARGE dispo → barre sabre rouge pulsé (togglé CHAQUE frame : sinon le 3e kill n'allume rien tant qu'aucun événement HUD)
+  if(overReady !== ammoEl._over){ ammoEl.classList.toggle('over-ready', overReady); ammoEl._over = overReady; }
 }
 // Jauge du DASH sabre ("Bonus d'attaque") : grise → se remplit en bleu pendant la recharge (6 s),
 // pleine = prête. Rechargée d'un coup au hit sabre. Affichée seulement quand le sabre est sorti.
