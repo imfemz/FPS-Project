@@ -27,6 +27,10 @@
     --blur:14px;
     --shadow:0 12px 40px rgba(0,0,0,.45);
     --shadow-sm:0 6px 20px rgba(0,0,0,.35);
+    /* ===== DA HUD rétro-futuriste : trait fin bleu + coins chanfreinés (carré futuriste) ===== */
+    --hud-edge:rgba(125,205,255,.6);   /* trait d'accent bleu fin des cadres */
+    --chamfer:13px;                    /* taille des coins coupés (haut-gauche + bas-droite) */
+    --chamfer-path:polygon(var(--chamfer) 0, 100% 0, 100% calc(100% - var(--chamfer)), calc(100% - var(--chamfer)) 100%, 0 100%, 0 var(--chamfer));
     --font:'Inter','Segoe UI',system-ui,Arial,sans-serif;
     --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
     /* alias hérités (compat ancien code) */
@@ -130,7 +134,21 @@
   @keyframes sbOverPulse{0%,100%{background:#ff5a5a;box-shadow:0 0 9px rgba(255,70,70,.7)}50%{background:#ff2020;box-shadow:0 0 20px rgba(255,40,40,1)}}
   #ammo.saber.over-ready .sb-charge{animation:sbOverPulse .7s ease-in-out infinite}
   #ammo.saber.over-ready .sb-wpn .sb-name{color:#ff6a6a;text-shadow:0 0 10px rgba(255,80,80,.7)}
-  #reloadmsg{position:absolute;left:50%;bottom:24%;transform:translateX(-50%);font-family:var(--mono);color:var(--txt);font-size:11px;letter-spacing:4px;display:none;
+  /* ===== REFONTE DA : cartes HUD rétro-futuristes (coins chanfreinés, bordure fine bleue en dégradé,
+     fond translucide flou + relief conservés). On garde la vibe ; juste plus "carré futuriste". ===== */
+  #vitals,#ammo,#leaderboard{
+    border:1.4px solid transparent;border-radius:0;box-shadow:none;
+    background:
+      linear-gradient(var(--panel),var(--panel)) padding-box,
+      linear-gradient(135deg,var(--hud-edge),var(--brd-strong) 34%,var(--brd) 66%,var(--hud-edge)) border-box;
+    -webkit-clip-path:var(--chamfer-path);clip-path:var(--chamfer-path);
+    filter:drop-shadow(0 10px 26px rgba(0,0,0,.5));
+  }
+  /* accent d'angle hachuré (fin, façon réf HUD) : en haut à droite */
+  #vitals::after,#ammo::after,#leaderboard::after{
+    content:'';position:absolute;top:6px;right:7px;width:24px;height:5px;pointer-events:none;opacity:.65;
+    background:repeating-linear-gradient(115deg,var(--hud-edge) 0 1.5px,transparent 1.5px 4.5px);
+  }
     background:var(--panel);border:1px solid var(--brd);border-radius:999px;padding:6px 16px;backdrop-filter:blur(var(--blur));box-shadow:var(--shadow-sm)}
   #score{position:absolute;top:18px;right:312px;display:flex;gap:10px;align-items:center}  /* bloc score : a gauche du logo top-droite, aligne */
   .scorebox{font-family:var(--mono);padding:6px 16px;font-size:22px;font-weight:700;background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius-sm);backdrop-filter:blur(var(--blur))}
@@ -311,9 +329,14 @@
   #wavebanner .wv-n{font-family:var(--mono);font-size:30px;font-weight:800;letter-spacing:4px;color:var(--txt);text-shadow:0 2px 14px rgba(0,0,0,.7)}
   #wavebanner .wv-s{font-family:var(--mono);font-size:11px;letter-spacing:4px;color:var(--accent);margin-top:3px}
   /* ===== Mini-map / radar (haut gauche) : ennemis rouges clignotants + orbes, rayon 10 m ===== */
-  #minimap{position:absolute;top:18px;left:18px;width:280px;height:280px;border-radius:50%;opacity:.85;
-    background:radial-gradient(circle at 50% 50%, rgba(12,16,20,.25), rgba(8,11,14,.4));
-    border:1.5px solid rgba(255,255,255,.16);box-shadow:0 4px 18px rgba(0,0,0,.45), inset 0 0 16px rgba(0,0,0,.45);
+  /* mini-map CARRÉE (coins chanfreinés), même DA que les cartes : bordure fine bleue + relief */
+  #minimap{position:absolute;top:18px;left:18px;width:280px;height:280px;border-radius:0;opacity:.85;
+    border:1.4px solid transparent;
+    background:
+      linear-gradient(rgba(11,15,19,.34),rgba(8,11,14,.46)) padding-box,
+      linear-gradient(135deg,var(--hud-edge),var(--brd-strong) 34%,var(--brd) 66%,var(--hud-edge)) border-box;
+    -webkit-clip-path:var(--chamfer-path);clip-path:var(--chamfer-path);
+    filter:drop-shadow(0 6px 20px rgba(0,0,0,.5));
     z-index:6;pointer-events:none;display:none}
   /* ===== Cadran de cap (compass FPS) en haut au centre : ticks + N/E/S/O, fade aux extrémités ===== */
   #compass{position:absolute;top:16px;left:50%;transform:translateX(-50%);width:460px;height:40px;
@@ -1034,11 +1057,11 @@ function buildSky(){
     t.wrapS = THREE.RepeatWrapping;
     skyDome.material = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { tSky: { value: t } },
+      uniforms: { tSky: { value: t }, skyGain: { value: (GAMECFG.GRAPHICS||{}).sky_gain ?? 1.0 } },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader: [
-        'varying vec2 vUv; uniform sampler2D tSky;',
-        'void main(){ gl_FragColor = vec4(texture2D(tSky, vUv).rgb, 1.0); }'
+        'varying vec2 vUv; uniform sampler2D tSky; uniform float skyGain;',
+        'void main(){ gl_FragColor = vec4(texture2D(tSky, vUv).rgb * skyGain, 1.0); }'
       ].join('\n')
     });
     // pas de nuages ni de soleil de jour sur la Lune
@@ -5699,11 +5722,17 @@ function updateMinimap(){
   const ctx = cv.getContext('2d'); const W=cv.width, H=cv.height, cx=W/2, cy=H/2, R=W/2-14;
   const RANGE=10, scale=R/RANGE;
   ctx.clearRect(0,0,W,H);
-  // anneaux + croix discrets
-  ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=1.2;
-  ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(cx,cy,R*0.5,0,Math.PI*2); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(cx-R,cy); ctx.lineTo(cx+R,cy); ctx.moveTo(cx,cy-R); ctx.lineTo(cx,cy+R); ctx.stroke();
+  // grille radar CARRÉE (DA rétro-futuriste) : sous-grille 3×3 + croix + anneau de portée fin (bleu)
+  const S = R;
+  ctx.strokeStyle='rgba(125,205,255,.15)'; ctx.lineWidth=1;
+  ctx.beginPath();
+  for(let i=1;i<3;i++){ const o=-S + (2*S)*(i/3);
+    ctx.moveTo(cx+o,cy-S); ctx.lineTo(cx+o,cy+S); ctx.moveTo(cx-S,cy+o); ctx.lineTo(cx+S,cy+o); }
+  ctx.stroke();
+  ctx.strokeStyle='rgba(125,205,255,.30)'; ctx.lineWidth=1.1;
+  ctx.beginPath(); ctx.moveTo(cx-S,cy); ctx.lineTo(cx+S,cy); ctx.moveTo(cx,cy-S); ctx.lineTo(cx,cy+S); ctx.stroke();
+  ctx.strokeStyle='rgba(125,205,255,.18)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,cy,S*0.66,0,Math.PI*2); ctx.stroke();
   const yaw = me.yaw||0, fx=-Math.sin(yaw), fz=-Math.cos(yaw);   // direction du regard (avant)
   const t = performance.now()*0.001;
   const blink = 0.4 + 0.6*Math.abs(Math.sin(t*4));               // clignotement des ennemis

@@ -8,13 +8,14 @@
     // d'environnement (sol mouillé, reflets arme) + lumière chaude. EXPOSURE = luminosité maîtresse.
     GRAPHICS: {
       ENABLED: true,           // false = revient au rendu d'origine (pour comparer)
-      exposure: 0.8,           // luminosité globale (tone mapping). BAISSE si ça crame, MONTE si trop sombre
+      exposure: 1.0,           // luminosité globale (tone mapping). BAISSE si ça crame, MONTE si trop sombre
+      sky_gain: 1.6,           // gain de luminosité du ciel lunaire (skybox) → plus de glow
       // --- Lumière ---
-      sun_intensity: 1.05,      // soleil (directionnelle chaude). Donne le contraste et les ombres
+      sun_intensity: 1.25,      // soleil (directionnelle chaude). Donne le contraste et les ombres
       sun_color: '#d6dde8',    // couleur du soleil (lumière froide, ambiance industrielle)
-      sky_light: 0.48,          // lumière du ciel (hemisphere) qui remplit les ombres
+      sky_light: 1.2,           // lumière du ciel (hemisphere) qui remplit les ombres
       ground_bounce: '#5d646e',// couleur du rebond de lumière du sol (béton froid)
-      ambient: 0.13,           // ambiante minimale (évite les noirs bouchés). 0 = ombres plus profondes
+      ambient: 0.28,           // ambiante minimale (évite les noirs bouchés). 0 = ombres plus profondes
       // --- Reflets d'environnement ---
       env_intensity: 0.45,      // force des reflets sur murs/caisses/rampes
       floor_roughness: 0.92,   // sol : plus BAS = plus lisse = plus réfléchissant (effet mouillé). 0.95 = mat
@@ -23,7 +24,7 @@
       gun_env: 0.8,            // reflets d'environnement sur l'arme
       // Tamise les surfaces texturées (1 = pleine luminosité, plus bas = plus sombre). Évite le sol
       // texturé qui part en blanc cramé. Descends vers 0.7 si c'est encore trop clair.
-      tex_brightness: 0.78,
+      tex_brightness: 0.9,
       // --- Atmosphère ---
       fog_color: '#878f99', fog_near: 65, fog_far: 200, // brume froide ; far poussé (map 90×90)
       // --- POST-FX (vrai shader) : anti-aliasing + occlusion ambiante + bloom ---
@@ -37,7 +38,7 @@
       // + assombrissement progressif du bas des faces verticales. Cohérente sous tous les angles.
       BAKED_AO: { enabled: true, ground_opacity: 0.42, ground_margin: 2.8, face_darken: 0.58 },
       BLOOM: true,             // halo lumineux sur les sources vives (sabre, néon, soleil)
-      bloom: { strength: 0.35, radius: 0.8, threshold: 0.7 }, // ↑strength = plus de glow ; threshold = seuil de brillance
+      bloom: { strength: 0.55, radius: 0.8, threshold: 0.72 }, // ↑strength = plus de glow ; threshold = seuil de brillance
     },
     DAMAGE: { BODY: 15, HEAD: 20 },
     ADS_SPEED: 12,   // vitesse de montée en visée (ADS) plus rapide (réglable en jeu : "Vitesse de visée")
