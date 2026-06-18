@@ -481,6 +481,8 @@ const CONFIG = {
   JUMP_VELOCITY: 6.8,
   // Fatigue de saut : sous vel_frac x (vitesse max de l'arme), re-sauter trop vite = saut plus bas + cooldown
   JUMP_FATIGUE: { vel_frac: 0.8, height_mult: 0.4, cooldown: 500 },
+  // HUD qui derive (inertie) selon le deplacement ; le viseur reste fixe (contre-translation)
+  HUD_SWAY: { amount: 0.4, max: 5, bob: 1.4, smooth: 8 },
   GRAVITY: 21,
   GROUND_ACCEL: 12,
   AIR_ACCEL: 0.6,               // dérive SANS input en l'air (bas = l'élan du slide jump se conserve)
@@ -4849,6 +4851,29 @@ function initMomentum(){
   const d = document.querySelector('#momentum .mdots'); if(!d || d.children.length) return;
   for(let i=0;i<MOMENTUM_DOTS;i++){ const s=document.createElement('span'); s.className='mdot'; d.appendChild(s); }
 }
+let _hudSwayX=0,_hudSwayY=0,_hudBobT=0;
+function updateHudSway(dt){
+  const hud=document.getElementById('hud'); if(!hud) return;
+  const HS = CONFIG.HUD_SWAY || {};
+  let tx=0,ty=0;
+  if(playing && alive){
+    const sy=Math.sin(me.yaw), cy=Math.cos(me.yaw);
+    const right = me.vel.x*cy - me.vel.z*sy;     // composante laterale (vel . droite)
+    const fwd   = -me.vel.x*sy - me.vel.z*cy;    // composante avant
+    const k = HS.amount ?? 0.4;
+    tx = -right * k;                              // inertie : le HUD traine a l'oppose du deplacement
+    ty = -fwd * k * 0.5;
+    const hsp = Math.hypot(me.vel.x, me.vel.z);
+    if(me.onGround && hsp > 1.2){ _hudBobT += dt*(7 + hsp*0.5); ty += Math.sin(_hudBobT)*Math.min(HS.bob ?? 1.4, hsp*0.16); }
+  }
+  const sm = Math.min(1, dt*(HS.smooth ?? 8));
+  _hudSwayX += (tx-_hudSwayX)*sm; _hudSwayY += (ty-_hudSwayY)*sm;
+  const MX = HS.max ?? 5;
+  _hudSwayX=Math.max(-MX,Math.min(MX,_hudSwayX)); _hudSwayY=Math.max(-MX,Math.min(MX,_hudSwayY));
+  hud.style.transform = 'translate('+_hudSwayX.toFixed(2)+'px,'+_hudSwayY.toFixed(2)+'px)';
+  const ch=document.getElementById('crosshair');                 // viseur FIXE : on annule la derive
+  if(ch) ch.style.transform = 'translate(-50%,-50%) translate('+(-_hudSwayX).toFixed(2)+'px,'+(-_hudSwayY).toFixed(2)+'px)';
+}
 function updateMomentumHUD(){
   const m = document.getElementById('momentum'); if(!m) return;
   const fill = document.getElementById('mbarfill'), num = document.getElementById('mvelnum');
@@ -7228,6 +7253,7 @@ function animate(){
   updateRagdolls(dt);
   updateCrosshair(dt);
   updateMomentumHUD();
+  updateHudSway(dt);
   updateSpeedFx(dt);
   updateSpeedEdge(dt);
   updateVelocitySfx();
