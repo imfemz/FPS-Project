@@ -195,12 +195,12 @@
     color:#ff8a2c;text-shadow:0 2px 22px rgba(255,120,30,.55),0 0 2px rgba(0,0,0,.4);opacity:0;white-space:nowrap}
   #killbanner.headshot{color:#ff3535;text-shadow:0 2px 22px rgba(255,40,40,.6),0 0 2px rgba(0,0,0,.45)}
   #killbanner.show{animation:killpop 2s cubic-bezier(.18,.9,.2,1) forwards}
-  #overbanner{position:absolute;left:50%;top:55%;transform:translate(-50%,-50%);z-index:7;pointer-events:none;text-align:center;opacity:0;white-space:nowrap}
-  #overbanner .ob-main{font-family:var(--font);font-weight:900;font-style:italic;font-size:clamp(24px,3.4vw,46px);letter-spacing:-.5px;color:#ff3535;text-shadow:0 2px 22px rgba(255,40,40,.6),0 0 2px rgba(0,0,0,.5)}
-  #overbanner .ob-sub{margin-top:7px;font-family:var(--mono);font-size:clamp(11px,1.2vw,15px);letter-spacing:2px;color:#ff8a8a;text-transform:uppercase;text-shadow:0 1px 8px rgba(255,40,40,.5)}
+  #overbanner{position:absolute;left:50%;bottom:82px;transform:translateX(-50%);z-index:7;pointer-events:none;text-align:center;opacity:0;white-space:nowrap}
+  #overbanner .ob-main{font-family:var(--font);font-weight:900;font-style:italic;font-size:clamp(14px,1.5vw,20px);letter-spacing:-.3px;color:#ff3535;text-shadow:0 1px 10px rgba(255,40,40,.5),0 0 2px rgba(0,0,0,.5)}
+  #overbanner .ob-sub{margin-top:2px;font-family:var(--mono);font-size:clamp(8px,0.85vw,11px);letter-spacing:2px;color:#ff8a8a;text-transform:uppercase;text-shadow:0 1px 6px rgba(255,40,40,.45)}
   #overbanner .ob-sub b{color:#fff}
   #overbanner.show{animation:obpop 2.6s cubic-bezier(.18,.9,.2,1) forwards}
-  @keyframes obpop{0%{opacity:0;transform:translate(-50%,-40%) scale(.82)}10%{opacity:1;transform:translate(-50%,-50%) scale(1.06)}18%{transform:translate(-50%,-50%) scale(1)}82%{opacity:1}100%{opacity:0;transform:translate(-50%,-56%) scale(1)}}
+  @keyframes obpop{0%{opacity:0;transform:translate(-50%,8px) scale(.9)}10%{opacity:1;transform:translate(-50%,0) scale(1.05)}18%{transform:translate(-50%,0) scale(1)}82%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-6px) scale(1)}}
   @keyframes killpop{
     0%{opacity:0;transform:translate(-50%,-50%) scale(.55) rotate(-5deg)}
     10%{opacity:1;transform:translate(-50%,-50%) scale(1.14) rotate(-3deg)}
@@ -841,6 +841,7 @@ let scene, camera, renderer, clock;
 // (GTAO les traite comme des surfaces opaques et les assombrit). La caméra principale les rend,
 // mais la caméra dédiée de l'AO (gtaoCam) ignore ce calque.
 const AO_SKIP_LAYER = 1;
+const DMG_OVERLAY_LAYER = 3;   // nombres de degats : rendus hors-bloom, par-dessus l'image
 let locked = false, playing = false, alive = true;
 // État de la caméra de mort (3e personne → kill cam)
 const deathCam = {
@@ -2022,21 +2023,15 @@ function makeDmgTexture(value, head, shield){
   const D = GAMECFG.DAMAGE_NUMBERS || {};
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128;
   const ctx = cv.getContext('2d');
-  const fs = head ? 62 : 52;
-  ctx.font = 'bold ' + fs + 'px Arial';
+  const fs = head ? 74 : 62;   // chiffres plus gros / plus lisibles
+  ctx.font = '900 ' + fs + 'px Arial';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const cx = 128, cy = 64, txt = String(value);
   const fill = head ? (D.color_head || '#ff5a5a') : (shield ? (D.color_shield || '#7fd4ff') : (D.color_health || '#ffe9c0'));
-  const glow = head ? (D.glow_head || '#ff3030') : (D.glow_shield || '#1f9dff');
-  const gs = (D.glow_strength != null ? D.glow_strength : 18);
-  // GLOW seulement sur les dégâts COLORÉS : rouge (tête) et bleu (bouclier). Pas de halo blanc sur les PV.
-  if(gs > 0 && (head || shield)){
-    ctx.fillStyle = fill; ctx.shadowColor = glow; ctx.shadowBlur = gs;
-    for(let i=0;i<3;i++) ctx.fillText(txt, cx, cy);
-  }
-  // contour sombre + chiffre net par-dessus (lisible sur fond clair)
-  ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
-  ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.strokeText(txt, cx, cy);
+  // AUCUN glow sur les nombres de degats (et bloom evite : rendus hors-composer).
+  // Contour sombre EPAIS -> chiffre net et lisible sur tout fond, sans halo.
+  ctx.lineJoin = 'round'; ctx.miterLimit = 2;
+  ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.strokeText(txt, cx, cy);
   ctx.fillStyle = fill; ctx.fillText(txt, cx, cy);
   return new THREE.CanvasTexture(cv);
 }
@@ -2046,12 +2041,19 @@ function spriteScreenScale(screenFrac, dist){
   const tanHalf = Math.tan(((camera && camera.fov) || 75) * Math.PI / 360);
   return screenFrac * 2 * dist * tanHalf;
 }
+const DMG_POP_DUR = 0.16;          // s : duree du punch d'apparition
+function dmgPopFactor(t){           // 1.5 -> 1.0 (easeOutCubic) : impact a l'apparition / a chaque coup
+  if(!(t < DMG_POP_DUR)) return 1;
+  const p = t / DMG_POP_DUR, e = 1 - (1-p)*(1-p)*(1-p);
+  return 1.5 + (1 - 1.5) * e;
+}
 function applyDmgScale(cnt){
   const D = GAMECFG.DAMAGE_NUMBERS || {};
   const frac = (D.screen_size != null ? D.screen_size : 0.055) * (cnt.head ? (D.head_mult || 1.25) : 1);
   const dist = camera.position.distanceTo(cnt.sprite.position);
   const h = spriteScreenScale(frac, dist);
-  cnt.sprite.scale.set(h * 2, h, 1); // canvas 2:1
+  const pf = dmgPopFactor(cnt.pop || 0);
+  cnt.sprite.scale.set(h * 2 * pf, h * pf, 1); // canvas 2:1 + punch d'impact
 }
 function addDamage(key, dmg, head, worldPos, shield){
   const D = GAMECFG.DAMAGE_NUMBERS || {};
@@ -2060,11 +2062,11 @@ function addDamage(key, dmg, head, worldPos, shield){
   let cnt = dmgCounters[key];
   if(!cnt || now - cnt.lastAt > winMs){ // nouvelle rafale → nouveau compteur
     if(cnt){ scene.remove(cnt.sprite); if(cnt.sprite.material.map) cnt.sprite.material.map.dispose(); }
-    cnt = dmgCounters[key] = { sprite: new THREE.Sprite(new THREE.SpriteMaterial({transparent:true, depthTest:false})), value: 0, lastAt: now, head:false, shield:false, rise:0 };
-    cnt.sprite.layers.set(AO_SKIP_LAYER);
+    cnt = dmgCounters[key] = { sprite: new THREE.Sprite(new THREE.SpriteMaterial({transparent:true, depthTest:false})), value: 0, lastAt: now, head:false, shield:false, rise:0, pop:0 };
+    cnt.sprite.layers.set(DMG_OVERLAY_LAYER);   // hors-bloom : rendu en overlay apres le composer
     scene.add(cnt.sprite);
   }
-  cnt.value += dmg; cnt.lastAt = now; cnt.head = !!head; cnt.shield = !!shield; cnt.rise = 0;
+  cnt.value += dmg; cnt.lastAt = now; cnt.head = !!head; cnt.shield = !!shield; cnt.rise = 0; cnt.pop = 0;
   if(cnt.sprite.material.map) cnt.sprite.material.map.dispose();
   cnt.sprite.material.map = makeDmgTexture(cnt.value, head, shield);
   cnt.sprite.material.needsUpdate = true;
@@ -2095,6 +2097,7 @@ function updateDamageNumbers(dt){
   for(const k in dmgCounters){
     const cnt = dmgCounters[k];
     const bar = healthBars[k];
+    if((cnt.pop||0) < DMG_POP_DUR) cnt.pop = (cnt.pop||0) + dt;   // avance le punch d'impact
     // Si une barre de vie existe pour cette cible : le numéro y est COLLÉ (haut-gauche),
     // toujours visible et de taille constante, et s'efface AVEC la barre.
     if(bar && bar.sprite){
@@ -8089,6 +8092,11 @@ function animate(){
     catch(e){ console.warn('[NEON] post-FX render erreur → rendu standard', e); composer = null; }
   }
   if(!worldDrawn) renderer.render(scene, camera);
+  // Nombres de degats : rendus APRES le post-FX -> jamais touches par le bloom (zero glow), nets et par-dessus.
+  { const _dmgMask = camera.layers.mask; camera.layers.set(DMG_OVERLAY_LAYER);
+    renderer.autoClear = false; renderer.clearDepth();
+    renderer.render(scene, camera);
+    renderer.autoClear = true; camera.layers.mask = _dmgMask; }
   // l'arme par-dessus, avec son FOV propre. Masquée en 3e personne, visible en killcam (arme du tueur).
   const showVM = !deathCam.active || deathCam.phase === 'killcam';
   if(gunCam && gunScene && showVM){
