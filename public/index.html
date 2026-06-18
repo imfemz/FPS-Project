@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>NEON COMPOUND — Mêlée 6 joueurs en ligne</title>
+<title>FPS Movement Prototype — by Femz</title>
 <link rel="icon" type="image/png" href="/textures/hud/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -161,6 +161,38 @@
   .btn:hover{transform:translateY(-2px)}
   .btn.ghost{background:transparent;color:var(--txt);border:1px solid var(--brd-strong)}
   .btn.ghost:hover{background:rgba(255,255,255,.06)}
+  /* ===== Titre "liquide" (esprit 21st.dev liquid-text) : dégradé animé qui coule dans le texte ===== */
+  #menu .liquid-title{font-size:60px;font-weight:900;letter-spacing:-1.5px;line-height:1.04;margin:2px 0 0;
+    background:linear-gradient(100deg,#5ce0ff 0%,#bfefff 16%,#ffffff 34%,#ffd27a 52%,#5ce0ff 76%,#bfefff 100%);
+    background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 3px 20px rgba(92,224,255,.35));animation:liquidFlow 7s ease-in-out infinite}
+  #menu .liquid-title .tp-sub{display:block;font-size:.32em;font-weight:700;letter-spacing:5px;margin-top:12px;
+    background:linear-gradient(100deg,#9fb2c6,#ffffff,#9fb2c6);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;
+    color:transparent;-webkit-text-fill-color:transparent;animation:liquidFlow 5s ease-in-out infinite;opacity:.95}
+  @keyframes liquidFlow{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+  /* ===== Fond "falling pattern" (esprit 21st.dev falling-pattern) : grille + gouttes qui tombent ===== */
+  #menu .falling-bg{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden;opacity:.55;
+    background-image:repeating-linear-gradient(90deg, rgba(92,224,255,.09) 0 1px, transparent 1px 48px),
+                     repeating-linear-gradient(0deg, rgba(255,255,255,.045) 0 1px, transparent 1px 48px);
+    -webkit-mask-image:radial-gradient(ellipse at 50% 42%, #000 28%, transparent 80%);
+            mask-image:radial-gradient(ellipse at 50% 42%, #000 28%, transparent 80%)}
+  #menu .falling-bg::before{content:"";position:absolute;left:0;right:0;top:-100%;height:200%;
+    background-image:repeating-linear-gradient(0deg, transparent 0 16px, rgba(92,224,255,.5) 16px 32px, transparent 32px 240px);
+    background-size:48px 240px;animation:fallDown 2.6s linear infinite}
+  @keyframes fallDown{from{transform:translateY(0)}to{transform:translateY(240px)}}
+  /* ===== Curseur manette (petit cercle blanc) pour naviguer dans les menus ===== */
+  #gpcursor{position:fixed;left:50%;top:50%;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.92);
+    border:2px solid rgba(0,0,0,.45);box-shadow:0 0 12px rgba(255,255,255,.55);z-index:2000;pointer-events:none;
+    transform:translate(-50%,-50%);display:none;transition:width .1s ease,height .1s ease,background .1s}
+  #gpcursor.over{width:28px;height:28px;background:rgba(92,224,255,.95);box-shadow:0 0 16px rgba(92,224,255,.85)}
+  .gp-hover{outline:2px solid var(--accent)!important;outline-offset:3px;border-radius:999px}
+  /* ===== Sélecteur de difficulté (mode bots) ===== */
+  .diffrow{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;margin:2px 0 4px;
+    font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--txt-faint)}
+  .diffbtn{cursor:pointer;background:rgba(255,255,255,.05);border:1px solid var(--brd-strong);color:var(--txt-dim);
+    padding:6px 16px;border-radius:999px;font-size:12px;font-family:var(--font);transition:all .15s}
+  .diffbtn:hover{background:rgba(255,255,255,.10);color:var(--txt)}
+  .diffbtn.sel{background:var(--accent);color:#04222b;border-color:var(--accent);font-weight:700}
   #countdown{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-family:var(--mono);font-size:120px;font-weight:700;color:var(--txt);z-index:9;pointer-events:none}
 
   #bindtable{border-collapse:collapse;margin:10px 0 14px;font-size:14px}
@@ -242,17 +274,24 @@
 <div id="damage"></div>
 <div id="dmgdir"><svg viewBox="-150 -150 300 300"><path class="ddarc" d="M -46 -116 A 124.8 124.8 0 0 1 46 -116"/></svg></div>
 <div id="countdown"></div>
+<div id="gpcursor"></div>
 
 <div class="screen show" id="menu">
+  <div class="falling-bg"></div>
   <div style="font-family:var(--mono);font-size:11px;letter-spacing:5px;color:var(--txt-faint);margin-bottom:14px">FEMZ FPS</div>
-  <h1>NEON <b>COMPOUND</b></h1>
+  <h1 class="liquid-title">FPS Movement Prototype<span class="tp-sub">by Femz</span></h1>
   <p style="max-width:480px">Mêlée générale jusqu'à <b style="color:var(--txt)">6 joueurs</b>. Premier à <b style="color:var(--txt)">10 éliminations</b>.<br>
   Mouvement rapide : slide, slide jump, wall bounce, grimpe, superglide.</p>
   <input class="pseudoinput" id="pseudo" maxlength="16" placeholder="Votre pseudo"><br>
-  <button class="btn" id="playbtn">Rejoindre</button>
-  <button class="btn ghost" id="botbtnmenu">Mode entraînement (bots)</button>
+  <button class="btn" id="playbtn">Mêlée Générale</button>
+  <button class="btn ghost" id="botbtnmenu">Mode Bots</button>
+  <div class="diffrow">Difficulté bots :
+    <button class="diffbtn" data-diff="easy">Easy</button>
+    <button class="diffbtn" data-diff="medium">Medium</button>
+    <button class="diffbtn" data-diff="hard">Hard</button>
+  </div>
   <button class="btn ghost" id="optbtn">Options</button>
-  <p style="margin-top:14px;font-size:12px;color:var(--txt-faint);max-width:420px">Au-delà de 6 joueurs vous êtes spectateur, et entrez automatiquement dès qu'une place se libère.<br>Le <b style="color:var(--txt-dim)">Mode entraînement</b> se joue hors-ligne contre des bots.</p>
+  <p style="margin-top:14px;font-size:12px;color:var(--txt-faint);max-width:420px">Au-delà de 6 joueurs vous êtes spectateur, et entrez automatiquement dès qu'une place se libère.<br>Le <b style="color:var(--txt-dim)">Mode Bots</b> se joue hors-ligne contre des bots.</p>
 </div>
 
 <div class="screen" id="options">
@@ -294,7 +333,7 @@
     <button class="btn" id="seatbtn">Jouer</button>
     <button class="btn ghost" id="specbtn">Spectateur</button>
   </div>
-  <button class="btn ghost" id="botbtn" style="margin-top:10px">Mode entraînement (bots)</button>
+  <button class="btn ghost" id="botbtn" style="margin-top:10px">Mode Bots</button>
   <button class="btn ghost" id="lobbyback" style="font-size:13px;padding:9px 26px;margin-top:14px">Quitter</button>
 </div>
 
@@ -3070,7 +3109,7 @@ function connect(){
   ws.onopen = ()=>{ ws.send(JSON.stringify({t:'hello', name: myName})); };
   ws.onclose = ()=>{
     if(playing || spec.active){ toMenu('Connexion perdue.'); }
-    else { const pb=document.getElementById('playbtn'); if(pb){ pb.disabled=false; pb.textContent='Rejoindre'; } }
+    else { const pb=document.getElementById('playbtn'); if(pb){ pb.disabled=false; pb.textContent='Mêlée Générale'; } }
   };
   ws.onmessage = (ev)=>{
     const m = JSON.parse(ev.data);
@@ -4695,7 +4734,7 @@ function toMenu(msg){
   playing = false; alive = true; myId = -1;
   if(ws){ ws.onclose=null; ws.close(); ws=null; }
   hideAll(); show('menu');
-  const pb = document.getElementById('playbtn'); if(pb){ pb.disabled = false; pb.textContent = 'Rejoindre'; }
+  const pb = document.getElementById('playbtn'); if(pb){ pb.disabled = false; pb.textContent = 'Mêlée Générale'; }
   if(msg) alert(msg);
 }
 const gameEl = document.getElementById('game');
@@ -4741,6 +4780,45 @@ document.getElementById('botbtnmenu').onclick = ()=>{
   inp.value = myName; localStorage.setItem('nc_pseudo', myName);
   startLocalBotMode();
 };
+// ===== Difficulté du Mode Bots (easy / medium / hard) — pilote LBOT.ai.difficulty (déjà géré par l'IA) =====
+(function initBotDifficulty(){
+  const valid = ['easy','medium','hard'];
+  const saved = localStorage.getItem('nc_botdiff');
+  if(saved && valid.includes(saved)) LBOT.ai.difficulty = saved;
+  const btns = document.querySelectorAll('.diffbtn');
+  const refresh = ()=> btns.forEach(b=> b.classList.toggle('sel', b.dataset.diff === LBOT.ai.difficulty));
+  btns.forEach(b=> b.onclick = ()=>{ LBOT.ai.difficulty = b.dataset.diff; localStorage.setItem('nc_botdiff', b.dataset.diff); refresh(); });
+  refresh();
+})();
+// ===== Navigation MANETTE des menus : petit curseur blanc (stick gauche) + bouton OPTIONS = Échap =====
+let gpCurX = innerWidth/2, gpCurY = innerHeight/2, _gpMenuPrev = [], _gpHover = null;
+function aMenuIsOpen(){ return !document.pointerLockElement && !!document.querySelector('.screen.show'); }
+function updateMenuGamepad(g){
+  const cur = document.getElementById('gpcursor'); if(!cur) return;
+  // Bouton OPTIONS / START (index 9) = Échap : fait apparaître le menu pause pendant le jeu
+  const opt = !!(g && g.buttons[9] && g.buttons[9].pressed);
+  if(opt && !_gpMenuPrev[9] && document.pointerLockElement){ document.exitPointerLock && document.exitPointerLock(); }
+  if(g && gpActive && aMenuIsOpen()){
+    const d = cfg.deadzone ?? 0.1;
+    let ax = g.axes[0]||0, ay = g.axes[1]||0;
+    if(Math.abs(ax) < d) ax = 0; if(Math.abs(ay) < d) ay = 0;
+    const sp = 14; // vitesse du curseur (px/frame au stick plein)
+    gpCurX = Math.max(0, Math.min(innerWidth, gpCurX + ax*sp));
+    gpCurY = Math.max(0, Math.min(innerHeight, gpCurY + ay*sp));
+    cur.style.display = 'block'; cur.style.left = gpCurX+'px'; cur.style.top = gpCurY+'px';
+    const el = document.elementFromPoint(gpCurX, gpCurY);
+    const tgt = (el && el.closest) ? el.closest('.btn,.bindbtn,.diffbtn,input,select') : null;
+    if(_gpHover && _gpHover !== tgt) _gpHover.classList.remove('gp-hover');
+    if(tgt){ tgt.classList.add('gp-hover'); cur.classList.add('over'); } else cur.classList.remove('over');
+    _gpHover = tgt;
+    // A / Croix (index 0) = clic sur l'élément survolé
+    if(g.buttons[0] && g.buttons[0].pressed && !_gpMenuPrev[0] && tgt){ tgt.click(); }
+  } else {
+    if(cur.style.display !== 'none') cur.style.display = 'none';
+    if(_gpHover){ _gpHover.classList.remove('gp-hover'); _gpHover = null; }
+  }
+  if(g) _gpMenuPrev = g.buttons.map(b=>b.pressed);
+}
 document.getElementById('specbtn').onclick = ()=>{ if(ws && ws.readyState===1) ws.send(JSON.stringify({t:'seat', want:false})); };
 let optionsFrom = 'menu';
 document.getElementById('optbtn').onclick = ()=>{ hideAll(); buildOptions(); show('options'); optionsFrom='menu'; };
@@ -6736,6 +6814,7 @@ function animate(){
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), .05);
   const g = pollGamepad();
+  updateMenuGamepad(g);   // curseur manette + bouton Options dans les menus
   // Hit reg : on actualise la position des ennemis au temps de rendu courant AVANT le tir, pour
   // que la detection touche exactement ce qui est a l'ecran. Sinon le tir testait la position
   // d'1 frame en arriere alors que le mesh est rendu a la nouvelle position -> tirs rates sur
