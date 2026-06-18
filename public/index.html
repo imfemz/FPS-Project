@@ -457,6 +457,8 @@ const CONFIG = {
   HOLSTER_SPRINT_SPEED: 11.2,
   CROUCH_SPEED: 3.4,
   JUMP_VELOCITY: 6.8,
+  // Fatigue de saut : sous vel_frac x (vitesse max de l'arme), re-sauter trop vite = saut plus bas + cooldown
+  JUMP_FATIGUE: { vel_frac: 0.8, height_mult: 0.7, cooldown: 450 },
   GRAVITY: 21,
   GROUND_ACCEL: 12,
   AIR_ACCEL: 0.6,               // dérive SANS input en l'air (bas = l'élan du slide jump se conserve)
@@ -6417,7 +6419,15 @@ function playerUpdate(dt, g){
     }
     if(jumpEdge && performance.now() - sgFiredAt > 60){
       if(me.onGround){
-        me.vel.y = CONFIG.JUMP_VELOCITY; me.onGround = false;
+        { const _now = performance.now(), _hsp = Math.hypot(me.vel.x, me.vel.z), _JF = CONFIG.JUMP_FATIGUE || {};
+          const _maxV = (typeof isSaber==='function' && isSaber()) ? (GAMECFG.MAX_SPEED_SERVER ?? 10) : (GAMECFG.MAX_SPEED_GUN ?? 8);
+          let _jv = CONFIG.JUMP_VELOCITY;
+          if(_hsp < _maxV * (_JF.vel_frac ?? 0.8)){                       // trop lent (<80% vmax) -> fatigue possible
+            if(_now < (me._jumpReadyAt || 0)) _jv *= (_JF.height_mult ?? 0.7);   // re-saut trop rapide -> plus bas
+            me._jumpReadyAt = _now + (_JF.cooldown ?? 450);               // petit cooldown pour re-sauter plein
+          }
+          me.vel.y = _jv; }
+        me.onGround = false;
         jumpShakeT = (GAMECFG.JUMP_SHAKE > 0) ? 1 : 0; // déclenche le shake (phase 1→0)
         jumpNoseTarget = (GAMECFG.WEAPON_ANIM_BLEND && GAMECFG.WEAPON_ANIM_BLEND.airborne && GAMECFG.WEAPON_ANIM_BLEND.airborne.jump_nose_dip) || 0; // nez qui pique
       } else if(!me.wallBounced && !me.climb.active){
