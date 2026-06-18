@@ -509,7 +509,7 @@
       ROTATION: 0.8,
       // Taille de la bulle autour de l'ennemi, en DEGRÉS. Le réticule doit entrer dedans pour que
       // l'assist s'active. Plus grand = s'accroche de plus loin. (Avant : ~8° en dur.)
-      BUBBLE_DEG: 8,
+      BUBBLE_DEG: 1,
       // Renforcement sur les BOTS (mode entraînement) : ils sont locaux, on peut être plus généreux
       // pour que l'assist se sente autant que sur un vrai adversaire. ×bulle et ×force.
       BOT_BUBBLE_MULT: 1.2,

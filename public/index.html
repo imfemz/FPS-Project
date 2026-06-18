@@ -511,6 +511,7 @@ const CONFIG = {
   EYE_STAND: 1.62, EYE_CROUCH: 1.02, EYE_SLIDE: 0.88,
   ADS_FOV: 56, BASE_FOV: 75,
   CROUCH_GUN_TILT: 0.14,
+  CROUCH_AIR_POSE_DAMP: 0.3, // en l'air, la pose crouch de l'arme est réduite à ce facteur (anti "arme qui couvre l'écran" en crouch-saut + déplacement). 1 = pleine pose, 0 = aucune en l'air.
   SLIDE_CAM_ROLL: 0.05,
   MAX_BULLET_HOLES: 80, BULLET_HOLE_LIFE: 15,  // les impacts disparaissent (fondu sur les 3 dernières s)
   INTERP_DELAY: 110,            // marge d'interpolation (horloge serveur + extrapolation 120 ms)
@@ -5841,7 +5842,10 @@ function updateWeaponAnimation(dt, sprinting, moving){
   // Réduite en ADS (garde la visée propre) et atténuée pendant le reload (le reload reste prioritaire).
   // Léger sway humain en plus (sans tremblement). Pilotée par shared/config.js > CROUCH_POSE.
   const _cpR = _CP.rot || [0,0,0], _cpP = _CP.pos || [0,0,0];
-  const _cScale = crouchPoseW * (1 - adsAmount) * (1 - (animWeights.reload || 0));
+  // En l'air, la pose crouch (gros roll ~60° + décalage) couvrait l'écran en se cumulant au mouvement
+  // et à l'airborne → on la réduit fortement quand on n'est pas au sol (lissé via airborneW : 1 au sol, ~0.3 en l'air).
+  const _crouchAirDamp = 1 - airborneW * (1 - (CONFIG.CROUCH_AIR_POSE_DAMP ?? 0.3));
+  const _cScale = crouchPoseW * (1 - adsAmount) * (1 - (animWeights.reload || 0)) * _crouchAirDamp;
   const _tmsC = performance.now()*0.001;
   const _cSwayA = (_CP.sway_amount ?? 0.012) * _cScale, _cSwaySpd = (_CP.sway_speed ?? 1.1);
   const cpX = _cpP[0]*_cScale, cpY = _cpP[1]*_cScale, cpZ = _cpP[2]*_cScale;
