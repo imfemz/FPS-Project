@@ -244,7 +244,7 @@
   .seg{position:relative;display:flex;width:330px;max-width:100%;background:rgba(255,255,255,.05);border:1px solid var(--brd-strong);border-radius:999px;padding:4px;margin:0 auto 12px}
   .seg-btn{flex:1;position:relative;z-index:1;cursor:pointer;background:none;border:none;color:var(--txt-dim);font-size:13px;font-weight:600;padding:9px 8px;border-radius:999px;display:flex;align-items:center;justify-content:center;gap:7px;transition:color .2s;font-family:var(--font)}
   .seg-btn.sel{color:#04222b}
-  .seg-ind{position:absolute;top:4px;left:4px;width:calc(50% - 4px);height:calc(100% - 8px);background:var(--accent);border-radius:999px;transition:transform .24s cubic-bezier(.4,0,.2,1);z-index:0}
+  .seg-ind{position:absolute;top:4px;left:4px;width:calc(50% - 4px);height:calc(100% - 8px);background:var(--accent);border-radius:999px;transition:transform .24s cubic-bezier(.4,0,.2,1);z-index:0;box-shadow:0 0 15px rgba(92,224,255,.65)}
   .seg.gp .seg-ind{transform:translateX(100%)}
   .opthint{color:var(--txt-faint);font-size:12px;margin:0 0 8px;max-width:330px;line-height:1.5;text-align:center}
   #bindtable.kbview th:nth-child(3),#bindtable.kbview td:nth-child(3){display:none}
@@ -261,6 +261,13 @@
   .optcol.settings .optrow > span:last-child{text-align:right;color:var(--txt);font-variant-numeric:tabular-nums}
   .optcol.settings .optrow input[type=color]{width:100%;height:26px}
   .optcard{background:rgba(255,255,255,.03);border:1px solid var(--brd-strong);border-radius:18px;padding:14px 0;margin-bottom:8px}
+  #options{justify-content:flex-start;padding-top:26px}
+  #options > h1{margin:0 0 20px}
+  #options .optcols{margin:0}
+  #options > div:last-child{margin-top:22px}
+  .optcol.settings .optrow.ctrlrow{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:0 26px;margin-top:10px}
+  .segpair{display:flex;gap:6px}
+  .optcol.settings .ctrlrow .bindbtn{min-width:92px;font-size:12px}
   .optcol.settings .optsec{padding:0 26px}
   /* fond du menu EN JEU : vue floutee + assombrie (au lieu du degrade plein) */
   #pause,.screen.ingame{background:rgba(8,9,12,.5);backdrop-filter:blur(13px);-webkit-backdrop-filter:blur(13px)}
@@ -364,17 +371,13 @@
     <div class="optcol">
       <div class="seg" id="ctrltoggle">
         <span class="seg-ind"></span>
-        <button class="seg-btn sel" data-view="kb"><svg class="seg-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>Clavier / Souris</button>
-        <button class="seg-btn" data-view="gp"><svg class="seg-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="11" x2="10" y2="11"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="15" y1="12" x2="15.01" y2="12"/><line x1="18" y1="10" x2="18.01" y2="10"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>Manette</button>
+        <button class="seg-btn sel" data-view="kb"><svg class="seg-ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>Clavier / Souris</button>
+        <button class="seg-btn" data-view="gp"><svg class="seg-ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="11" x2="10" y2="11"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="15" y1="12" x2="15.01" y2="12"/><line x1="18" y1="10" x2="18.01" y2="10"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>Manette</button>
       </div>
       <p class="opthint">Cliquez sur une case puis pressez la touche / le bouton souhaité.</p>
       <table id="bindtable" class="kbview">
         <tr><th>ACTION</th><th>CLAVIER / SOURIS</th><th>MANETTE</th></tr>
       </table>
-      <div class="optrow"><span class="optlbl">Mode accroupi</span>
-        <button class="bindbtn" id="cmhold">Maintenir</button>
-        <button class="bindbtn" id="cmtoggle">Toggle</button>
-      </div>
     </div>
     <div class="optcol settings">
       <div class="optcard">
@@ -393,6 +396,12 @@
       <div class="optrow"><span class="optlbl">Épaisseur</span><input type="range" id="chthick" min="1" max="8" step="1"><span id="chthickv"></span></div>
       <div class="optrow"><span class="optlbl">Couleur</span><input type="color" id="chcolor" style="width:100%;height:26px;background:none;border:1px solid var(--brd-strong);border-radius:6px;cursor:pointer"></div>
       <div class="optrow"><span class="optlbl">Point central</span><input type="checkbox" id="chdot"></div>
+      <div class="optrow ctrlrow"><span class="optlbl">Mode accroupi</span>
+        <div class="segpair"><button class="bindbtn" id="cmhold">Maintenir</button><button class="bindbtn" id="cmtoggle">Toggle</button></div>
+      </div>
+      <div class="optrow ctrlrow"><span class="optlbl">Saut</span>
+        <div class="segpair"><button class="bindbtn" id="jmanual">Manuel</button><button class="bindbtn" id="jauto">Auto</button></div>
+      </div>
     </div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px">
@@ -549,7 +558,7 @@ const DEFAULTS = {
   kb: { forward:'KeyW', back:'KeyS', left:'KeyA', right:'KeyD', jump:'Space',
         crouch:'ControlLeft', sprint:'ShiftLeft', reload:'KeyR', shoot:'Mouse0', ads:'Mouse2', holster:'KeyH', dash:'KeyF', weapon1:'Digit1', weapon2:'Digit2', weapon3:'Digit3' },
   gp: { forward:-1, back:-1, left:-1, right:-1, jump:0, crouch:1, sprint:10, reload:2, shoot:7, ads:6, holster:3, dash:5, weapon_stick:11, weapon3:-1 },
-  sensKb: 1.0, sensGp: 1.0, aimAssist: true, crouchMode: 'hold', autoSprint: true, fov: 0, deadzone: 0.06,
+  sensKb: 1.0, sensGp: 1.0, aimAssist: true, crouchMode: 'hold', autoSprint: true, autoJump: false, fov: 0, deadzone: 0.06,
   wheelSwitch: false,            // molette souris = changer d'arme (activable en options)
   adsSpeed: 17,                  // vitesse de montée en visée (ADS)
   crosshair: { size: 13, gap: 17, thickness: 2, color: '#ffffff', dot: false }, // viseur perso
@@ -5133,10 +5142,19 @@ function buildOptions(){
   refreshCrouchModeUI();
   document.getElementById('cmhold').onclick = ()=>{ cfg.crouchMode='hold'; me.crouchToggleState=false; saveCfg(); refreshCrouchModeUI(); };
   document.getElementById('cmtoggle').onclick = ()=>{ cfg.crouchMode='toggle'; saveCfg(); refreshCrouchModeUI(); };
+  const _jm=document.getElementById('jmanual'), _ja=document.getElementById('jauto');
+  if(_jm) _jm.onclick = ()=>{ cfg.autoJump=false; saveCfg(); refreshJumpModeUI(); };
+  if(_ja) _ja.onclick = ()=>{ cfg.autoJump=true; saveCfg(); refreshJumpModeUI(); };
+  refreshJumpModeUI();
 }
 function refreshCrouchModeUI(){
   document.getElementById('cmhold').classList.toggle('active', cfg.crouchMode==='hold');
   document.getElementById('cmtoggle').classList.toggle('active', cfg.crouchMode==='toggle');
+}
+function refreshJumpModeUI(){
+  const m=document.getElementById('jmanual'), a=document.getElementById('jauto');
+  if(m) m.classList.toggle('active', !cfg.autoJump);
+  if(a) a.classList.toggle('active', !!cfg.autoJump);
 }
 function startListen(action, dev, el){
   if(listening) listening.el.classList.remove('listening');
@@ -6283,6 +6301,7 @@ function playerUpdate(dt, g){
   /* --- Fronts montants des entrées --- */
   const jumpPressed = actionDown('jump', g);
   const jumpEdge = jumpPressed && !prevJump;
+  const jumpGround = cfg.autoJump ? jumpPressed : jumpEdge;   // AUTO = maintenir saut -> re-saut a chaque atterrissage
   const crouchPressed = actionDown('crouch', g);
   const crouchEdge = crouchPressed && !prevCrouch;
   const holsterPressed = actionDown('holster', g);
@@ -6436,8 +6455,8 @@ function playerUpdate(dt, g){
       me.vel.x += (wish.x - me.vel.x)*Math.min(1, dt*accel);
       me.vel.z += (wish.z - me.vel.z)*Math.min(1, dt*accel);
     }
-    if(jumpEdge && performance.now() - sgFiredAt > 60){
-      if(me.onGround){
+    if((jumpGround || jumpEdge) && performance.now() - sgFiredAt > 60){
+      if(me.onGround && jumpGround){
         { const _now = performance.now(), _hsp = Math.hypot(me.vel.x, me.vel.z), _JF = CONFIG.JUMP_FATIGUE || {};
           const _maxV = (typeof isSaber==='function' && isSaber()) ? (GAMECFG.MAX_SPEED_SERVER ?? 10) : (GAMECFG.MAX_SPEED_GUN ?? 8);
           let _jv = CONFIG.JUMP_VELOCITY;
@@ -6449,7 +6468,7 @@ function playerUpdate(dt, g){
         me.onGround = false;
         jumpShakeT = (GAMECFG.JUMP_SHAKE > 0) ? 1 : 0; // déclenche le shake (phase 1→0)
         jumpNoseTarget = (GAMECFG.WEAPON_ANIM_BLEND && GAMECFG.WEAPON_ANIM_BLEND.airborne && GAMECFG.WEAPON_ANIM_BLEND.airborne.jump_nose_dip) || 0; // nez qui pique
-      } else if(!me.wallBounced && !me.climb.active){
+      } else if(jumpEdge && !me.wallBounced && !me.climb.active){
         /* --- WALL BOUNCE (façon Apex : l'élan repart vers où on REGARDE) --- */
         const n = findWallNormal(me.pos, me.pos.y);
         const hv = new THREE.Vector3(me.vel.x, 0, me.vel.z);
