@@ -285,6 +285,22 @@
       particle_jitter: 0.015,// dispersion radiale autour de la lame (m)
       particle_color_a: 0x4db8ff, // bleu
       particle_color_b: 0xa35cff, // violet (dégradé entre les deux par particule)
+      // ===== OVERCHARGE : attaque spéciale débloquée après 3 kills d'affilée =====
+      // Le joueur LANCE le sabre en avant (rotation violente), il touche les ennemis dans un rayon,
+      // puis revient en boomerang dans la main. Pas de hit = pas de dégât, le sabre revient quand même.
+      overcharge: {
+        streak: 3,             // kills d'affilée requis pour débloquer
+        doubletap_ms: 300,     // fenêtre du double-tap d'attaque pour la lancer (quand dispo)
+        radius: 5,             // rayon de touche (m)
+        dmg_front: 140,        // dégâts en frontal (cône avant)
+        dmg_side: 100,         // dégâts sur les côtés (dans le rayon, hors cône frontal)
+        front_cone_deg: 70,    // ouverture du cône "frontal" (au-delà = côtés)
+        throw_out: 0.26,       // durée aller (s)
+        throw_back: 0.34,      // durée retour boomerang (s)
+        spin: 42,              // vitesse de rotation du sabre lancé (rad/s)
+        blade_len: 1.15,       // longueur de la lame lancée (m)
+        color: 0x4db8ff,       // couleur de la lame lancée (glow bleu)
+      },
       // --- Traînée lumineuse (ruban additif derrière la lame pendant le swing) ---
       trail_len: 0.95,       // longueur de la traînée le long de la lame (m, depuis la garde)
       trail_base: -0.12,     // position de la base de la traînée (m, côté garde)

@@ -2909,6 +2909,16 @@ let switchShake = 0, switchShakePhase = 0, switchShakeT = 0; // vibration au cha
 let fireShake = 0, fireShakePhase = 0, fireShakeT = 0, fireShakeCfg = null; // secousse de tir lourde (ex: Wingman)
 let saberTrail = null; const saberTrailSamples = [];
 let saberGlowTube = null, saberParticles = null, _saberPtcl = null;  // halo + particules électriques permanentes
+// ===== OVERCHARGE (attaque spéciale sabre, dispo à 3 kills d'affilée) =====
+let overReady = false, overBase = 0, overActive = false;
+const overState = { t:0, group:null, origin:new THREE.Vector3(), dir:new THREE.Vector3(), right:new THREE.Vector3(), apex:new THREE.Vector3(), light:null };
+function overConfig(){ return (GAMECFG.MELEE||{}).overcharge || {}; }
+// Débloque l'Overcharge dès que la série atteint le palier (appelé après chaque kill local).
+function checkOverchargeUnlock(){
+  const need = overConfig().streak ?? 3;
+  if(!overReady && (localBotKills - overBase) >= need) overReady = true;
+}
+function resetOvercharge(){ overReady = false; overBase = 0; if(overActive) endOvercharge(); }
 function saberWeaponIndex(){ const W = GAMECFG.WEAPONS||[]; for(let i=0;i<W.length;i++) if(W[i].melee) return i; return -1; }
 function isSaber(){ const W = curWeapon(); return !!(W && W.melee); }
 // Prochaine arme À FEU (saute le sabre) — pour le cycle clic-bref manette.
