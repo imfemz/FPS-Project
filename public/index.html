@@ -204,11 +204,20 @@
     padding:8px 20px;border-radius:999px;font-size:14px;font-family:var(--font);transition:all .15s}
   .diffbtn:hover{background:rgba(255,255,255,.10);color:var(--txt)}
   .diffbtn.sel{background:var(--accent);color:#04222b;border-color:var(--accent);font-weight:700}
+  #wavebanner{position:fixed;top:96px;left:50%;transform:translate(-50%,-8px);z-index:8;pointer-events:none;text-align:center;opacity:0;transition:opacity .4s,transform .4s}
+  #wavebanner.show{opacity:1;transform:translate(-50%,0)}
+  #wavebanner .wv-n{font-family:var(--mono);font-size:30px;font-weight:800;letter-spacing:4px;color:var(--txt);text-shadow:0 2px 14px rgba(0,0,0,.7)}
+  #wavebanner .wv-s{font-family:var(--mono);font-size:11px;letter-spacing:4px;color:var(--accent);margin-top:3px}
   /* ===== Mini-map / radar (haut gauche) : ennemis rouges clignotants + orbes, rayon 10 m ===== */
-  #minimap{position:absolute;top:18px;left:18px;width:140px;height:140px;border-radius:50%;
+  #minimap{position:absolute;top:18px;left:18px;width:280px;height:280px;border-radius:50%;opacity:.85;
     background:radial-gradient(circle at 50% 50%, rgba(12,16,20,.5), rgba(8,11,14,.8));
     border:1.5px solid rgba(255,255,255,.16);box-shadow:0 4px 18px rgba(0,0,0,.45), inset 0 0 16px rgba(0,0,0,.45);
     z-index:6;pointer-events:none;display:none}
+  /* ===== Cadran de cap (compass FPS) en haut au centre : ticks + N/E/S/O, fade aux extrémités ===== */
+  #compass{position:absolute;top:16px;left:50%;transform:translateX(-50%);width:460px;height:40px;
+    z-index:6;pointer-events:none;display:none;
+    -webkit-mask-image:linear-gradient(90deg, transparent 0, #000 16%, #000 84%, transparent 100%);
+            mask-image:linear-gradient(90deg, transparent 0, #000 16%, #000 84%, transparent 100%)}
   #countdown{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-family:var(--mono);font-size:120px;font-weight:700;color:var(--txt);z-index:9;pointer-events:none}
 
   #bindtable{border-collapse:collapse;margin:10px 0 14px;font-size:14px}
@@ -267,7 +276,8 @@
 <div id="game"></div>
 
 <div id="hud">
-  <canvas id="minimap" width="140" height="140"></canvas>
+  <canvas id="minimap" width="280" height="280"></canvas>
+  <canvas id="compass" width="460" height="40"></canvas>
   <div id="crosshair">
     <span class="ch ch-l"></span><span class="ch ch-r"></span><span class="ch ch-t"></span><span class="ch ch-b"></span>
     <span class="ch-dot"></span>
@@ -298,6 +308,7 @@
   <div id="killbanner"></div>
   <div id="reloadmsg">RECHARGEMENT</div>
   <div id="score" style="display:none"><div class="scorebox" id="pscore">0</div><div id="scoremid"></div><div class="scorebox" id="escore">0</div></div>
+  <div id="wavebanner"><div class="wv-n">VAGUE 1</div><div class="wv-s">3 ENNEMIS</div></div>
   <div id="leaderboard"></div>
   <div id="killfeed"></div>
   <div id="specinfo" style="display:none">SPECTATEUR</div>
@@ -323,6 +334,7 @@
     <button class="diffbtn" data-diff="easy">Easy</button>
     <button class="diffbtn" data-diff="medium">Medium</button>
     <button class="diffbtn" data-diff="hard">Hard</button>
+    <button class="diffbtn" data-diff="insane">Insane</button>
   </div>
   <button class="btn ghost" id="optbtn">Options</button>
   <p style="margin-top:16px;font-size:14px;color:var(--txt-faint);max-width:520px">Au-delà de 6 joueurs vous êtes spectateur, et entrez automatiquement dès qu'une place se libère.<br>Le <b style="color:var(--txt-dim)">Mode Bots</b> se joue hors-ligne contre des bots.</p>
@@ -1662,9 +1674,9 @@ function spawnOrb(id, p){
     grp.add(sp); parts.push(sp);
   }
   scene.add(grp);
-  orbsFx[id] = { grp, parts, core, halo, light, t: Math.random()*5, baseY: p[1], born: performance.now(), fadeT: 0, fadeDur: 0.5 };
-  const _act = Object.keys(orbsFx).filter(k=>!(orbsFx[k].fadeT>0));
-  if(_act.length > 2){ _act.sort((a,b)=>orbsFx[a].born-orbsFx[b].born); for(let i=0;i<_act.length-2;i++){ orbsFx[_act[i]].fadeT = orbsFx[_act[i]].fadeDur = 0.5; } }
+  orbsFx[id] = { grp, parts, core, halo, light, t: Math.random()*5, baseY: p[1], born: performance.now(), fading:false, fadeT: 0, fadeDur: 0.45 };
+  const _act = Object.keys(orbsFx).filter(k=>!orbsFx[k].fading);
+  if(_act.length > 2){ _act.sort((a,b)=>orbsFx[a].born-orbsFx[b].born); for(let i=0;i<_act.length-2;i++){ const _o=orbsFx[_act[i]]; _o.fading=true; _o.fadeT=_o.fadeDur; } }
 }
 function removeOrb(id){
   const o = orbsFx[id]; if(!o) return;
@@ -1679,7 +1691,7 @@ function updateOrbs(dt){
     o.grp.position.y = o.baseY + Math.sin(o.t*2.4)*.13;
     o.grp.rotation.y += dt*1.4;
     let fadeK = 1;
-    if(o.fadeT > 0){ o.fadeT -= dt; fadeK = Math.max(0, o.fadeT / (o.fadeDur || 0.5)); }
+    if(o.fading){ o.fadeT -= dt; if(o.fadeT <= 0){ removeOrb(id); continue; } fadeK = Math.max(0, o.fadeT / (o.fadeDur || 0.45)); }
     if(o.core) o.core.material.opacity = .95 * fadeK;
     if(o.halo) o.halo.material.opacity = fadeK;
     if(o.light) o.light.intensity = 1.3 * fadeK;
@@ -1688,7 +1700,6 @@ function updateOrbs(dt){
       sp.position.set(Math.cos(sp.userData.a)*sp.userData.r, u - .4, Math.sin(sp.userData.a)*sp.userData.r);
       sp.material.opacity = Math.max(0, 1 - u/1.4) * fadeK;
     }
-    if(o.fadeT > 0 && fadeK <= 0){ removeOrb(id); }
   }
   // Mode entraînement : ramassage des orbes côté CLIENT (pas de serveur pour gérer la collecte).
   // En ligne c'est le serveur qui détecte le pickup et envoie 'orbtaken'.
@@ -4383,7 +4394,7 @@ function onBotRespawn(m){
    ========================================================================== */
 let localBotMode = false, localBotKills = 0;
 const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist: 12,
-  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4, spawn_sep: 15,
+  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4, spawn_sep: 15, MAX_BOTS: 8, waveMode: false, wave: 1,
   ai: {
     difficulty: 'medium',     // 'easy' | 'medium' | 'hard'
     fire_range: 15,           // portee de tir des bots (m) -- ils ouvrent le feu en rafale des 15 m
@@ -4400,7 +4411,8 @@ const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist:
       // burst: [rafale a portee MAX, rafale au CONTACT] -> plus c'est proche, plus la rafale est longue
       easy:   { react: 0.55, hit_chance: 0.50, move_pen: 0.65, burst:[1,4],  gap:[0.7,1.3], reload: 2.0, evade: 0.20, dmg_mult: 0.7 },
       medium: { react: 0.32, hit_chance: 0.72, move_pen: 0.50, burst:[2,7],  gap:[0.4,0.8], reload: 1.6, evade: 0.45, dmg_mult: 1.0 },
-      hard:   { react: 0.16, hit_chance: 0.90, move_pen: 0.35, burst:[3,12], gap:[0.25,0.5], reload: 1.3, evade: 0.75, dmg_mult: 1.15 }
+      hard:   { react: 0.16, hit_chance: 0.90, move_pen: 0.35, burst:[3,12], gap:[0.25,0.5], reload: 1.3, evade: 0.75, dmg_mult: 1.15 },
+      insane: { react: 0.10, hit_chance: 0.98, move_pen: 0.20, burst:[5,18], gap:[0.15,0.35], reload: 1.0, evade: 0.85, dmg_mult: 1.3 }
     }
   } };  // séparation = distance mini entre bots ; radius = collision joueur ; hit_pad = hitbox bien généreuse pour bien toucher
 const _botTmp = new THREE.Vector3();
@@ -4442,12 +4454,15 @@ function startLocalBotMode(){
   // Mode solo : on coupe le réseau proprement (pas de message "connexion perdue")
   if(ws){ try{ ws.onclose = null; ws.close(); }catch(e){} ws = null; }
   spec.active = false; localBotMode = true; localBotKills = 0;
+  LBOT.waveMode = (LBOT.ai.difficulty === 'insane'); LBOT.wave = 1;   // INSANE = survie par vagues
+  const _startCount = LBOT.waveMode ? botsForWave(1) : LBOT.count;
   const bots = []; const _placed = [];
-  for(let i=0;i<LBOT.count;i++){ const _p = lbotSpawnPoint(i, LBOT.count, _placed); _placed.push([_p[0], _p[2]]); bots.push({ id: i+1, p: _p, yaw: Math.random()*Math.PI*2 }); }
+  for(let i=0;i<_startCount;i++){ const _p = lbotSpawnPoint(i, _startCount, _placed); _placed.push([_p[0], _p[2]]); bots.push({ id: i+1, p: _p, yaw: Math.random()*Math.PI*2 }); }
   onBotStart({ humanSeat: 0, spawns: MAP.spawns, bots, countdown: 3 });   // crée le décor + le décompte
   for(const bb of bots){ const b = botMgr.get(bb.id); if(b){ b.hp = maxHp; b.sh = maxShield; b._shPrev = maxShield;
     initLocalBotAI(b); } }
   // HUD : score d'entraînement (cache le tableau FFA)
+  if(LBOT.waveMode) setTimeout(()=>showWaveBanner(1), 250);
   const lb = document.getElementById('leaderboard'); if(lb) lb.style.display = 'none';
   const sc = document.getElementById('score');
   if(sc){ sc.style.display = 'flex'; sc.style.flexDirection = 'column'; sc.style.gap = '3px';
@@ -4455,6 +4470,41 @@ function startLocalBotMode(){
     const es = document.getElementById('escore'); if(es) es.style.display = 'none';
     const ps = document.getElementById('pscore'); if(ps) ps.textContent = '0';
   }
+}
+// ===== Mode INSANE : survie par VAGUES (3 bots au depart, +1/vague, plafonne a MAX_BOTS) =====
+function botsForWave(w){ return Math.min(LBOT.MAX_BOTS ?? 8, 2 + w); }
+function spawnBotWave(n){
+  const _placed = [];
+  for(let i=0;i<n;i++){
+    const id = i+1;
+    let b = botMgr.get(id); if(!b) b = ensureBot(id, 0xff7755);
+    const p = lbotSpawnPoint(i, n, _placed); _placed.push([p[0], p[2]]);
+    b.hp = maxHp; b.sh = maxShield; b._shPrev = maxShield;
+    onBotRespawn({ id, p:[p[0], p[1]||0, p[2]], yaw: Math.random()*Math.PI*2 });
+    initLocalBotAI(b);
+  }
+}
+let _wavePending = false;
+function checkWaveClear(){
+  if(!LBOT.waveMode || !localBotMode || _wavePending) return;
+  let anyAlive = false;
+  for(const b of botMgr.values()){ if(b && !b.dead){ anyAlive = true; break; } }
+  if(anyAlive) return;
+  _wavePending = true;
+  setTimeout(()=>{ _wavePending = false;
+    if(!localBotMode || !LBOT.waveMode) return;
+    LBOT.wave = (LBOT.wave||1) + 1;
+    spawnBotWave(botsForWave(LBOT.wave));
+    showWaveBanner(LBOT.wave);
+  }, 1800);
+}
+function showWaveBanner(n){
+  const el = document.getElementById('wavebanner'); if(!el) return;
+  const nn = el.querySelector('.wv-n'), ss = el.querySelector('.wv-s');
+  if(nn) nn.textContent = 'VAGUE ' + n;
+  if(ss) ss.textContent = botsForWave(n) + ' ENNEMIS';
+  el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(()=>el.classList.remove('show'), 2800);
 }
 // --- IA combat bots (local) : perception, tir/accuracy, degats joueur, esquive, saut ---
 const _losO = new THREE.Vector3(), _losDir = new THREE.Vector3();
@@ -4475,6 +4525,7 @@ function localPlayerDeath(){
   setTimeout(()=>{ if(!localBotMode) return;
     const sps = MAP.spawns || [[0,0,0,0]]; const sp = sps[Math.floor(Math.random()*sps.length)];
     doMyRespawn({ p:[sp[0], 0, sp[2]], yaw: sp[3]||0 });
+    if(LBOT.waveMode){ LBOT.wave = 1; spawnBotWave(botsForWave(1)); showWaveBanner(1); }
   }, 1400);
 }
 function damagePlayerLocal(dmg, fromPos){
@@ -4634,7 +4685,8 @@ function applyLocalBotDamage(id, b, dmg, head, melee){
     showKillBanner(reloadedSinceKill ? 'NICE SHOTS !' : 'PERFECT KILL !', !!head);
     reloadedSinceKill = false;
     localBotKills++; const ps = document.getElementById('pscore'); if(ps) ps.textContent = localBotKills;
-    setTimeout(()=>{
+    if(LBOT.waveMode){ checkWaveClear(); }
+    else setTimeout(()=>{
       if(!localBotMode) return; const bb = botMgr.get(id); if(!bb) return;
       bb.hp = maxHp; bb.sh = maxShield; bb._shPrev = maxShield;
       initLocalBotAI(bb);
@@ -4827,7 +4879,7 @@ document.getElementById('botbtnmenu').onclick = ()=>{
 };
 // ===== Difficulté du Mode Bots (easy / medium / hard) — pilote LBOT.ai.difficulty (déjà géré par l'IA) =====
 (function initBotDifficulty(){
-  const valid = ['easy','medium','hard'];
+  const valid = ['easy','medium','hard','insane'];
   const saved = localStorage.getItem('nc_botdiff');
   if(saved && valid.includes(saved)) LBOT.ai.difficulty = saved;
   const btns = document.querySelectorAll('.diffbtn');
@@ -4884,11 +4936,11 @@ function updateMinimap(){
                  && (typeof alive==='undefined' || alive) && me && me.pos;
   if(!inGame){ if(cv.style.display!=='none') cv.style.display='none'; return; }
   if(cv.style.display==='none') cv.style.display='block';
-  const ctx = cv.getContext('2d'); const W=cv.width, H=cv.height, cx=W/2, cy=H/2, R=W/2-10;
+  const ctx = cv.getContext('2d'); const W=cv.width, H=cv.height, cx=W/2, cy=H/2, R=W/2-14;
   const RANGE=10, scale=R/RANGE;
   ctx.clearRect(0,0,W,H);
   // anneaux + croix discrets
-  ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=1;
+  ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=1.2;
   ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.stroke();
   ctx.beginPath(); ctx.arc(cx,cy,R*0.5,0,Math.PI*2); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(cx-R,cy); ctx.lineTo(cx+R,cy); ctx.moveTo(cx,cy-R); ctx.lineTo(cx,cy+R); ctx.stroke();
@@ -4903,7 +4955,7 @@ function updateMinimap(){
   if(typeof orbsFx==='object' && orbsFx){
     for(const id in orbsFx){ const p=orbsFx[id].grp.position, q=plot(p.x,p.z); if(!q) continue;
       ctx.fillStyle='rgba(120,210,255,'+((1-q.dist/RANGE)*0.9).toFixed(3)+')';
-      ctx.beginPath(); ctx.arc(q.x,q.y,3.2,0,Math.PI*2); ctx.fill(); }
+      ctx.beginPath(); ctx.arc(q.x,q.y,4.6,0,Math.PI*2); ctx.fill(); }
   }
   // Ennemis (rouge clignotant, fondu avec la distance, invisibles au-delà de 10 m)
   const enemies=[];
@@ -4911,12 +4963,46 @@ function updateMinimap(){
   if(typeof remote!=='undefined' && remote && remote.pos && !remote.dead) enemies.push(remote.pos);
   for(const ep of enemies){ const q=plot(ep.x,ep.z); if(!q) continue;
     const a=Math.max(0,(1-q.dist/RANGE))*blink;
-    ctx.shadowColor='rgba(255,40,40,'+a.toFixed(3)+')'; ctx.shadowBlur=6;
+    ctx.shadowColor='rgba(255,40,40,'+a.toFixed(3)+')'; ctx.shadowBlur=9;
     ctx.fillStyle='rgba(255,60,60,'+a.toFixed(3)+')';
-    ctx.beginPath(); ctx.arc(q.x,q.y,3.8,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; }
+    ctx.beginPath(); ctx.arc(q.x,q.y,5.4,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; }
   // Moi au centre : flèche blanche pointant vers le haut (ma direction)
   ctx.fillStyle='rgba(255,255,255,.95)';
-  ctx.beginPath(); ctx.moveTo(cx,cy-6); ctx.lineTo(cx-4.5,cy+5); ctx.lineTo(cx+4.5,cy+5); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx,cy-9); ctx.lineTo(cx-6.5,cy+7); ctx.lineTo(cx+6.5,cy+7); ctx.closePath(); ctx.fill();
+}
+// ===== Cadran de cap (compass FPS) en haut au centre : ticks + N/E/S/O qui défilent avec le regard,
+// marqueur central, fondu aux extrémités (via mask CSS). Style HUD (cyan). =====
+function updateCompass(){
+  const cv = document.getElementById('compass'); if(!cv) return;
+  const inGame = ((typeof playing!=='undefined' && playing) || (typeof localBotMode!=='undefined' && localBotMode))
+                 && (typeof alive==='undefined' || alive) && me;
+  if(!inGame){ if(cv.style.display!=='none') cv.style.display='none'; return; }
+  if(cv.style.display==='none') cv.style.display='block';
+  const ctx = cv.getContext('2d'), W=cv.width, H=cv.height, cx=W/2;
+  ctx.clearRect(0,0,W,H);
+  const heading = ((-(me.yaw||0)*180/Math.PI)%360+360)%360;     // cap 0..360 (0 = direction de réf.)
+  const pxPerDeg = W/120;                                        // ~120° de champ visible
+  const card = {0:'N',45:'NE',90:'E',135:'SE',180:'S',225:'SO',270:'O',315:'NO'};
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(let D=0; D<360; D+=15){
+    let delta = D - heading; if(delta>180) delta-=360; if(delta<-180) delta+=360;
+    const x = cx + delta*pxPerDeg; if(x < -12 || x > W+12) continue;
+    const lbl = card[D];
+    if(lbl){
+      const main = (D%90===0);
+      ctx.strokeStyle = 'rgba(150,235,255,.85)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x,H-13); ctx.lineTo(x,H-3); ctx.stroke();
+      ctx.fillStyle = main ? 'rgba(185,245,255,.98)' : 'rgba(200,222,236,.72)';
+      ctx.font = (main ? 'bold 16px ' : '12px ') + 'ui-monospace,Menlo,monospace';
+      ctx.fillText(lbl, x, 11);
+    } else {
+      ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x,H-9); ctx.lineTo(x,H-3); ctx.stroke();
+    }
+  }
+  // marqueur central (cap courant) : petit chevron cyan
+  ctx.fillStyle = '#5ce0ff';
+  ctx.beginPath(); ctx.moveTo(cx,H-15); ctx.lineTo(cx-6,H-24); ctx.lineTo(cx+6,H-24); ctx.closePath(); ctx.fill();
 }
 document.getElementById('specbtn').onclick = ()=>{ if(ws && ws.readyState===1) ws.send(JSON.stringify({t:'seat', want:false})); };
 let optionsFrom = 'menu';
@@ -7048,6 +7134,7 @@ function animate(){
   updateAudioListener();
   updateOrbs(dt);
   updateMinimap();   // radar haut-gauche : ennemis rouges clignotants + orbes, rayon 10 m
+  updateCompass();   // cadran de cap (haut centre)
   updateRagdolls(dt);
   updateCrosshair(dt);
   updateMomentumHUD();
