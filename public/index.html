@@ -53,6 +53,23 @@
   #hitmarker.kill span{background:#ff3030;box-shadow:0 0 7px rgba(255,40,40,.9)}
   #hitmarker.head{transform:translate(-50%,-50%) rotate(45deg) scale(1.3)}
   #hitmarker.kill{transform:translate(-50%,-50%) rotate(45deg) scale(1.65)}
+  /* Hitmarker SABRE : 3x plus gros (boîte + longueur des ticks ×3) MAIS épaisseur identique (3px),
+     bleu, glow ~3 frames puis plus de glow, pop de scale rapide. */
+  #saberhit{position:absolute;left:50%;top:50%;width:102px;height:102px;opacity:0;pointer-events:none;z-index:9;
+    transform:translate(-50%,-50%) rotate(45deg)}
+  #saberhit span{position:absolute;background:#5ce0ff;border-radius:1.5px}
+  #saberhit .a,#saberhit .b{left:50%;width:3px;height:33px;margin-left:-1.5px}
+  #saberhit .a{top:0}#saberhit .b{bottom:0}
+  #saberhit .c,#saberhit .d{top:50%;height:3px;width:33px;margin-top:-1.5px}
+  #saberhit .c{left:0}#saberhit .d{right:0}
+  #saberhit.show{animation:saberHitPop .16s ease-out forwards}
+  @keyframes saberHitPop{
+    0%   {opacity:1; transform:translate(-50%,-50%) rotate(45deg) scale(1.55); filter:drop-shadow(0 0 5px #5ce0ff) drop-shadow(0 0 12px #5ce0ff)}
+    30%  {opacity:1; filter:drop-shadow(0 0 5px #5ce0ff) drop-shadow(0 0 12px #5ce0ff)}  /* glow tenu ~3 frames */
+    31%  {filter:none}                                                                    /* puis plus de glow */
+    60%  {opacity:1}
+    100% {opacity:0; transform:translate(-50%,-50%) rotate(45deg) scale(1); filter:none}
+  }
 
   /* ===== Carte VIE / BOUCLIER (bas gauche) ===== */
   #vitals{position:absolute;left:26px;bottom:30px;width:240px;min-height:96px;padding:9px 18px 10px;
@@ -311,6 +328,7 @@
     <span class="ch-dot"></span>
   </div>
   <div id="hitmarker"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span></div>
+  <div id="saberhit"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span></div>
   <div id="sgdot"></div>
   <canvas id="speedfx"></canvas>
   <div id="speededge"></div>
@@ -4074,16 +4092,25 @@ function onRemoteShot(m){
     f.visible = true; setTimeout(()=>{ f.visible = false; }, 60);
   }
 }
+// Hitmarker SABRE : relance l'animation (gros marker bleu, glow bref + pop) à chaque coup touché.
+function triggerSaberHit(){
+  const el = document.getElementById('saberhit'); if(!el) return;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); // reflow → relance l'anim même si rapproché
+}
 function onHit(m){
   // --- Dégâts que J'INFLIGE à un autre joueur → hitmarker + sons + chiffres sur l'entité ---
   if(m.by === myId && m.target !== myId){
-    if(m.melee){ meleeShake = Math.min(2.2, meleeShake + 0.35); melee.flare = 1; } // sabre confirmé
     const willKill = (m.hp <= 0);
-    const h = document.getElementById('hitmarker');
-    h.classList.toggle('head', !!m.head && !willKill);
-    h.classList.toggle('kill', willKill);
-    h.style.opacity=1;
-    setTimeout(()=>{ h.style.opacity=0; }, willKill?220:(m.head?140:95));
+    if(m.melee){
+      meleeShake = Math.min(2.2, meleeShake + 0.35); melee.flare = 1; // sabre confirmé
+      triggerSaberHit();   // hitmarker SABRE (3x, bleu, glow bref + pop) à la place du X normal
+    } else {
+      const h = document.getElementById('hitmarker');
+      h.classList.toggle('head', !!m.head && !willKill);
+      h.classList.toggle('kill', willKill);
+      h.style.opacity=1;
+      setTimeout(()=>{ h.style.opacity=0; }, willKill?220:(m.head?140:95));
+    }
     const b = botMgr.get(m.target);
     const broke = (m.sh === 0) && (!b || b._shPrev === undefined || b._shPrev > 0);
     if(broke) playSfx('shield_crack');
@@ -4463,9 +4490,10 @@ function onBotHit(m){
       showHealthBar('bot'+m.id, m.hp, m.sh, !!(b.anim && b.anim.c));
     }
   }
-  // hitmarker visuel
-  const hm = document.getElementById('hitmarker');
-  if(hm){ hm.classList.toggle('head', !!m.head); hm.style.opacity = 1; setTimeout(()=>{ hm.style.opacity = 0; }, m.head?140:95); }
+  // hitmarker visuel : sabre = marker spécial (3x, bleu, glow + pop), sinon le X normal
+  if(m.melee){ triggerSaberHit(); }
+  else { const hm = document.getElementById('hitmarker');
+    if(hm){ hm.classList.toggle('head', !!m.head); hm.style.opacity = 1; setTimeout(()=>{ hm.style.opacity = 0; }, m.head?140:95); } }
 }
 function onBotKill(m){
   const b = botMgr.get(m.id);
