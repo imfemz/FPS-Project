@@ -87,8 +87,8 @@
   #healthbar{height:4px;border-radius:3px;background:rgba(255,255,255,.10);overflow:hidden}
   #healthfill{height:100%;width:100%;background:var(--hp);border-radius:3px;transition:width .25s cubic-bezier(.2,.8,.2,1)}
   #shieldsegs{display:flex;gap:4px;margin-bottom:5px}
-  #shieldsegs .seg{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.10);overflow:hidden}
-  #shieldsegs .segfill{height:100%;width:100%;background:var(--shield);border-radius:2px;transition:width .2s ease}
+  #shieldsegs .seg{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.10);overflow:hidden}
+  #shieldsegs .segfill{height:100%;width:100%;background:var(--shield);border-radius:2px;box-shadow:0 0 7px rgba(77,184,255,.65);transition:width .2s ease}
 
   /* ===== Carte MUNITIONS / ARME (bas droite) ===== */
   #ammo{position:absolute;right:26px;bottom:30px;width:240px;min-height:96px;display:flex;align-items:center;justify-content:space-between;gap:16px;
@@ -106,19 +106,22 @@
   #ammo .mag{font-family:var(--mono);font-size:42px;font-weight:700;color:var(--txt);line-height:.85;letter-spacing:-1px;transition:color .2s}
   #ammo.low .mag{color:var(--red)}
   #ammo .res{font-family:var(--mono);font-size:11px;color:var(--txt-faint);letter-spacing:2px}
-  /* Barre de COOLDOWN du sabre (bleu), sous la carte arme, en bas à droite */
-  #cooldownbar{position:absolute;right:26px;bottom:18px;width:240px;height:4px;border-radius:3px;
-    background:rgba(255,255,255,.10);overflow:hidden;display:none}
-  #cooldownbar .cdfill{height:100%;width:100%;background:var(--accent);border-radius:3px;box-shadow:0 0 8px rgba(92,224,255,.5)}
-  #cooldownbar.empty .cdfill{background:#ff7a7a;box-shadow:0 0 8px rgba(255,120,120,.55)}
-  /* Dash sabre ("Bonus d'attaque") : icône + mini jauge grise qui se remplit en bleu à la recharge */
-  #dashbar{position:absolute;right:26px;bottom:30px;display:none;flex-direction:column;align-items:flex-end;gap:5px;z-index:5;pointer-events:none}
-  #dashbar .dash-lbl{font-family:var(--mono);font-size:11px;letter-spacing:3px;color:var(--txt-faint);transition:color .2s,text-shadow .2s}
-  #dashbar.ready .dash-lbl{color:#46e88f;text-shadow:0 0 10px rgba(70,232,143,.7)}
-  #dashbar .dash-track{width:130px;height:6px;border-radius:3px;background:rgba(255,255,255,.13);overflow:hidden}
-  #dashbar .dash-fill{height:100%;width:0%;background:var(--accent);border-radius:3px;box-shadow:0 0 8px rgba(92,224,255,.5);transition:width .08s linear,background .15s,box-shadow .15s}
-  /* dash chargé au MAX → la barre passe en VERT */
-  #dashbar.ready .dash-fill{background:#46e88f;box-shadow:0 0 13px rgba(70,232,143,.95)}
+  /* ===== Carte SABRE (style img3) : 2 colonnes égales ARME | DASH, chacune label + glyphe centré + barre bleue ===== */
+  #ammo .sb-col{display:none}                                   /* colonnes masquées hors sabre */
+  #ammo.saber #wpnbox,#ammo.saber .magwrap{display:none}        /* en mode sabre : on masque le layout arme à feu */
+  #ammo.saber{gap:0;align-items:stretch;padding:11px 0}
+  #ammo.saber .sb-col{display:flex;flex:1 1 0;min-width:0;flex-direction:column;align-items:center;gap:8px;padding:0 18px}
+  #ammo.saber .sb-wpn{border-right:1px solid var(--brd)}
+  .sb-col .sb-name{font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:3px;color:var(--txt-dim);transition:color .2s,text-shadow .2s}
+  .sb-col .sb-icon{height:30px;display:flex;align-items:center;justify-content:center}
+  .sb-col .sb-icon img,.sb-col .sb-icon svg{height:30px;width:auto;display:block;opacity:.95}
+  .sb-col .sb-glyph{font-size:24px;line-height:.75;font-weight:700;letter-spacing:3px;color:var(--accent);text-shadow:0 0 12px rgba(92,224,255,.55);transition:color .2s,text-shadow .2s}
+  .sb-col .sb-bar{width:100%;height:5px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin-top:auto}
+  .sb-col .sb-fill{height:100%;width:100%;background:var(--accent);border-radius:3px;box-shadow:0 0 8px rgba(92,224,255,.5);transition:width .1s linear,background .15s,box-shadow .15s}
+  /* sabre déchargé → barre rouge ; dash chargé au MAX → barre + label + glyphe en VERT */
+  #ammo.saber.charge-empty .sb-charge{background:#ff7a7a;box-shadow:0 0 8px rgba(255,120,120,.55)}
+  #ammo.saber.dash-ready .sb-dashfill{background:#46e88f;box-shadow:0 0 13px rgba(70,232,143,.95)}
+  #ammo.saber.dash-ready .sb-dash .sb-name,#ammo.saber.dash-ready .sb-dash .sb-glyph{color:#46e88f;text-shadow:0 0 10px rgba(70,232,143,.7)}
   #reloadmsg{position:absolute;left:50%;bottom:24%;transform:translateX(-50%);font-family:var(--mono);color:var(--txt);font-size:11px;letter-spacing:4px;display:none;
     background:var(--panel);border:1px solid var(--brd);border-radius:999px;padding:6px 16px;backdrop-filter:blur(var(--blur));box-shadow:var(--shadow-sm)}
   #score{position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center}
@@ -224,14 +227,22 @@
   .fr-logo{width:min(440px,60vw);height:auto;filter:drop-shadow(0 6px 26px rgba(0,0,0,.6));animation:frLogo 6s ease-in-out infinite}
   @keyframes frLogo{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
   @keyframes frFade{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
-  .fr-main{width:100%;display:grid;grid-template-columns:1fr 360px;gap:48px;align-items:center;justify-items:center}
+  .fr-main{width:100%;display:grid;grid-template-columns:1fr 360px;gap:48px;align-items:stretch;justify-items:center}
   @media(max-width:900px){.fr-main{grid-template-columns:1fr;gap:24px}.fr-preview{order:2}}
-  .fr-nav{width:100%;max-width:360px;display:flex;flex-direction:column;gap:14px}
-  .fr-nav>*{animation:frBtnIn .55s cubic-bezier(.2,.8,.2,1) both}
-  .fr-nav>*:nth-child(1){animation-delay:.04s}
-  .fr-nav>*:nth-child(2){animation-delay:.11s}
-  .fr-nav>*:nth-child(3){animation-delay:.18s}
-  .fr-nav>*:nth-child(4){animation-delay:.25s}
+  .fr-nav{width:100%;max-width:360px;align-self:stretch;display:flex;flex-direction:column;justify-content:space-between;gap:18px;min-height:360px}
+  .fr-nav-top{display:flex;flex-direction:column;gap:14px}
+  #frPseudoWrap{animation:frBtnIn .55s cubic-bezier(.2,.8,.2,1) both;animation-delay:.04s}
+  #mode-melee{animation:frBtnIn .55s cubic-bezier(.2,.8,.2,1) both;animation-delay:.11s}
+  #mode-bots{animation:frBtnIn .55s cubic-bezier(.2,.8,.2,1) both;animation-delay:.18s}
+  #optbtn{animation:frBtnIn .55s cubic-bezier(.2,.8,.2,1) both;animation-delay:.25s}
+  .fr-diff{display:none;flex-direction:column;gap:10px;background:var(--panel-2);border:1px solid var(--brd-strong);border-radius:13px;padding:13px 16px;box-shadow:var(--shadow)}
+  .fr-diff.show{display:flex;animation:frSlideUp .5s cubic-bezier(.2,.85,.2,1) both}
+  .fr-diff-lbl{font:600 12px/1 var(--font);letter-spacing:1.5px;color:var(--txt-dim);text-transform:uppercase;text-align:center}
+  .fr-diff .fr-seg{display:flex;gap:7px;justify-content:center;flex-wrap:wrap}
+  .fr-diff .diffbtn{padding:8px 13px;font-size:13px}
+  .fr-meleeinfo{display:none;margin-top:14px;background:var(--panel-2);border:1px solid var(--brd-strong);border-radius:11px;padding:10px 16px;font:600 12px/1.3 var(--font);letter-spacing:.6px;color:var(--txt-dim);text-transform:uppercase;box-shadow:var(--shadow-sm)}
+  .fr-meleeinfo b{color:var(--txt)}
+  .fr-meleeinfo.show{display:inline-block;animation:frSlideUp .5s cubic-bezier(.2,.85,.2,1) both}
   @keyframes frBtnIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
   .fr-btn{position:relative;width:100%;padding:17px 24px;background:rgba(255,255,255,.025);border:1px solid var(--brd-strong);border-radius:11px;color:var(--txt-dim);font:600 16px/1 var(--font);letter-spacing:2.5px;text-transform:uppercase;cursor:pointer;text-align:center;transition:color .18s,border-color .18s,background .18s,transform .14s,box-shadow .25s}
   .fr-btn:hover{color:var(--txt);border-color:rgba(255,255,255,.45);background:rgba(255,255,255,.06);transform:translateY(-1px)}
@@ -243,7 +254,7 @@
   .fr-pseudo-btn.has .fr-k{font-size:11px;letter-spacing:2px;opacity:.55}
   .fr-pseudo-btn .fr-v{color:#fff;font-weight:700;letter-spacing:1px;text-transform:none}
   .fr-pseudo-input{width:100%;padding:17px 24px;background:rgba(255,255,255,.06);border:1px solid var(--accent);border-radius:11px;color:#fff;font:600 16px/1 var(--font);letter-spacing:1px;text-align:center;outline:none;box-shadow:0 0 0 3px rgba(92,224,255,.12)}
-  .fr-preview{width:100%;max-width:560px;opacity:0;transform:translateX(-16px) scale(.99);transition:opacity .4s ease,transform .45s cubic-bezier(.2,.8,.2,1);pointer-events:none}
+  .fr-preview{width:100%;max-width:560px;align-self:center;opacity:0;transform:translateX(-16px) scale(.99);transition:opacity .4s ease,transform .45s cubic-bezier(.2,.8,.2,1);pointer-events:none}
   .fr-preview.show{opacity:1;transform:none;pointer-events:auto}
   .fr-screen{position:relative;width:100%;aspect-ratio:16/9;border:1px solid var(--brd-strong);border-radius:13px;overflow:hidden;background:#08090c;box-shadow:var(--shadow)}
   .fr-canvas{position:absolute;inset:0}
@@ -402,9 +413,18 @@
   <div id="ammo">
     <div id="wpnbox"><span id="wpnname">R-69</span><span id="wpnicon"></span></div>
     <div class="magwrap"><div class="mag" id="magcount">30</div><div class="res" id="ammosub">/ ∞</div></div>
+    <!-- Carte SABRE (style img3) : colonne ARME | colonne DASH, chacune avec son glyphe centré + barre bleue -->
+    <div class="sb-col sb-wpn">
+      <div class="sb-name" id="sbName">SABRE LASER</div>
+      <div class="sb-icon" id="sbIcon"></div>
+      <div class="sb-bar"><div class="sb-fill sb-charge" id="sbCharge"></div></div>
+    </div>
+    <div class="sb-col sb-dash">
+      <div class="sb-name">DASH</div>
+      <div class="sb-glyph">&#10094;&#10094;</div>
+      <div class="sb-bar"><div class="sb-fill sb-dashfill" id="sbDash"></div></div>
+    </div>
   </div>
-  <div id="cooldownbar"><div class="cdfill"></div></div>
-  <div id="dashbar"><span class="dash-lbl">&#10218;&#10218; DASH</span><div class="dash-track"><div class="dash-fill"></div></div></div>
   <div id="momentum"><div class="mvel"><span id="mvelnum">0.0</span><span class="mu">M/S</span></div><div class="mbar"><div class="mbar-fill" id="mbarfill"></div><span class="mbar-max">MAX</span></div></div>
   <div id="toasts"></div>
   <div id="killbanner"></div>
@@ -438,34 +458,29 @@
         <div class="fr-screen"><div class="fr-canvas" id="menuPreview"></div><span class="fr-live">LIVE</span></div>
         <p class="fr-rules" id="frRules"></p>
         <button class="fr-launch" id="menuLaunch">Lancer</button>
+        <div class="fr-meleeinfo" id="frMeleeInfo">Mêlée en ligne · jusqu'à <b>6 joueurs</b> · premier à <b>10 éliminations</b></div>
       </section>
 
       <nav class="fr-nav">
-        <div class="fr-pseudo" id="frPseudoWrap">
-          <button class="fr-btn fr-pseudo-btn" id="frPseudoBtn"><span class="fr-k">Pseudo</span><span class="fr-v" id="frPseudoVal"></span></button>
-          <input class="fr-pseudo-input" id="pseudo" maxlength="16" placeholder="Votre pseudo" style="display:none">
-        </div>
-        <button class="fr-btn fr-mode" id="mode-melee" data-mode="melee">Mêlée Général</button>
-        <button class="fr-btn" id="optbtn">Options</button>
-        <button class="fr-btn fr-mode" id="mode-bots" data-mode="bots">Entraînement</button>
-      </nav>
-    </div>
-
-    <div class="fr-drawer" id="frDrawer">
-      <div class="fr-drawer-inner">
-        <div class="fr-drawer-row" id="frDrawerBots">
-          <span class="fr-drawer-lbl">Difficulté bots</span>
-          <div class="fr-seg">
-            <button class="diffbtn" data-diff="easy">Easy</button>
-            <button class="diffbtn" data-diff="medium">Medium</button>
-            <button class="diffbtn" data-diff="hard">Hard</button>
-            <button class="diffbtn" data-diff="insane">Insane</button>
+        <div class="fr-nav-top">
+          <div class="fr-pseudo" id="frPseudoWrap">
+            <button class="fr-btn fr-pseudo-btn" id="frPseudoBtn"><span class="fr-k">Pseudo</span><span class="fr-v" id="frPseudoVal"></span></button>
+            <input class="fr-pseudo-input" id="pseudo" maxlength="16" placeholder="Votre pseudo" style="display:none">
+          </div>
+          <button class="fr-btn fr-mode" id="mode-melee" data-mode="melee">Mêlée Général</button>
+          <button class="fr-btn fr-mode" id="mode-bots" data-mode="bots">Entraînement</button>
+          <div class="fr-diff" id="frDiff">
+            <span class="fr-diff-lbl">Difficulté bots</span>
+            <div class="fr-seg">
+              <button class="diffbtn" data-diff="easy">Easy</button>
+              <button class="diffbtn" data-diff="medium">Medium</button>
+              <button class="diffbtn" data-diff="hard">Hard</button>
+              <button class="diffbtn" data-diff="insane">Insane</button>
+            </div>
           </div>
         </div>
-        <div class="fr-drawer-row" id="frDrawerMelee" style="display:none">
-          <span class="fr-drawer-lbl">Mêlée en ligne · jusqu'à <b>6 joueurs</b> · premier à <b>10 éliminations</b></span>
-        </div>
-      </div>
+        <button class="fr-btn fr-opt" id="optbtn">Options</button>
+      </nav>
     </div>
 
     <div class="fr-legacy" aria-hidden="true">
@@ -1110,14 +1125,17 @@ function applyWeaponHUD(){
   const holstered = (weapon.state !== 'equipped');
   document.getElementById('wpnname').textContent = holstered ? '—' : (W.name || 'R-69');
   const holder = document.getElementById('wpnicon');
+  const sbIcon = document.getElementById('sbIcon');
+  const sbName = document.getElementById('sbName');
+  if(sbName && !holstered && W.melee) sbName.textContent = W.name || 'SABRE LASER';
   if(holstered){ holder.innerHTML = HOLSTER_SVG; return; }
   const icon = W.icon || GAMECFG.WEAPON_ICON;
   if(icon){
     const img = new Image();
-    img.onload = ()=>{ holder.innerHTML=''; holder.appendChild(img); };
-    img.onerror = ()=>{ holder.innerHTML = WEAPON_SVG; };
+    img.onload = ()=>{ holder.innerHTML=''; holder.appendChild(img); if(sbIcon){ const c=img.cloneNode(); sbIcon.innerHTML=''; sbIcon.appendChild(c); } };
+    img.onerror = ()=>{ holder.innerHTML = WEAPON_SVG; if(sbIcon) sbIcon.innerHTML = WEAPON_SVG; };
     img.src = icon;
-  } else holder.innerHTML = WEAPON_SVG;
+  } else { holder.innerHTML = WEAPON_SVG; if(sbIcon) sbIcon.innerHTML = WEAPON_SVG; }
 }
 function applyCustomHUD(){
   const H = GAMECFG.HUD || {};
@@ -3183,27 +3201,25 @@ function saberHitSound(finisher){
 function saberEmptyClick(){ sfx(200, 150, 0.06, 0.035, 'square'); } // sabre déchargé : petit "clic vide"
 // Barre de COOLDOWN du sabre (bleue, bas droite) — MAJ seulement quand ça change (perf).
 function updateCooldownBar(){
-  const cb = document.getElementById('cooldownbar'); if(!cb) return;
-  const show = isSaber() && playing && alive;
-  if(cb._shown !== show){ cb.style.display = show ? 'block' : 'none'; cb._shown = show; }
-  if(!show) return;
+  const f = document.getElementById('sbCharge'); const ammoEl = document.getElementById('ammo');
+  if(!f || !ammoEl) return;
+  if(!(isSaber() && playing && alive)) return;   // visibilité gérée par #ammo.saber (updateAmmoUI)
   const p = Math.round(melee.charge * 100);
-  if(p !== cb._p){ const f = cb.firstElementChild; if(f) f.style.width = p + '%'; cb._p = p; }
+  if(p !== f._p){ f.style.width = p + '%'; f._p = p; }
   const empty = melee.charge < 1/((GAMECFG.MELEE||{}).max_hits ?? 5) - 1e-4;
-  if(empty !== cb._empty){ cb.classList.toggle('empty', empty); cb._empty = empty; }
+  if(empty !== ammoEl._cEmpty){ ammoEl.classList.toggle('charge-empty', empty); ammoEl._cEmpty = empty; }
 }
 // Jauge du DASH sabre ("Bonus d'attaque") : grise → se remplit en bleu pendant la recharge (6 s),
 // pleine = prête. Rechargée d'un coup au hit sabre. Affichée seulement quand le sabre est sorti.
 function updateDashUI(){
-  const el = document.getElementById('dashbar'); if(!el) return;
-  const show = isSaber() && playing && alive;
-  if(el._shown !== show){ el.style.display = show ? 'flex' : 'none'; el._shown = show; }
-  if(!show) return;
+  const f = document.getElementById('sbDash'); const ammoEl = document.getElementById('ammo');
+  if(!f || !ammoEl) return;
+  if(!(isSaber() && playing && alive)) return;   // visibilité gérée par #ammo.saber (updateAmmoUI)
   const cd = me.dashCD || 0;
   const pct = Math.max(0, Math.min(100, Math.round((1 - cd/DASH_CD)*100)));
-  if(pct !== el._p){ const f = el.querySelector('.dash-fill'); if(f) f.style.width = pct + '%'; el._p = pct; }
+  if(pct !== f._p){ f.style.width = pct + '%'; f._p = pct; }
   const ready = cd <= 0;
-  if(ready !== el._ready){ el.classList.toggle('ready', ready); el._ready = ready; }
+  if(ready !== ammoEl._dReady){ ammoEl.classList.toggle('dash-ready', ready); ammoEl._dReady = ready; }
 }
 
 const HIP_POS = new THREE.Vector3(.22,-.28,-.46); // position hanche (style Apex : bas-droite, proche)
@@ -5125,7 +5141,7 @@ function updateAmmoUI(){
   const ammoEl = document.getElementById('ammo');
   const max = W.mag || CONFIG.MAG_SIZE || 30;
   const low = !isMelee && !holstered && me.mag <= Math.ceil(max*0.25);
-  if(ammoEl) ammoEl.classList.toggle('low', low);
+  if(ammoEl){ ammoEl.classList.toggle('low', low); ammoEl.classList.toggle('saber', isMelee && !holstered); }
 }
 // Pulse de la carte munitions à chaque tir.
 function triggerAmmoPulse(){
@@ -5315,10 +5331,9 @@ document.getElementById('botbtnmenu').onclick = ()=>{
     $('mode-melee').classList.toggle('sel',m==='melee');
     $('mode-bots').classList.toggle('sel',m==='bots');
     $('frRules').innerHTML=RULES[m]||'';
-    $('frDrawerBots').style.display=(m==='bots')?'':'none';
-    $('frDrawerMelee').style.display=(m==='melee')?'':'none';
+    var DF=$('frDiff'); if(m==='bots'){ DF.classList.remove('show'); void DF.offsetWidth; DF.classList.add('show'); } else DF.classList.remove('show');
+    var MI=$('frMeleeInfo'); if(m==='melee'){ MI.classList.remove('show'); void MI.offsetWidth; MI.classList.add('show'); } else MI.classList.remove('show');
     var P=$('frPreview'); P.classList.add('show'); P.classList.remove('anim'); void P.offsetWidth; P.classList.add('anim');
-    var D=$('frDrawer'); D.classList.add('show'); D.classList.remove('anim'); void D.offsetWidth; D.classList.add('anim');
     if(pv)pv.t=0; pvStart();
   }
   var mM=$('mode-melee'),mB=$('mode-bots');
