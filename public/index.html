@@ -2908,6 +2908,7 @@ let meleeShake = 0, meleeShakePhase = 0, meleeKickPitch = 0, meleeKickYaw = 0;
 let switchShake = 0, switchShakePhase = 0, switchShakeT = 0; // vibration au changement d'arme (enveloppe attack/decay)
 let fireShake = 0, fireShakePhase = 0, fireShakeT = 0, fireShakeCfg = null; // secousse de tir lourde (ex: Wingman)
 let saberTrail = null; const saberTrailSamples = [];
+let saberGlowTube = null, saberParticles = null, _saberPtcl = null;  // halo + particules électriques permanentes
 function saberWeaponIndex(){ const W = GAMECFG.WEAPONS||[]; for(let i=0;i<W.length;i++) if(W[i].melee) return i; return -1; }
 function isSaber(){ const W = curWeapon(); return !!(W && W.melee); }
 // Prochaine arme À FEU (saute le sabre) — pour le cycle clic-bref manette.
@@ -3146,10 +3147,99 @@ function updateSaberTrail(active){
   tr.geometry.setDrawRange(0, (n-1)*6);
 }
 
+// ===== FX SABRE PERMANENT : halo de glow + particules électriques bleu->violet =====
+// Texture ronde douce pour des particules additives (générée une fois).
+function _saberSparkTex(){
+  if(_saberSparkTex._t) return _saberSparkTex._t;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(32,32,0, 32,32,32);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.3,'rgba(210,225,255,0.85)');
+  grd.addColorStop(1, 'rgba(140,150,255,0)');
+  g.fillStyle = grd; g.beginPath(); g.arc(32,32,32,0,Math.PI*2); g.fill();
+  const t = new THREE.CanvasTexture(c); _saberSparkTex._t = t; return t;
+}
+function ensureSaberFX(){
+  if(!gunScene || saberParticles) return;
+  const S = GAMECFG.MELEE || {};
+  const tip = -(S.trail_len ?? 0.95), base = (S.trail_base ?? -0.12);
+  // Halo : tube additif le long de l'axe -Z du gun (orientation de la lame), un peu plus large.
+  const L = Math.abs(tip - base), r = (S.glow_radius ?? 0.055);
+  const tg = new THREE.CylinderGeometry(r, r*0.7, L, 14, 1, true);
+  tg.rotateX(-Math.PI/2);                 // axe Y -> Z
+  tg.translate(0, 0, (tip + base)/2);     // centre de la lame
+  saberGlowTube = new THREE.Mesh(tg, new THREE.MeshBasicMaterial({
+    color:(S.blade_color ?? 0x36e3ff), transparent:true, opacity:(S.glow_opacity ?? 0.30),
+    blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, toneMapped:false }));
+  saberGlowTube.frustumCulled = false; saberGlowTube.matrixAutoUpdate = false; saberGlowTube.visible = false;
+  gunScene.add(saberGlowTube);
+  // Particules : Points additifs, couleur par sommet (dégradé bleu->violet), fade par la couleur.
+  const MAX = (S.particle_count ?? 120);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX*3), 3));
+  geo.setAttribute('color',    new THREE.BufferAttribute(new Float32Array(MAX*3), 3));
+  saberParticles = new THREE.Points(geo, new THREE.PointsMaterial({
+    size:(S.particle_size ?? 0.055), map:_saberSparkTex(), vertexColors:true, transparent:true,
+    blending:THREE.AdditiveBlending, depthWrite:false, sizeAttenuation:true, toneMapped:false }));
+  saberParticles.frustumCulled = false; saberParticles.visible = true;
+  gunScene.add(saberParticles);
+  _saberPtcl = []; for(let i=0;i<MAX;i++) _saberPtcl.push({ life:0, max:1, pos:new THREE.Vector3(), vel:new THREE.Vector3(), col:new THREE.Color() });
+}
+const _sbTmpV = new THREE.Vector3();
+function updateSaberFX(dt, active){
+  ensureSaberFX();
+  if(!saberParticles) return;
+  const S = GAMECFG.MELEE || {};
+  gun.updateMatrixWorld(true);
+  // --- Halo glow tube : suit exactement le gun (matrice copiée), pulse avec la lame ---
+  if(saberGlowTube){
+    saberGlowTube.visible = active;
+    if(active){
+      saberGlowTube.matrix.copy(gun.matrixWorld); saberGlowTube.matrixWorldNeedsUpdate = true;
+      const pulse = 1 + Math.sin(performance.now()*0.012) * (S.blade_pulse ?? 0.12);
+      saberGlowTube.material.opacity = (S.glow_opacity ?? 0.30) * (0.7 + 0.3*pulse) * (1 + melee.flare*1.2);
+    }
+  }
+  // --- Particules électriques émises le long de la lame ---
+  const tip = -(S.trail_len ?? 0.95), base = (S.trail_base ?? -0.12);
+  const cA = new THREE.Color(S.particle_color_a ?? 0x4db8ff), cB = new THREE.Color(S.particle_color_b ?? 0xa35cff);
+  const jr = (S.particle_jitter ?? 0.015), sp = (S.particle_speed ?? 0.55), rise = (S.particle_rise ?? 0.12);
+  const posA = saberParticles.geometry.attributes.position.array;
+  const colA = saberParticles.geometry.attributes.color.array;
+  let toSpawn = active ? Math.round((S.particle_rate ?? 210) * dt) : 0;
+  for(let i=0;i<_saberPtcl.length;i++){
+    const p = _saberPtcl[i], b = i*3;
+    if(p.life <= 0 && toSpawn > 0){
+      // spawn sur la lame (z entre tip et base, jitter radial) -> monde via gun.matrixWorld
+      const t = Math.random();
+      _sbTmpV.set((Math.random()*2-1)*jr, (Math.random()*2-1)*jr, tip + (base - tip)*t).applyMatrix4(gun.matrixWorld);
+      p.pos.copy(_sbTmpV);
+      p.vel.set((Math.random()*2-1)*sp, (Math.random()*2-1)*sp + rise, (Math.random()*2-1)*sp);
+      p.max = (S.particle_life ?? 0.42) * (0.6 + Math.random()*0.8); p.life = p.max;
+      p.col.copy(cA).lerp(cB, Math.random());   // dégradé bleu -> violet par particule
+      toSpawn--;
+    }
+    if(p.life > 0){
+      p.life -= dt;
+      p.pos.addScaledVector(p.vel, dt);
+      p.vel.multiplyScalar(0.90);                // friction : crackle qui s'éteint
+      const f = Math.max(0, p.life / p.max), fade = f*f;   // additif : couleur->0 = fade out
+      posA[b]=p.pos.x; posA[b+1]=p.pos.y; posA[b+2]=p.pos.z;
+      colA[b]=p.col.r*fade; colA[b+1]=p.col.g*fade; colA[b+2]=p.col.b*fade;
+    } else {
+      colA[b]=colA[b+1]=colA[b+2]=0;             // mort = invisible (additif)
+    }
+  }
+  saberParticles.geometry.attributes.position.needsUpdate = true;
+  saberParticles.geometry.attributes.color.needsUpdate = true;
+}
+
 // Mise à jour mêlée — appelée en TOUT DERNIER chaque frame (par-dessus la pose d'arme).
 function updateMelee(dt){
   const saber = isSaber();
   updateSaberGlow(dt, saber);
+  updateSaberFX(dt, saber && playing && alive);   // halo + particules électriques permanentes (sabre sorti)
   if(!saber){ if(saberTrail) saberTrail.visible = false; melee.active = false; melee.trailOn = false; updateCooldownBar(); return; }
   const S = GAMECFG.MELEE || {};
   // COOLDOWN sabre : la charge se recharge avec le temps ; la barre bleue se vide/remonte.

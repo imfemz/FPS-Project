@@ -268,10 +268,23 @@
       magnet_rate: 10,       // vitesse de rattrapage de la visée vers la cible
       // --- Rendu de la lame ---
       blade_color: 0x36e3ff, // couleur de la lame (cyan néon, assorti au thème)
-      blade_emissive: 3.2,   // intensité d'émission de la lame
-      blade_light: 2.4,      // intensité de la lumière dynamique projetée par la lame
-      blade_light_dist: 4,   // portée de cette lumière (m)
+      blade_emissive: 4.8,   // intensité d'émission de la lame (PLUS de glow)
+      blade_light: 3.4,      // intensité de la lumière dynamique projetée par la lame (PLUS de glow)
+      blade_light_dist: 5,   // portée de cette lumière (m)
       blade_pulse: 0.74,     // amplitude de la pulsation de la lame (vivante)
+      // --- Halo de glow (tube additif autour de la lame, sans bloom car rendu viewmodel) ---
+      glow_radius: 0.055,    // rayon du halo (m) — un peu plus large que la lame
+      glow_opacity: 0.30,    // opacité du halo additif
+      // --- Particules électriques permanentes émises par la lame (dégradé bleu -> violet) ---
+      particle_count: 120,   // nombre max de particules vivantes
+      particle_rate: 210,    // particules émises par seconde
+      particle_life: 0.42,   // durée de vie (s)
+      particle_size: 0.055,  // taille des particules
+      particle_speed: 0.55,  // vitesse "crackle" électrique
+      particle_rise: 0.12,   // légère dérive vers le haut
+      particle_jitter: 0.015,// dispersion radiale autour de la lame (m)
+      particle_color_a: 0x4db8ff, // bleu
+      particle_color_b: 0xa35cff, // violet (dégradé entre les deux par particule)
       // --- Traînée lumineuse (ruban additif derrière la lame pendant le swing) ---
       trail_len: 0.95,       // longueur de la traînée le long de la lame (m, depuis la garde)
       trail_base: -0.12,     // position de la base de la traînée (m, côté garde)
