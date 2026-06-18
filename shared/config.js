@@ -426,8 +426,8 @@
         { t: 0.20, pos: [0, 0, 0], rot: [0, 0, 0], ease: 'easeInOut' },
       ],
     },
-    CROSSHAIR: { SIZE: 13, GAP: 17, THICKNESS: 1, EXPAND: 10, EXPAND_SPEED: 18, HOLSTER_DOT: 4 },
-    BULLET_DROP: 1,
+    CROSSHAIR: { SIZE: 10, GAP: 22, THICKNESS: 1, EXPAND: 10, EXPAND_SPEED: 20, HOLSTER_DOT: 4 },
+    BULLET_DROP: 10,
     BULLET_SPEED: 520,
     JUMP_SHAKE: 0.125,
     // ===== Effet au WALL BOUNCE =====
@@ -435,13 +435,13 @@
     WALLBOUNCE_KICK: {
       ENABLED: true,
       roll: 0.52,    // roll de l'arme (rad). NÉGATIF = penche à GAUCHE (~ -0.22 ≈ 13°). Positif = droite.
-      pos_x: -0.015,  // léger décalage de position vers la gauche (m). 0 = aucun.
+      pos_x: -0.005,  // léger décalage de position vers la gauche (m). 0 = aucun.
       yaw: -0.05,     // léger yaw de l'arme (rad). 0 = aucun.
       attack: 0.15,   // temps de MONTÉE jusqu'au max (s) — petit = "se penche vite".
       return: 0.55,   // temps de RETOUR à zéro (s) — grand = "revient doucement".
     },
     // Léger shake de la caméra joueur au wall bounce. Amplitude en rad (≈ 0.01 = discret). 0 = off.
-    WALLBOUNCE_SHAKE: 0.128,   // amplitude du shake au wall bounce (enveloppe attack/decay, façon switch)
+    WALLBOUNCE_SHAKE: 0.098,   // amplitude du shake au wall bounce (enveloppe attack/decay, façon switch)
     SWAY_SMOOTH: 2,
     SWAY_AMOUNT: 5,
     IDLE_SWAY: { AMOUNT: 0.10, SPEED: 0.005 },
