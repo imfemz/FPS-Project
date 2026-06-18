@@ -507,7 +507,12 @@ const CONFIG = {
   WALLBOUNCE_MIN_SPEED: 3.5,
   WALLBOUNCE_KEEP: 1.85,
   WALLBOUNCE_PUSH: 3.6,
-  WALLBOUNCE_UP: 7.4,
+  WALLBOUNCE_UP: 7.4,        // saut Y de BASE au wall bounce (plancher, pour un rebond lent/rasant)
+  // Saut Y VARIABLE : bonus ajouté selon la vitesse d'approche ET l'angle d'impact (de face = plus haut).
+  WALLBOUNCE_UP_BONUS: 4.5,      // bonus Y max (m/s) ajouté au-dessus de la base
+  WALLBOUNCE_UP_REF_SPEED: 13,   // vitesse (m/s) à laquelle le facteur vitesse atteint 1 (au-delà = plafonné)
+  WALLBOUNCE_UP_ANGLE: 0.6,      // part de l'ANGLE dans le bonus : 0 = bonus piloté que par la vitesse, 1 = surtout l'angle (impact de face)
+  WALLBOUNCE_UP_MAX: 12,         // plafond du saut Y au wall bounce
   // 1.0 = l'élan repart PILE dans la direction du regard (façon Apex). 0 = ancien rebond miroir
   // sur le mur. Entre les deux = mélange. C'est ça qui fait "je garde ma vélocité où je regarde".
   WALLBOUNCE_REDIRECT: 1.0,
@@ -3707,10 +3712,13 @@ function startAmbient(){
       }catch(e){}
     });
 }
+const AUDIO_CACHE_BUST = Date.now();   // change a chaque chargement de page -> casse le cache audio du navigateur
 function loadAudioBuffer(url, onOk){
   if(!url) return;
   // Préfère la version .m4a (AAC, ~2× plus légère que le .mp3) ; retombe sur le .mp3 si absente.
-  const tryLoad = (u, onFail) => fetch(u)
+  // Anti-cache : token unique par page -> un son remplacé est TOUJOURS rejoué (jamais l'ancien en cache).
+  const bust = u => u + (u.includes('?') ? '&' : '?') + 'v=' + AUDIO_CACHE_BUST;
+  const tryLoad = (u, onFail) => fetch(bust(u))
     .then(r=>{ if(!r.ok) throw 0; return r.arrayBuffer(); })
     .then(ab=>ensureAudioCtx().decodeAudioData(ab))
     .then(buf=>onOk && onOk(buf))
@@ -6519,7 +6527,14 @@ function playerUpdate(dt, g){
           const out = dir.multiplyScalar(spd * CONFIG.WALLBOUNCE_KEEP)
                          .add(n.clone().multiplyScalar(CONFIG.WALLBOUNCE_PUSH));
           me.vel.x = out.x; me.vel.z = out.z;
-          me.vel.y = CONFIG.WALLBOUNCE_UP;
+          // Saut Y VARIABLE : base + bonus selon la VITESSE d'approche et l'ANGLE d'impact (de face = plus haut).
+          const _inward = Math.max(0, -hv.dot(n));                              // vitesse vers le mur (m/s) : 0 = rasant, élevé = de face
+          const _angleFac = spd > 0.01 ? Math.min(1, _inward/spd) : 0;          // 0 (rasant) → 1 (de face)
+          const _speedFac = Math.min(1, spd / (CONFIG.WALLBOUNCE_UP_REF_SPEED ?? 13));
+          const _aw = CONFIG.WALLBOUNCE_UP_ANGLE ?? 0.6;
+          const _upFac = _speedFac * ((1 - _aw) + _aw * _angleFac);            // vitesse pondérée par l'angle
+          me.vel.y = Math.min(CONFIG.WALLBOUNCE_UP_MAX ?? 12,
+                              CONFIG.WALLBOUNCE_UP + (CONFIG.WALLBOUNCE_UP_BONUS ?? 4.5) * _upFac);
           me.wallBounced = true;
           wbKickT = 0;                                   // déclenche le "lean gauche" de l'arme
           wbShake = 1; wbShakeT = 0;                     // déclenche le shake caméra (enveloppe attack/decay)
