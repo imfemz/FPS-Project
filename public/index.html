@@ -246,7 +246,7 @@
     z-index:6;pointer-events:none;display:none;
     -webkit-mask-image:linear-gradient(90deg, transparent 0, #000 16%, #000 84%, transparent 100%);
             mask-image:linear-gradient(90deg, transparent 0, #000 16%, #000 84%, transparent 100%)}
-  #countdown{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-family:var(--mono);font-size:120px;font-weight:700;color:var(--txt);z-index:9;pointer-events:none}
+  #countdown{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-family:var(--mono);font-size:120px;font-weight:700;color:var(--txt);z-index:90;pointer-events:none}
 
   #bindtable{border-collapse:collapse;margin:10px 0 14px;font-size:14px}
   #bindtable th,#bindtable td{padding:6px 16px;border-bottom:1px solid var(--brd)}
@@ -762,7 +762,7 @@ function buildScene(){
   camera = new THREE.PerspectiveCamera(GAMECFG.FOV.VIEW, innerWidth/innerHeight, 0.05, 400);
   camera.layers.enable(AO_SKIP_LAYER); // la caméra principale rend aussi les overlays (sprites/particules)
   gunCam = new THREE.PerspectiveCamera(GAMECFG.FOV.WEAPON, innerWidth/innerHeight, 0.01, 50);
-  renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
+  renderer = new THREE.WebGLRenderer({antialias:true});
   renderer.setSize(innerWidth, innerHeight);
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
   renderer.shadowMap.enabled = true;
@@ -3840,93 +3840,91 @@ function maybeStartMenuMusic(){
 }
 // Entrée effective en partie : son de spawn + coupe la musique de menu.
 function onEnterGameAudio(){ menuMusicWanted = false; stopMenuMusic(); playSfx('spawn'); spawnSimOverlay(); }
-/* ===== Overlay de spawn "shader lines" : 3s, et le BLANC du shader deforme le jeu ===== */
+/* ===== Overlay de spawn "shader lines" (3s) : deformation du jeu (filtre SVG) + lignes en surimpression ===== */
 let spawnFxActive = false;
 function spawnSimOverlay(){
   const CFG = GAMECFG.SPAWN_OVERLAY || {};
   if(CFG.ENABLED === false || spawnFxActive) return;
+  const dur = (CFG.duration ?? 3.0) * 1000;
+  const warpPx = (CFG.warp ?? 0.06) * window.innerHeight;
+  const lineInt = (CFG.intensity ?? 1.0);
+  let cont=null, svg=null, dispEl=null, ov=null, raf=0, safety=0, done=false;
+  let gameCanvas=null, prevFilter='', onResize=function(){};
+  const cleanup = function(){
+    if(done) return; done=true; spawnFxActive=false;
+    try{ cancelAnimationFrame(raf); }catch(e){}
+    try{ clearTimeout(safety); }catch(e){}
+    try{ window.removeEventListener('resize', onResize); }catch(e){}
+    try{ if(gameCanvas) gameCanvas.style.filter = prevFilter; }catch(e){}
+    try{ if(svg && svg.parentNode) svg.parentNode.removeChild(svg); }catch(e){}
+    try{ if(ov){ ov.dispose(); var gl=ov.getContext(); var lc=gl&&gl.getExtension('WEBGL_lose_context'); if(lc) lc.loseContext(); } }catch(e){}
+    try{ if(cont && cont.parentNode) cont.parentNode.removeChild(cont); }catch(e){}
+  };
   try{
-    if(typeof renderer === "undefined" || !renderer || !renderer.domElement) return;
     spawnFxActive = true;
-    const dur = (CFG.duration ?? 3.0) * 1000;
-    const warpAmp = (CFG.warp ?? 0.06);
-    const lineInt = (CFG.intensity ?? 1.0);
-    const cont = document.createElement("div");
-    cont.style.cssText = "position:fixed;inset:0;z-index:80;pointer-events:none;background:#000";
+    // 1) deformation du JEU : filtre SVG feTurbulence + feDisplacementMap (scale -> 0)
+    if(typeof renderer !== "undefined" && renderer && renderer.domElement){
+      gameCanvas = renderer.domElement; prevFilter = gameCanvas.style.filter || '';
+      const NS='http://www.w3.org/2000/svg';
+      svg=document.createElementNS(NS,'svg');
+      svg.setAttribute('width','0'); svg.setAttribute('height','0'); svg.style.cssText='position:absolute;width:0;height:0';
+      const fil=document.createElementNS(NS,'filter'); const fid='spawnWarp_'+Math.floor(Math.random()*1e6);
+      fil.setAttribute('id',fid); fil.setAttribute('x','-20%'); fil.setAttribute('y','-20%'); fil.setAttribute('width','140%'); fil.setAttribute('height','140%');
+      const turb=document.createElementNS(NS,'feTurbulence');
+      turb.setAttribute('type','fractalNoise'); turb.setAttribute('baseFrequency','0.012 0.018');
+      turb.setAttribute('numOctaves','2'); turb.setAttribute('seed',String(Math.floor(Math.random()*1000))); turb.setAttribute('result','noise');
+      dispEl=document.createElementNS(NS,'feDisplacementMap');
+      dispEl.setAttribute('in','SourceGraphic'); dispEl.setAttribute('in2','noise');
+      dispEl.setAttribute('scale',String(warpPx)); dispEl.setAttribute('xChannelSelector','R'); dispEl.setAttribute('yChannelSelector','G');
+      fil.appendChild(turb); fil.appendChild(dispEl); svg.appendChild(fil); document.body.appendChild(svg);
+      gameCanvas.style.filter='url(#'+fid+')';
+    }
+    // 2) lignes du shader en surimpression transparente (jamais de couverture noire)
+    cont=document.createElement('div');
+    cont.style.cssText='position:fixed;inset:0;z-index:80;pointer-events:none;background:transparent';
     document.body.appendChild(cont);
-    const ovScene = new THREE.Scene();
-    const ovCam = new THREE.Camera();
-    const geo = new THREE.PlaneGeometry(2, 2);
-    const gameTex = new THREE.CanvasTexture(renderer.domElement);
-    gameTex.colorSpace = THREE.NoColorSpace;
-    gameTex.minFilter = THREE.LinearFilter; gameTex.magFilter = THREE.LinearFilter;
-    gameTex.wrapS = gameTex.wrapT = THREE.ClampToEdgeWrapping;
-    gameTex.generateMipmaps = false;
-    const uniforms = {
-      time:{ value:1.0 }, resolution:{ value:new THREE.Vector2() },
-      intensity:{ value:lineInt }, warp:{ value:warpAmp }, strength:{ value:1.0 },
-      tGame:{ value:gameTex },
-    };
-    const vert = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position, 1.0); }';
-    const frag = [
+    const ovScene=new THREE.Scene(); const ovCam=new THREE.Camera(); const geo=new THREE.PlaneGeometry(2,2);
+    const uniforms={ time:{value:1.0}, resolution:{value:new THREE.Vector2()}, intensity:{value:lineInt}, strength:{value:1.0} };
+    const vert='void main(){ gl_Position = vec4(position, 1.0); }';
+    const frag=[
       'precision highp float;',
-      'varying vec2 vUv;',
-      'uniform vec2 resolution; uniform float time; uniform float intensity; uniform float warp; uniform float strength;',
-      'uniform sampler2D tGame;',
+      'uniform vec2 resolution; uniform float time; uniform float intensity; uniform float strength;',
       'float random(in float x){ return fract(sin(x)*1e4); }',
       'void main(void){',
-      '  vec2 suv = (gl_FragCoord.xy*2.0 - resolution.xy)/min(resolution.x, resolution.y);',
-      '  vec2 muv = suv;',
-      '  vec2 fMosaicScal = vec2(4.0, 2.0);',
-      '  vec2 vScreenSize = vec2(256.0, 256.0);',
-      '  muv.x = floor(muv.x*vScreenSize.x/fMosaicScal.x)/(vScreenSize.x/fMosaicScal.x);',
-      '  muv.y = floor(muv.y*vScreenSize.y/fMosaicScal.y)/(vScreenSize.y/fMosaicScal.y);',
-      '  float t = time*0.06 + random(muv.x)*0.4;',
-      '  float lw = 0.0008;',
-      '  vec3 lines = vec3(0.0);',
+      '  vec2 uv=(gl_FragCoord.xy*2.0 - resolution.xy)/min(resolution.x,resolution.y);',
+      '  vec2 fMosaicScal=vec2(4.0,2.0); vec2 vScreenSize=vec2(256.0,256.0);',
+      '  uv.x=floor(uv.x*vScreenSize.x/fMosaicScal.x)/(vScreenSize.x/fMosaicScal.x);',
+      '  uv.y=floor(uv.y*vScreenSize.y/fMosaicScal.y)/(vScreenSize.y/fMosaicScal.y);',
+      '  float t=time*0.06+random(uv.x)*0.4; float lw=0.0008; vec3 color=vec3(0.0);',
       '  for(int j=0;j<3;j++){ for(int i=0;i<5;i++){',
-      '    lines[j] += lw*float(i*i)/abs(fract(t - 0.01*float(j)+float(i)*0.01) - length(muv));',
+      '    color[j]+=lw*float(i*i)/abs(fract(t-0.01*float(j)+float(i)*0.01)-length(uv));',
       '  }}',
-      '  float L = clamp(lines.x+lines.y+lines.z, 0.0, 1.0);',
-      '  vec2 c = vUv - 0.5;',
-      '  vec2 dir = length(c) > 0.001 ? normalize(c) : vec2(0.0);',
-      '  vec2 off = dir * (L * warp * strength);',
-      '  float r = texture2D(tGame, vUv + off*1.0).r;',
-      '  float g = texture2D(tGame, vUv + off*0.6).g;',
-      '  float b = texture2D(tGame, vUv + off*0.3).b;',
-      '  vec3 col = vec3(r, g, b);',
-      '  col += vec3(lines.z, lines.y, lines.x) * intensity * strength;',
-      '  gl_FragColor = vec4(col, 1.0);',
+      '  float a=clamp(color.x+color.y+color.z,0.0,1.0)*strength;',
+      '  gl_FragColor=vec4(vec3(color.z,color.y,color.x)*intensity*strength, a);',
       '}'
     ].join('\n');
-    const mat = new THREE.ShaderMaterial({ uniforms, vertexShader:vert, fragmentShader:frag });
-    ovScene.add(new THREE.Mesh(geo, mat));
-    const ov = new THREE.WebGLRenderer({ antialias:false, alpha:false });
-    ov.outputColorSpace = THREE.NoColorSpace;
-    ov.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    const mat=new THREE.ShaderMaterial({uniforms:uniforms, vertexShader:vert, fragmentShader:frag, transparent:true, depthTest:false, depthWrite:false});
+    ovScene.add(new THREE.Mesh(geo,mat));
+    ov=new THREE.WebGLRenderer({antialias:false, alpha:true, premultipliedAlpha:false});
+    ov.setClearColor(0x000000, 0); ov.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
     cont.appendChild(ov.domElement);
-    const resize = ()=>{ ov.setSize(window.innerWidth, window.innerHeight); uniforms.resolution.value.set(ov.domElement.width, ov.domElement.height); };
-    resize(); window.addEventListener("resize", resize);
-    const t0 = performance.now(); let raf = 0;
-    const cleanup = ()=>{
-      cancelAnimationFrame(raf); window.removeEventListener("resize", resize);
-      try{ geo.dispose(); mat.dispose(); gameTex.dispose(); ov.dispose(); }catch(e){}
-      try{ const gl = ov.getContext(); const lc = gl && gl.getExtension('WEBGL_lose_context'); lc && lc.loseContext(); }catch(e){}
-      cont.remove(); spawnFxActive = false;
+    const doResize=function(){ ov.setSize(window.innerWidth, window.innerHeight); uniforms.resolution.value.set(ov.domElement.width, ov.domElement.height); };
+    doResize(); onResize=doResize; window.addEventListener('resize', onResize);
+    const t0=performance.now();
+    const loop=function(){
+      try{
+        const el=performance.now()-t0; const p=Math.min(el/dur,1.0);
+        let st=1.0-p; st=st*st*(3.0-2.0*st);
+        uniforms.strength.value=st; uniforms.time.value+=0.05;
+        if(dispEl) dispEl.setAttribute('scale', String(warpPx*st));
+        ov.render(ovScene, ovCam);
+        if(el>=dur){ cleanup(); return; }
+        raf=requestAnimationFrame(loop);
+      }catch(e){ console.warn('[spawnSimOverlay loop]', e); cleanup(); }
     };
-    const loop = ()=>{
-      const el = performance.now() - t0;
-      const p = Math.min(el/dur, 1.0);
-      let st = 1.0 - p; st = st*st*(3.0 - 2.0*st);
-      uniforms.strength.value = st;
-      uniforms.time.value += 0.05;
-      gameTex.needsUpdate = true;
-      ov.render(ovScene, ovCam);
-      if(el >= dur){ cleanup(); return; }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-  }catch(e){ console.warn('[spawnSimOverlay]', e); spawnFxActive = false; }
+    safety=setTimeout(cleanup, dur+800);
+    raf=requestAnimationFrame(loop);
+  }catch(e){ console.warn('[spawnSimOverlay]', e); cleanup(); }
 }
 function unlockMenuAudio(){ audioUnlocked = true; ensureAudioCtx(); maybeStartMenuMusic(); }
 addEventListener('pointerdown', unlockMenuAudio, { once:true });
