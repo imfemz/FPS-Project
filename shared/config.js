@@ -590,7 +590,7 @@
       post_kill_time: 1.5,  // durée (s) de capture APRÈS le kill, pour que la killcam ne coupe pas net
     },
     MODELS: {
-      character: '/models/Animated Base Character.glb',
+      character: '/models/AnimatedBaseCharacter.glb',
       character_scale: 1,
       // Visee haut-du-corps de l'adversaire : la colonne suit le pitch (regard haut/bas).
       // sign: -1 si ca penche a l'envers ; pitch_gain: amplitude ; bones: vertebres concernees.
