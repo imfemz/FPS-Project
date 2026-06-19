@@ -120,7 +120,7 @@
       // Multiplie le recul caméra appliqué à me.pitch / me.yaw pendant le tir.
       // 1 = comportement normal, 0.75 = caméra moins secouée, 0 = aucun recul caméra.
       RECOIL_MULT: 1.0,
-      HIP_MULT: 2.0,
+      HIP_MULT: 1.0,
       ADS_MULT: 1.0,
 
       // Multiplie uniquement le micro-jitter caméra du spray.
@@ -579,19 +579,21 @@
       post_kill_time: 1.5,  // durée (s) de capture APRÈS le kill, pour que la killcam ne coupe pas net
     },
     MODELS: {
-      character: '/models/SWAT.glb',
+      character: '/models/Animated Base Character.glb',
       character_scale: 1,
       // Visee haut-du-corps de l'adversaire : la colonne suit le pitch (regard haut/bas).
       // sign: -1 si ca penche a l'envers ; pitch_gain: amplitude ; bones: vertebres concernees.
-      spine_aim: { enabled: true, pitch_gain: 0.65, sign: -1, axis: 'x', bones: ['Abdomen','Torso','Chest'], max: 1.3 },
+      spine_aim: { enabled: true, pitch_gain: 0.65, sign: -1, axis: 'x', bones: ['DEF-spine.001','DEF-spine.002','DEF-spine.003'], max: 1.3 },
       // ===== ANIM EN COUCHES (third-person bots & remotes) =====
       // Visee CORPS (twist procedural Hips/Abdomen/Torso vers la cible) : le perso ne tourne plus
       // le dos en tirant. max_deg = torsion max avant que le corps pivote ; smooth = lissage.
-      body_aim: { enabled: true, max_deg: 58, smooth: 12, turn_follow: 7, dist: { Hips: 0.45, Abdomen: 0.35, Torso: 0.20 } },  // turn_follow = vitesse a laquelle le BAS rattrape le regard (bas = + de delay haut/bas)
-      // Bas du corps par INPUT : saut & crouch = clips FIGES sur une frame (pose statique). Live: tuneLowerFrame(jumpFrame, crouchFrame).
-      lower_pose: { fps: 24, jump_clip: 'Run', jump_frame: 4, crouch_clip: 'Death', crouch_frame: 7 },
-      // Seuils de vitesse LOCALE (m/s) pour le choix du clip de jambes (course/marche/idle).
-      layer_anim: { run_thresh: 0.15, walk_thresh: 0.2 },
+      body_aim: { enabled: true, max_deg: 58, smooth: 12, turn_follow: 7, dist: { 'DEF-spine.001': 0.55, 'DEF-spine.002': 0.45 } },  // twist sur spine.001/002 (DEF-hips porte le bob, role 'Body'). turn_follow = vitesse a laquelle le BAS rattrape le regard.
+      // Bas du corps par INPUT : VRAIS clips en boucle (Crouch_*, Jump_Loop) -> plus de pose figee.
+      // lower_pose conserve (compat tuneLowerFrame) mais n'est plus lu par le driver en couches.
+      lower_pose: { fps: 24, jump_clip: 'Jump_Loop', jump_frame: 0, crouch_clip: 'Crouch_Idle_Loop', crouch_frame: 0 },
+      // Seuils locomotion BAS : walk_thresh = idle->mvt (m/s) ; side_deg = angle mvt/visee au-dela
+      // duquel c'est lateral/arriere (-> Walk_Loop) ; jog_lo/jog_hi = plage vitesse Sprint(<lo)<->Jog(>hi).
+      layer_anim: { walk_thresh: 0.5, side_deg: 50, jog_lo: 6, jog_hi: 8, run_thresh: 0.15 },
       // Saut : pose procedurale (plus de roulade). euler [x,y,z] rad par bone. sign: -1 si jambes a l'envers.
       jump_pose: { enabled: true, blend: 12, sign: 1, upperleg: [0.85, 0, 0.08], lowerleg: [-0.95, 0, 0] },
       // Accroupi : flexion procedurale des jambes (squat), MEME convention que jump_pose.
@@ -606,16 +608,23 @@
         // couvertes jusqu'au sol ; top 1.86 = couvre la tête. Utilisé par le CLIENT et le SERVEUR (multi).
         radius: 0.42, bottom: 0.0, top: 1.86, top_crouch: 1.22, head: 0.33,
       },
+      // role -> clip (prefixe 'Rig|'). Sert au FALLBACK plein-corps + Death/Hit. La locomotion en
+      // COUCHES utilise LOWER_CLIP_SOURCES/UPPER_CLIP_SOURCES (noms courts) cote index.html.
       character_anims: {
-        idle:   'CharacterArmature|Idle',
-        walk:   'CharacterArmature|Walk',
-        run:    'CharacterArmature|Run',
-        run_shoot: 'CharacterArmature|Run_Shoot',
-        shoot:  'CharacterArmature|Gun_Shoot',
-        jump:   'CharacterArmature|Roll',
-        crouch: 'CharacterArmature|Roll',
-        death:  'CharacterArmature|Death',
-        hit:    'CharacterArmature|HitRecieve',
+        idle:        'Rig|Idle_Loop',
+        walk:        'Rig|Walk_Loop',
+        run:         'Rig|Jog_Fwd_Loop',
+        sprint:      'Rig|Sprint_Loop',
+        death:       'Rig|Death01',
+        hit:         'Rig|Hit_Chest',
+        hit_head:    'Rig|Hit_Head',
+        shoot:       'Rig|Pistol_Shoot',
+        gun_idle:    'Rig|Pistol_Idle_Loop',
+        saber_idle:  'Rig|Sword_Idle',
+        saber_attack:'Rig|Sword_Attack',
+        crouch_idle: 'Rig|Crouch_Idle_Loop',
+        crouch_move: 'Rig|Crouch_Fwd_Loop',
+        jump:        'Rig|Jump_Loop',
       },
       weapon_in_hand: { pos: [0, 0, 0], rot: [0, 0, 0], scale: 1 },
       weapon: '/models/weapon.glb',

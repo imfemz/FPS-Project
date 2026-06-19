@@ -2877,6 +2877,24 @@ function crossfadeLayer(s, layer, key, fade){
   if(s[curProp] && s[curProp] !== next) s[curProp].crossFadeTo(next, fade != null ? fade : 0.10, false);
   s[curProp] = next; s[curKeyProp] = key;
 }
+// Blend LOWER de DEUX actions simultanees (ex: Jog<->Sprint par la vitesse). wA = poids de keyA, (1-wA) = keyB.
+// Les deux actions tournent en boucle avec poids complementaires ; toute autre action basse est coupee en douceur.
+function blendLowerPair(s, keyA, keyB, wA){
+  const map = s.lower; if(!map || !map[keyA] || !map[keyB]) return false;
+  wA = Math.max(0, Math.min(1, wA));
+  const a = map[keyA], b = map[keyB];
+  const tag = 'BLEND:'+keyA+'+'+keyB;
+  const fresh = (s.lowerKey !== tag);
+  for(const act of [a,b]){
+    if(fresh || !act.isRunning()){ act.reset(); act.enabled = true; act.setLoop(THREE.LoopRepeat, Infinity); act.paused = false; act.play(); }
+  }
+  // crossfade depuis l'ancienne action simple (si differente) vers la paire
+  if(fresh && s.lowerCur && s.lowerCur !== a && s.lowerCur !== b){ s.lowerCur.crossFadeTo(a, 0.14, false); }
+  a.setEffectiveWeight(wA); b.setEffectiveWeight(1 - wA);
+  s.lowerCur = (wA >= 0.5 ? a : b);   // pour les transitions futures
+  s.lowerKey = tag;
+  return true;
+}
 // Fige une couche BASSE sur une frame precise (pose statique : crouch=Death f7, saut=Run f4). Crossfade fluide.
 function freezeLowerPose(s, key, time){
   const a = s.lower && s.lower[key]; if(!a) return;
@@ -2899,14 +2917,14 @@ function freezeUpper(s, key){
   a.paused = true; a.time = 0.0001;   // frame 1 tenue
   s.upperOneShot = false;
 }
-// Declenche Gun_Shoot HAUT en lecture (restart controle a chaque tir), sans bloquer les jambes.
+// Declenche Pistol_Shoot HAUT en lecture (restart controle a chaque tir), sans bloquer les jambes.
 function fireUpperShoot(s){
-  const a = s.upper && s.upper['Gun_Shoot'];
+  const a = s.upper && s.upper['Pistol_Shoot'];
   if(!a) return;
   a.reset(); a.enabled = true; a.paused = false; a.setLoop(THREE.LoopOnce, 1);
   a.clampWhenFinished = true; a.setEffectiveWeight(1); a.play();
   if(s.upperCur && s.upperCur !== a) s.upperCur.crossFadeTo(a, 0.05, false);
-  s.upperCur = a; s.upperKey = 'Gun_Shoot'; s.upperOneShot = true;
+  s.upperCur = a; s.upperKey = 'Pistol_Shoot'; s.upperOneShot = true;
 }
 // Joue un clip HAUT en one-shot (slash sabre, reaction de douleur) sans toucher au bas du corps.
 function playUpperOnce(s, key, fade){
@@ -2934,8 +2952,11 @@ function applyBodyAim(s, anim, dt){
   // (turn_follow), pendant que le HAUT (colonne) twiste vers la visee. Quand on tourne, le haut mene et
   // le bas suit avec un retard -> plus realiste (le swat ne pivote plus d'un bloc).
   const follow = AB.turn_follow ?? 7;
-  const targetFace = s.root.rotation.y;   // facing voulu par le jeu (regard pour le joueur, mouvement pour les bots)
-  const aimYaw = (anim && typeof anim.aimYaw === 'number') ? anim.aimYaw : targetFace;
+  // facing CIBLE des JAMBES : par defaut le facing du jeu (root.rotation.y). Si le driver fournit
+  // anim._legFace (direction du DEPLACEMENT, ex: strafe/recul), les jambes pointent la-bas et le HAUT
+  // twiste vers la visee (aimYaw) -> on ne court plus "de cote en regardant devant".
+  const targetFace = (anim && typeof anim._legFace === 'number') ? anim._legFace : s.root.rotation.y;
+  const aimYaw = (anim && typeof anim.aimYaw === 'number') ? anim.aimYaw : s.root.rotation.y;
   s.aimYaw = aimYaw;
   if(s.legYaw == null) s.legYaw = targetFace;
   let dF = wrapAngle(targetFace - s.legYaw);
@@ -2993,53 +3014,65 @@ function animateSoldierRigged(s, anim, dt, t){
     // vitesse locale (repere du corps) : vx (droite), vz (avance).
     // Si vx/vz absents (ex: killcam, anim enregistree) -> on synthetise une avance depuis anim.m.
     let vx = anim.vx, vz = anim.vz;
-    if(vx == null && vz == null){ vx = 0; vz = (anim.m || 0) * 4.0; }   // m (0..1) -> ~avance (m/s)
+    if(vx == null && vz == null){ vx = 0; vz = (anim.m || 0) * 5.0; }   // m (0..1) -> ~avance (m/s)
     else { vx = vx || 0; vz = vz || 0; }
     const sp = Math.hypot(vx, vz);
-    const TR_RUN = (GAMECFG.MODELS.layer_anim && GAMECFG.MODELS.layer_anim.run_thresh) || 0.6;
-    const TR_WALK = (GAMECFG.MODELS.layer_anim && GAMECFG.MODELS.layer_anim.walk_thresh) || 0.2;
-    // BAS DU CORPS : par input. Priorite saut > crouch > locomotion directionnelle. Clips, crossfade fluide.
-    // Saut et crouch = clips FIGES sur une frame precise (pose statique). Le reste = clips en boucle.
-    const FR = (GAMECFG.MODELS && GAMECFG.MODELS.lower_pose) || {};
-    const _fps = FR.fps || 24;
-    let lowKey = 'Idle_Neutral', lowFreeze = -1;   // lowFreeze >= 0 -> fige le clip a ce temps (s)
-    if(!grounded){ lowKey = FR.jump_clip || 'Run'; lowFreeze = (FR.jump_frame ?? 4) / _fps; }          // saut/air = Run fige (frame 4)
-    else if(crouch){ lowKey = FR.crouch_clip || 'Death'; lowFreeze = (FR.crouch_frame ?? 7) / _fps; }  // crouch = Death fige (frame 7)
-    else if(sp < TR_WALK){ lowKey = 'Idle_Neutral'; }                                                  // immobile
-    else {
-      const ax = Math.abs(vx), az = Math.abs(vz);
-      if(az >= ax && vz > TR_RUN) lowKey = 'Run';            // avancer (course)
-      else if(az >= ax && vz < -TR_RUN) lowKey = 'Run_Back'; // reculer
-      else if(ax > az && vx > TR_RUN) lowKey = 'Run_Left';   // strafe droite -> clip Run_Left (mapping inverse)
-      else if(ax > az && vx < -TR_RUN) lowKey = 'Run_Right'; // strafe gauche -> clip Run_Right
-      else lowKey = 'Walk';                                  // vitesse moderee / oblique / marche
-    }
-    if(!s.lower[lowKey]){ lowKey = s.lower['Idle_Neutral'] ? 'Idle_Neutral' : Object.keys(s.lower)[0]; lowFreeze = -1; }
-    if(lowFreeze >= 0) freezeLowerPose(s, lowKey, lowFreeze);   // pose figee (crouch / saut)
-    else crossfadeLayer(s, 'lower', lowKey, 0.12);            // locomotion en boucle (crossfade fluide)
+    const LA = (GAMECFG.MODELS && GAMECFG.MODELS.layer_anim) || {};
+    const TR_WALK = LA.walk_thresh ?? 0.5;          // seuil idle->mouvement (m/s)
+    const SIDE_DEG = LA.side_deg ?? 50;             // angle mvt/visee au-dela duquel c'est lateral/arriere -> Walk
+    const JOG_LO = LA.jog_lo ?? 6, JOG_HI = LA.jog_hi ?? 8;  // smoothstep vitesse Sprint(<lo) <-> Jog(>hi)
+    // angle du DEPLACEMENT dans le repere du corps : 0 = avance, +-PI/2 = strafe, PI = recul.
+    const moveAng = Math.atan2(vx, vz);             // atan2(droite, avant)
+    const moveOff = Math.abs(moveAng);              // ecart a "tout droit"
+    const sideThresh = SIDE_DEG * Math.PI/180;
+    // facing CIBLE des jambes : direction du DEPLACEMENT (root facing tourne de moveAng). Quand on va
+    // tout droit, = facing visee ; en strafe/recul, les jambes pointent la ou on va (le haut twiste vers la visee).
+    if(sp > TR_WALK) anim._legFace = s.root.rotation.y + moveAng;
+    else delete anim._legFace;
 
-    // HAUT DU CORPS
-    const hitUpper = s.hitUpperUntil && performance.now() < s.hitUpperUntil && s.upper['HitRecieve'];
-    if(hitUpper){
-      // reaction de douleur (HitRecieve) sur le HAUT seulement : les jambes gardent leur anim d'input
-      if(s.upperKey !== 'HitRecieve' || !s.upperOneShot) playUpperOnce(s, 'HitRecieve', 0.05);
-    } else if(isSaber){
-      // attaque sabre : anim.saber_attack -> Sword_Slash one-shot, sinon Idle_Sword
-      if(anim.saber_attack && s.upper['Sword_Slash']){
-        if(s.upperKey !== 'Sword_Slash' || !s.upperOneShot) playUpperOnce(s, 'Sword_Slash', 0.06);
-      } else {
-        if(s.upperOneShot && s.upperCur && s.upperCur.isRunning()){ /* laisse finir le slash */ }
-        else crossfadeLayer(s, 'upper', 'Idle_Sword', 0.12);
+    // BAS DU CORPS : priorite air > crouch > locomotion. VRAIS clips en boucle (plus de pose figee).
+    let lowKey = 'Idle_Loop', lowBlend = null;   // lowBlend = {a,b,w} pour Jog<->Sprint
+    if(!grounded){ lowKey = 'Jump_Loop'; }                                       // en l'air = boucle de saut
+    else if(crouch){ lowKey = (sp > TR_WALK) ? 'Crouch_Fwd_Loop' : 'Crouch_Idle_Loop'; }  // accroupi (vrais clips)
+    else if(sp < TR_WALK){ lowKey = 'Idle_Loop'; }                               // immobile
+    else if(moveOff < sideThresh){
+      // deplacement VERS la visee : course = blend Sprint(lent) <-> Jog(rapide) par la vitesse
+      const w = (sp <= JOG_LO) ? 0 : (sp >= JOG_HI ? 1 : (sp - JOG_LO) / (JOG_HI - JOG_LO)); // smoothstep lineaire -> poids Jog
+      lowBlend = { a:'Jog_Fwd_Loop', b:'Sprint_Loop', w:w };                     // wA=Jog, wB=Sprint
+    } else { lowKey = 'Walk_Loop'; }                                             // lateral / arriere = marche
+
+    if(lowBlend){
+      if(!blendLowerPair(s, lowBlend.a, lowBlend.b, lowBlend.w)){             // un des 2 clips manque -> fallback simple
+        lowKey = s.lower['Jog_Fwd_Loop'] ? 'Jog_Fwd_Loop' : (s.lower['Sprint_Loop'] ? 'Sprint_Loop' : 'Walk_Loop');
+        crossfadeLayer(s, 'lower', lowKey, 0.12);
       }
     } else {
-      // R69 / Wingman : tir -> Gun_Shoot joue ; sinon FREEZE frame 1 (pose combat)
+      if(!s.lower[lowKey]){ lowKey = s.lower['Idle_Loop'] ? 'Idle_Loop' : Object.keys(s.lower)[0]; }
+      crossfadeLayer(s, 'lower', lowKey, 0.12);
+    }
+
+    // HAUT DU CORPS
+    const hitClip = (s.hitHead && s.upper['Hit_Head']) ? 'Hit_Head' : (s.upper['Hit_Chest'] ? 'Hit_Chest' : null);
+    const hitUpper = s.hitUpperUntil && performance.now() < s.hitUpperUntil && hitClip;
+    if(hitUpper){
+      // reaction de douleur (Hit_Chest/Hit_Head) sur le HAUT seulement : les jambes gardent leur anim d'input
+      if((s.upperKey !== hitClip) || !s.upperOneShot) playUpperOnce(s, hitClip, 0.05);
+    } else if(isSaber){
+      // attaque sabre : anim.saber_attack -> Sword_Attack one-shot, sinon Sword_Idle (boucle)
+      if(anim.saber_attack && s.upper['Sword_Attack']){
+        if(s.upperKey !== 'Sword_Attack' || !s.upperOneShot) playUpperOnce(s, 'Sword_Attack', 0.06);
+      } else {
+        if(s.upperOneShot && s.upperCur && s.upperCur.isRunning()){ /* laisse finir l'attaque */ }
+        else crossfadeLayer(s, 'upper', 'Sword_Idle', 0.12);
+      }
+    } else {
+      // R69 / Wingman : tir -> Pistol_Shoot (one-shot) ; sinon Pistol_Idle_Loop (boucle, plus de freeze frame)
       if(firing){
-        // (re)declenche au front montant du tir
         if(!s._wasFiring || (s.upperOneShot && s.upperCur && !s.upperCur.isRunning())) fireUpperShoot(s);
         else if(!s.upperOneShot) fireUpperShoot(s);
       } else {
         if(s.upperOneShot && s.upperCur && s.upperCur.isRunning()){ /* laisse finir le tir */ }
-        else freezeUpper(s, 'Gun_Shoot');
+        else crossfadeLayer(s, 'upper', 'Pistol_Idle_Loop', 0.12);
       }
     }
     s._wasFiring = firing;
@@ -3101,10 +3134,11 @@ function playDeathAnim(s){
   return true;
 }
 // Réaction de douleur courte (one-shot) qui revient ensuite à l'anim normale
-function playHitAnim(s){
+function playHitAnim(s, head){
   if(!s || s.currentKey==='death') return false;
-  // Mode COUCHES : HitRecieve sur le HAUT du corps uniquement -> les jambes gardent leur anim d'input
-  if(s.layered && s.upper && s.upper['HitRecieve']){
+  // Mode COUCHES : Hit_Chest/Hit_Head sur le HAUT du corps uniquement -> les jambes gardent leur anim d'input
+  if(s.layered && s.upper && (s.upper['Hit_Chest'] || s.upper['Hit_Head'])){
+    s.hitHead = !!(head && s.upper['Hit_Head']);   // headshot -> Hit_Head si dispo
     s.hitUpperUntil = performance.now() + 420;
     return true;
   }
@@ -5339,7 +5373,7 @@ function onHit(m){
       const np = (b.pos ? b.pos.clone() : new THREE.Vector3()); np.y += (b.anim && b.anim.c ? 1.8 : 2.3);
       addDamage('bot'+m.target, m.dmg||0, !!m.head, np, m.sh > 0);
       showHealthBar('bot'+m.target, m.hp, m.sh, !!(b.anim && b.anim.c));
-      if(b.soldier && b.soldier.rigged && m.hp > 0) playHitAnim(b.soldier);
+      if(b.soldier && b.soldier.rigged && m.hp > 0) playHitAnim(b.soldier, m.head);
     }
   }
   // --- Dégâts que JE SUBIS ---
@@ -5361,7 +5395,7 @@ function onHit(m){
     if(b){
       b._shPrev = m.sh;
       showHealthBar('bot'+m.target, m.hp, m.sh, !!(b.anim && b.anim.c));
-      if(b.soldier && b.soldier.rigged && m.hp > 0) playHitAnim(b.soldier);
+      if(b.soldier && b.soldier.rigged && m.hp > 0) playHitAnim(b.soldier, m.head);
     }
   }
 }
@@ -5729,7 +5763,7 @@ function onBotHit(m){
     if(m.head) playSfx('hit_head');
     b._shPrev = m.sh;
     if(b.soldier){
-      if(b.soldier.rigged && m.hp > 0) playHitAnim(b.soldier);
+      if(b.soldier.rigged && m.hp > 0) playHitAnim(b.soldier, m.head);
       const np = b.pos.clone(); np.y += 2.0;
       addDamage('bot'+m.id, m.dmg||0, !!m.head, np, m.sh>0);
       showHealthBar('bot'+m.id, m.hp, m.sh, !!(b.anim && b.anim.c));
