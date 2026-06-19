@@ -120,7 +120,7 @@
       // Multiplie le recul caméra appliqué à me.pitch / me.yaw pendant le tir.
       // 1 = comportement normal, 0.75 = caméra moins secouée, 0 = aucun recul caméra.
       RECOIL_MULT: 1.0,
-      HIP_MULT: 1.0,
+      HIP_MULT: 2.0,
       ADS_MULT: 1.0,
 
       // Multiplie uniquement le micro-jitter caméra du spray.

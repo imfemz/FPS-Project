@@ -2477,16 +2477,19 @@ function swapSoldiersToRigged(){
    procedural (Phase 4) -> exclus des clips de couche.
    ============================================================ */
 let ANIM_DEBUG = false;   // overlay debug couches (toggle KeyJ)
-// Ensembles de bones par couche
-const LOWER_BONES = ['UpperLeg.L','UpperLeg.R','LowerLeg.L','LowerLeg.R','Foot.L','Foot.R','PT.L','PT.R'];
-const AIM_BONES   = ['Hips','Abdomen','Torso'];   // pilotes procedural (visee) -> jamais par un clip de couche
+// Ensembles de bones par couche — RIG RIGIFY (Animated Base Character, prefixe DEF-)
+// LOWER = jambes. AIM (procedural twist) = spine.001/002. UPPER = torse haut + bras + doigts.
+// DEF-hips joue le role de 'Body' SWAT (parent de spine.001 ET des jambes, porte le bob) -> gere via _isBodyBone.
+const LOWER_BONES = ['DEF-thigh.L','DEF-thigh.R','DEF-shin.L','DEF-shin.R','DEF-foot.L','DEF-foot.R','DEF-toe.L','DEF-toe.R'];
+const AIM_BONES   = ['DEF-spine.001','DEF-spine.002'];   // pilotes procedural (visee twist) -> jamais par un clip de couche
 // UPPER = haut du corps SAUF les bones de visee. Construit par prefixe (doigts inclus).
-const _UPPER_PREFIX = ['Chest','Neck','Head','Shoulder','UpperArm','LowerArm','Wrist',
-                       'Index','Middle','Ring','Pinky','Thumb'];
+// DEF-spine.003 = analogue 'Chest' SWAT : clip-drive (UPPER) + pitch ; PAS twiste.
+const _UPPER_PREFIX = ['DEF-spine.003','DEF-neck','DEF-head','DEF-shoulder','DEF-upper_arm',
+                       'DEF-forearm','DEF-hand','DEF-f_','DEF-thumb'];
 function _isUpperBone(name){
   if(!name) return false;
-  if(AIM_BONES.indexOf(name) !== -1) return false;       // Hips/Abdomen/Torso exclus
-  if(name === 'Body' || name === 'Root' || name === 'Armature') return false;
+  if(AIM_BONES.indexOf(name) !== -1) return false;       // spine.001/002 exclus (procedural)
+  if(name === 'DEF-hips' || name === 'root' || name === 'Rig' || name === 'RootNode') return false;
   for(const p of _UPPER_PREFIX){ if(name === p || name.indexOf(p) === 0) return true; }
   return false;
 }
@@ -2524,11 +2527,12 @@ function makeLayerClip(srcClip, boneSetFn, suffix, posOnlyFn){
   if(!tracks.length) return null;
   return new THREE.AnimationClip(srcClip.name + suffix, srcClip.duration, tracks);
 }
-const _isBodyBone = (n)=> n === 'Body';   // bone porteur du bob (position seule en couche basse)
+const _isBodyBone = (n)=> n === 'DEF-hips';   // bone porteur du bob (position+rotation en couche basse, role 'Body' SWAT)
 // Cache des clips de couche (calcule une fois sur le template). Cle = nom de clip source.
 let LAYER_CLIPS = null;   // { lower:{name:clip}, upper:{name:clip} } ou null si pas pret
-const LOWER_CLIP_SOURCES = ['Run','Run_Back','Run_Left','Run_Right','Walk','Idle_Neutral','Death'];   // Death=pose crouch figee (frame), Run aussi fige pour le saut
-const UPPER_CLIP_SOURCES = ['Gun_Shoot','Idle_Sword','Sword_Slash','Idle_Neutral','HitRecieve'];
+// Clips SOURCES (noms courts, prefixe 'Rig|' retire par _findClipByShortName) — vrais clips Crouch/Jump (plus de pose figee).
+const LOWER_CLIP_SOURCES = ['Idle_Loop','Walk_Loop','Jog_Fwd_Loop','Sprint_Loop','Crouch_Idle_Loop','Crouch_Fwd_Loop','Jump_Loop','Death01'];
+const UPPER_CLIP_SOURCES = ['Pistol_Idle_Loop','Pistol_Shoot','Sword_Idle','Sword_Attack','Hit_Chest','Hit_Head','Idle_Loop'];
 function _findClipByShortName(clips, shortName){
   // les clips sont prefixes "CharacterArmature|" -> on matche le suffixe
   for(const c of clips){
@@ -2569,9 +2573,9 @@ function buildLayerClips(){
    extrait du modele arms.glb les meshes 'saber'/'lightsaber'.
    ============================================================ */
 const WEAPON_ATTACH_CONFIG = {
-  R69:     { file:'/models/weapon.glb',  bone:'Index1.R', position:{x:0,y:0.001,z:0}, rotation:{x:100*Math.PI/180,y:-22*Math.PI/180,z:95*Math.PI/180}, scale:0.35 },  // cale en jeu (tuneWeapon): rotDeg 100,-22,95
-  WINGMAN: { file:'/models/Wingman_swat.glb', bone:'Index1.R', position:{x:0,y:0.001,z:0}, rotation:{x:-80*Math.PI/180,y:22*Math.PI/180,z:85*Math.PI/180}, scale:1 },  // R69 retourne 180deg (canon vers l'AVANT). Si pas bon: tuneWeapon('WINGMAN',0,0.001,0, 100,-22,-85, 1) ou (...,-80,22,-95,1)
-  SABER:   { file:'/models/Saber_swat.glb',   bone:'Index1.R', position:{x:0,y:0.001,z:0}, rotation:{x:100*Math.PI/180,y:-22*Math.PI/180,z:95*Math.PI/180}, scale:1 },  // MEME rotation que R69 ; scale 1 = taille bakee Blender. Affiner: tuneWeapon('SABER',...)
+  R69:     { file:'/models/weapon.glb',  bone:'DEF-hand.R', position:{x:0,y:0.001,z:0}, rotation:{x:100*Math.PI/180,y:-22*Math.PI/180,z:95*Math.PI/180}, scale:0.35 },  // cale en jeu (tuneWeapon): rotDeg 100,-22,95
+  WINGMAN: { file:'/models/Wingman_swat.glb', bone:'DEF-hand.R', position:{x:0,y:0.001,z:0}, rotation:{x:-80*Math.PI/180,y:22*Math.PI/180,z:85*Math.PI/180}, scale:1 },  // R69 retourne 180deg (canon vers l'AVANT). Si pas bon: tuneWeapon('WINGMAN',0,0.001,0, 100,-22,-85, 1) ou (...,-80,22,-95,1)
+  SABER:   { file:'/models/Saber_swat.glb',   bone:'DEF-hand.R', position:{x:0,y:0.001,z:0}, rotation:{x:100*Math.PI/180,y:-22*Math.PI/180,z:95*Math.PI/180}, scale:1 },  // MEME rotation que R69 ; scale 1 = taille bakee Blender. Affiner: tuneWeapon('SABER',...)
 };
 // weaponIdx (config WEAPONS) -> cle de WEAPON_ATTACH_CONFIG
 function _weaponKeyForIdx(idx){ return idx === 1 ? 'WINGMAN' : (idx === 2 ? 'SABER' : 'R69'); }
@@ -2742,11 +2746,11 @@ function createSoldierRigged(accent){
 
   // Bones de la colonne -> visee haut du corps (pitch additif applique APRES le mixer)
   const _SA = (GAMECFG.MODELS && GAMECFG.MODELS.spine_aim) || {};
-  const _spineNames = _SA.bones || ['Abdomen','Torso','Chest'];
+  const _spineNames = _SA.bones || ['DEF-spine.001','DEF-spine.002','DEF-spine.003'];
   const spine = [];
   inst.traverse(n=>{ if(n && n.name && _spineNames.indexOf(n.name) !== -1){ n.userData.qRest = n.quaternion.clone(); spine.push(n); } });
   // Bones de jambes -> saut procedural (pose normale, plus de roulade)
-  const legs = {}; const _legMap = { ulL:'UpperLeg.L', ulR:'UpperLeg.R', llL:'LowerLeg.L', llR:'LowerLeg.R' };
+  const legs = {}; const _legMap = { ulL:'DEF-thigh.L', ulR:'DEF-thigh.R', llL:'DEF-shin.L', llR:'DEF-shin.R' };
   const _legNorm = {}; for(const k in _legMap) _legNorm[k] = _normBone(_legMap[k]);   // match tolerant: rig reel = UpperLegL (sans point)
   inst.traverse(n=>{ if(!n || !n.name) return; const nn = _normBone(n.name); for(const k in _legMap){ if(nn === _legNorm[k]){ n.userData.qRest = n.quaternion.clone(); legs[k] = n; } } });
 
@@ -2764,7 +2768,7 @@ function createSoldierRigged(accent){
 
   // Bone d'attache des armes (Index1.R) + socket
   let index1R = null;
-  const _wantBone = _normBone((WEAPON_ATTACH_CONFIG.R69 && WEAPON_ATTACH_CONFIG.R69.bone) || 'Index1.R');
+  const _wantBone = _normBone((WEAPON_ATTACH_CONFIG.R69 && WEAPON_ATTACH_CONFIG.R69.bone) || 'DEF-hand.R');
   inst.traverse(n=>{ if(!index1R && n && n.name && _normBone(n.name) === _wantBone) index1R = n; });   // match tolerant (Index1R vs Index1.R)
   let weaponSocket = null;
   if(index1R){
@@ -2772,13 +2776,13 @@ function createSoldierRigged(accent){
     index1R.add(weaponSocket);
   } else {
     const dispo = []; inst.traverse(n=>{ if(n && n.name) dispo.push(n.name); });
-    console.warn('[ANIM] bone Index1.R introuvable, bones dispo: ' + dispo.join(','));
+    console.warn('[ANIM] bone DEF-hand.R introuvable, bones dispo: ' + dispo.join(','));
   }
 
   // Bone 'Body' (parent de Hips ET des jambes) : on capture sa pose de repos pour ANNULER son lean
   // de course sur le HAUT du corps (separation propre haut/bas), tout en le gardant sur les jambes/pieds.
   let bodyBone = null;
-  inst.traverse(n=>{ if(!bodyBone && n && n.name === 'Body'){ bodyBone = n; if(!n.userData.qRest) n.userData.qRest = n.quaternion.clone(); } });
+  inst.traverse(n=>{ if(!bodyBone && n && n.name === 'DEF-hips'){ bodyBone = n; if(!n.userData.qRest) n.userData.qRest = n.quaternion.clone(); } });
 
   const s = { root, inst, rigged:true, mixer, actions, flash, accent, spine, legs, aim, bodyBone, jumpW:0,
               lower, upper, lowerCur:null, lowerKey:null, upperCur:null, upperKey:null,
@@ -2944,8 +2948,8 @@ function applyBodyAim(s, anim, dt){
   // Repartition du twist (rotation autour de Y local). applySpineAim a deja ecrit le PITCH sur
   // Abdomen/Torso (= qRest*pitch) -> on MULTIPLIE le twist par-dessus ; pour Hips on part de qRest.
   const SA = (GAMECFG.MODELS && GAMECFG.MODELS.spine_aim) || {};
-  const spineSet = (SA.bones || ['Abdomen','Torso','Chest']);
-  const dist = AB.dist || { Hips:0.45, Abdomen:0.35, Torso:0.20 };
+  const spineSet = (SA.bones || ['DEF-spine.001','DEF-spine.002','DEF-spine.003']);
+  const dist = AB.dist || { 'DEF-spine.001':0.55, 'DEF-spine.002':0.45 };
   for(const name in dist){
     const b = s.aim[name]; if(!b || !b.userData.qRest) continue;
     _aimQ.setFromAxisAngle(_aimY, s.twistYaw * dist[name]);
@@ -5111,7 +5115,7 @@ function updateAnimDebug(){
     'firing: ' + (a.f?'OUI':'non') + '   grounded: ' + (a.grounded===false?'NON':(a.grounded?'oui':'?')) + '\n' +
     'localVel vx,vz: ' + fmt(a.vx) + ', ' + fmt(a.vz) + '\n' +
     'aimYaw: ' + fmt(a.aimYaw) + '  bodyYaw: ' + fmt(s.bodyYaw) + '  twist: ' + fmt(s.twistYaw) + '\n' +
-    'Index1.R: ' + idx1 + '   armes: ' + watt + '\n' +
+    'DEF-hand.R: ' + idx1 + '   armes: ' + watt + '\n' +
     'layered: ' + (s.layered?'OUI':'non');
 }
 let recoilAccum = 0, recoilYawAccum = 0, burstDir = 1, shotsInBurst = 0; // recul caméra à recentrer (vertical + horizontal)
