@@ -2503,22 +2503,24 @@ function _trackNodeAndProp(trackName){
 }
 // Construit un clip derive ne gardant que les tracks 'quaternion' des bones de boneSet.
 // boneSetFn(name) -> bool. On DROP position/scale (rotation only) pour eviter tout drift racine.
-function makeLayerClip(srcClip, boneSetFn, suffix){
+function makeLayerClip(srcClip, boneSetFn, suffix, posOnlyFn){
   if(!srcClip) return null;
   const tracks = [];
   for(const tr of srcClip.tracks){
-    const [node] = _trackNodeAndProp(tr.name);
-    // tolerance des conventions de nommage (UpperLeg.L / UpperLeg_L / UpperLegL)
-    const ok = boneSetFn(node) || boneSetFn(node.replace(/_/g,'.'));
-    if(!ok) continue;
-    // On garde TOUTES les tracks du bone (quaternion + POSITION + scale). Les anims Run/Walk
-    // bakees depuis de l'IK ont des tracks de POSITION sur jambes/pieds : les droper deformait
-    // (etirait) les jambes. Aucun drift racine : ni LOWER ni UPPER n'inclut le Hips/Root.
-    tracks.push(tr.clone());
+    const [node, prop] = _trackNodeAndProp(tr.name);
+    const norm = node.replace(/_/g,'.');
+    // bones de la couche : on garde TOUTES leurs tracks (quaternion + POSITION + scale). Les anims
+    // Run/Walk bakees IK ont des tracks de POSITION sur jambes/pieds : les droper etirait les jambes.
+    if(boneSetFn(node) || boneSetFn(norm)){ tracks.push(tr.clone()); continue; }
+    // bones "position SEULE" (ex: 'Body') : on garde le BOB vertical du corps. Sans lui, les jambes
+    // (sous Body) ne bougent pas avec les pieds (sous Root) -> cheville/pied decales -> pieds deformes.
+    // On exclut sa ROTATION (pilotee par la visee sur le haut du corps). Pas de drift : anims in-place.
+    if(posOnlyFn && prop === 'position' && (posOnlyFn(node) || posOnlyFn(norm))){ tracks.push(tr.clone()); }
   }
   if(!tracks.length) return null;
   return new THREE.AnimationClip(srcClip.name + suffix, srcClip.duration, tracks);
 }
+const _isBodyBone = (n)=> n === 'Body';   // bone porteur du bob (position seule en couche basse)
 // Cache des clips de couche (calcule une fois sur le template). Cle = nom de clip source.
 let LAYER_CLIPS = null;   // { lower:{name:clip}, upper:{name:clip} } ou null si pas pret
 const LOWER_CLIP_SOURCES = ['Run_Right','Run_Left','Run_Shoot','Walk','Idle_Neutral'];
@@ -2538,7 +2540,7 @@ function buildLayerClips(){
   for(const sn of LOWER_CLIP_SOURCES){
     const src = _findClipByShortName(clips, sn);
     if(!src){ console.warn('[ANIM] clip manquant (LOWER):', sn); continue; }
-    const c = makeLayerClip(src, _isLowerBone, '_LOWER');
+    const c = makeLayerClip(src, _isLowerBone, '_LOWER', _isBodyBone);   // + bob du corps (position de Body)
     if(c) lower[sn] = c; else console.warn('[ANIM] aucune track LOWER pour', sn);
   }
   for(const sn of UPPER_CLIP_SOURCES){
@@ -2560,7 +2562,7 @@ function buildLayerClips(){
    extrait du modele arms.glb les meshes 'saber'/'lightsaber'.
    ============================================================ */
 const WEAPON_ATTACH_CONFIG = {
-  R69:     { file:'/models/weapon.glb',  bone:'Index1.R', position:{x:0,y:0,z:0}, rotation:{x:0,y:0,z:0}, scale:1 },
+  R69:     { file:'/models/weapon.glb',  bone:'Index1.R', position:{x:0,y:0,z:0}, rotation:{x:0,y:Math.PI,z:0}, scale:0.429 },  // valeurs de R69_swat.glb (rot 180Y, scale 0.429) ; scale x compensation = taille native x0.429
   WINGMAN: { file:'/models/wingman.glb', bone:'Index1.R', position:{x:0,y:0,z:0}, rotation:{x:0,y:0,z:0}, scale:1 },
   SABER:   { fromArms:true,              bone:'Index1.R', position:{x:0,y:0,z:0}, rotation:{x:0,y:0,z:0}, scale:1 },
 };
