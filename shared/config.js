@@ -160,6 +160,17 @@
       CENTER_PROTECT: 1.0,
       CENTER_ADS_START: 1.55,
     },
+    // Recul ROTATIONNEL fluide : l'arme se penche gauche/droite en ARCS lisses pendant le tir soutenu,
+    // pivotée autour de l'aim point (le canon reste sur cible, c'est l'arme qui penche).
+    SPRAY_LEAN: {
+      ENABLED: true,
+      AMOUNT: 0.07,     // amplitude max du lean (radians) a plein spray. 0.04 subtil, 0.10 marque.
+      SPEED: 7.0,       // vitesse de l'arc (rad/s) : plus haut = oscille plus vite.
+      RISE: 5.0,        // montee de l'amplitude quand on tire (fluide).
+      FALL: 3.5,        // retour a 0 quand on arrete de tirer.
+      HIP_MULT: 1.0,    // au juge : lean bien visible.
+      ADS_MULT: 0.45,   // en ADS : plus discret (viseur propre).
+    },
     SUPERGLIDE: {
       ENABLED: true, JUMP_ONLY: true, WINDOW: 0.25, GRACE: 0.14,
       SPEED: 15.0, UP: 6.2, FOV_KICK: 10, FOV_DECAY: 2.6,

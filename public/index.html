@@ -5185,10 +5185,16 @@ let vkickGun = 0, vkickCam = 0; // recul vertical "snap" (Wingman) : montée rap
 // Recul rotationnel directionnel (ex : Wingman) : l'arme part en haut-droite puis revient fluide
 let rkickPitch = 0, rkickYaw = 0, rkickRoll = 0;        // valeurs courantes
 let rkickPitchT = 0, rkickYawT = 0, rkickRollT = 0;     // cibles (poussées au tir, reviennent à 0)
+let sprayLean = 0, sprayLeanPhase = 0, sprayLeanAmp = 0;   // lean fluide gauche/droite pendant le spray (pivot aim point)
+let _jitterSeed = 0;                                       // graine du bruit organique du micro-jitter (varie par rafale)
+function _organicNoise(t, chaos){                          // bruit cohérent (pseudo-Perlin) : ondulation fluide, jamais snappy
+  chaos = (chaos == null) ? 0.5 : chaos;
+  return (Math.sin(t) + 0.5*chaos*Math.sin(t*2.19 + 1.7) + 0.27*chaos*Math.sin(t*4.07 + 4.1)) / (1 + 0.77*chaos);
+}
 function shoot(){
   const RC = GAMECFG.RECOIL;
   const now = performance.now();
-  if(now - me.lastShotAt > 220){ shotsInBurst = 0; burstDir = Math.random() < 0.5 ? -1 : 1; }
+  if(now - me.lastShotAt > 220){ shotsInBurst = 0; burstDir = Math.random() < 0.5 ? -1 : 1; _jitterSeed = Math.random()*1000; }
   shotsInBurst++;
   const W = curWeapon();
   me.mag--; me.mags[me.weaponIdx] = me.mag;
@@ -5271,8 +5277,10 @@ function shoot(){
   const jFreq = RC.MICRO_JITTER_FREQ ?? 2.7;
   const jRand = RC.MICRO_JITTER_RANDOM ?? 0.55;
   const jScale = adsK * sm * Math.min(1.18, sprayK);
-  const jx = (RC.MICRO_JITTER_X ?? 0) * (Math.sin(shotsInBurst * jFreq) + (Math.random()*2 - 1) * jRand) * jScale;
-  const jy = (RC.MICRO_JITTER_Y ?? 0) * (Math.cos(shotsInBurst * jFreq * 1.37) + (Math.random()*2 - 1) * jRand) * jScale;
+  // Jitter ORGANIQUE : bruit cohérent piloté par le TEMPS -> ondulation fluide (fini le saut random par balle)
+  const jt = now * 0.001 * jFreq + _jitterSeed;
+  const jx = (RC.MICRO_JITTER_X ?? 0) * _organicNoise(jt, jRand) * jScale;
+  const jy = (RC.MICRO_JITTER_Y ?? 0) * _organicNoise(jt*1.31 + 47.3, jRand) * jScale;
 
   const finalV = (v + jy * camJitterK) * camRecoilK;
   const finalH = (h + jx * camJitterK) * camRecoilK;
@@ -7380,6 +7388,16 @@ function updateWeaponAnimation(dt, sprinting, moving){
   rkickPitch += (rkickPitchT - rkickPitch) * Math.min(1, dt*rkRise);
   rkickYaw   += (rkickYawT   - rkickYaw)   * Math.min(1, dt*rkRise);
   rkickRoll  += (rkickRollT  - rkickRoll)  * Math.min(1, dt*rkRise);
+  // Lean de spray FLUIDE : l'arme se penche gauche/droite en arcs lisses (sinus) pendant le tir soutenu.
+  const SL = GAMECFG.SPRAY_LEAN || {};
+  if(SL.ENABLED !== false){
+    const _slMode = adsAmount > 0.7 ? (SL.ADS_MULT ?? 0.45) : (SL.HIP_MULT ?? 1);
+    const _slTarget = firingNow ? (SL.AMOUNT ?? 0.07) * _slMode : 0;
+    const _slSpd = firingNow ? (SL.RISE ?? 5) : (SL.FALL ?? 3.5);
+    sprayLeanAmp += (_slTarget - sprayLeanAmp) * Math.min(1, dt*_slSpd);
+    sprayLeanPhase += dt * (SL.SPEED ?? 7.0);
+    sprayLean = Math.sin(sprayLeanPhase) * sprayLeanAmp;
+  } else { sprayLean = 0; sprayLeanAmp = 0; }
   // Recul visuel : la translation arrière porte le ressenti soutenu ;
   // la rotation n'est qu'un flick instantané par balle, pivot avant
   const vmBack = (GAMECFG.RECOIL.VM_BACK ?? 0.12) * (GAMECFG.RECOIL.KICK_VM ?? 1);
@@ -7539,8 +7557,15 @@ function updateWeaponAnimation(dt, sprinting, moving){
     const compensatedPos = pivotNoRoll.sub(pivot.clone().applyQuaternion(qRoll));
     finalPos.lerp(compensatedPos, Math.max(0, Math.min(1, centerProtect)));
   }
+  // Lean de spray : roll fluide TOUJOURS pivoté autour de l'aim point (le canon reste sur cible, l'arme penche)
+  if(Math.abs(sprayLean) > 1e-6){
+    const _lp = (adsAlignLocal[me.weaponIdx] ? adsAlignLocal[me.weaponIdx].clone() : sightCenter.clone());
+    const _qA = new THREE.Quaternion().setFromEuler(new THREE.Euler(finalRx, finalRy, finalRz, 'XYZ'));
+    const _qB = new THREE.Quaternion().setFromEuler(new THREE.Euler(finalRx, finalRy, finalRz + sprayLean, 'XYZ'));
+    finalPos.add(_lp.clone().applyQuaternion(_qA)).sub(_lp.clone().applyQuaternion(_qB));
+  }
   gun.position.copy(finalPos);
-  gun.rotation.set(finalRx, finalRy, finalRz);
+  gun.rotation.set(finalRx, finalRy, finalRz + sprayLean);
 
   if(weapon.state==='holstering' || weapon.state==='equipping'){
     const dur = weapon.state==='holstering' ? CONFIG.HOLSTER_T : CONFIG.EQUIP_T;
