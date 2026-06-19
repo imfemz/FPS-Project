@@ -817,7 +817,7 @@
       byType: {
         container: '/models/container.glb',
         metal:     '/models/metal.glb',
-        concrete:  '/models/container.glb',
+        wall:      '/models/wall.glb',
         crate:     '/models/crate.glb',
       },
     },
