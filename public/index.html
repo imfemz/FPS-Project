@@ -643,6 +643,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { clone as skeletonUtilsClone } from 'three/addons/utils/SkeletonUtils.js';
 /* =====================================================
    NEON COMPOUND — client v3
    v3 : transitions arme/caméra lissées (tilt crouch, roll
@@ -2406,23 +2407,9 @@ let RIG_TEMPLATE = null;     // scène source chargée une fois
 let RIG_READY = false;
 // Clone profond qui PRÉSERVE le skin (SkeletonUtils.clone simplifié pour three r128)
 function cloneRigged(source){
-  const cloneLookup = new Map();
-  const clone = source.clone(true);
-  (function parallel(a, b){
-    cloneLookup.set(a, b);
-    for(let i=0;i<a.children.length;i++) parallel(a.children[i], b.children[i]);
-  })(source, clone);
-  clone.traverse(node=>{
-    if(!node.isSkinnedMesh) return;
-    const srcMesh = (function find(o){ // retrouver le mesh source correspondant
-      let r=null; cloneLookup.forEach((v,k)=>{ if(v===o) r=k; }); return r;
-    })(node);
-    if(!srcMesh) return;
-    const srcBones = srcMesh.skeleton.bones;
-    const newBones = srcBones.map(b=> cloneLookup.get(b)).filter(Boolean);
-    node.bind(new THREE.Skeleton(newBones, srcMesh.skeleton.boneInverses), srcMesh.bindMatrix);
-  });
-  return clone;
+  // r184 : SkeletonUtils.clone gere correctement plusieurs SkinnedMesh partageant un squelette
+  // (l'ancien clone maison cassait le bind -> mesh explose/invisible).
+  return skeletonUtilsClone(source);
 }
 function loadRiggedTemplate(){
   const M = GAMECFG.MODELS || {};
