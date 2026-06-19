@@ -47,6 +47,7 @@
   #crosshair span{position:absolute;background:rgba(255,255,255,.82);box-shadow:0 0 2px rgba(0,0,0,.7);left:50%;top:50%;border-radius:1px}
   #crosshair .ch-dot{border-radius:50%;display:none;box-shadow:0 0 0 1px rgba(0,0,0,.65),0 0 4px rgba(0,0,0,.5)}
   #crosshair .l{left:0}#crosshair .r{right:0}#crosshair .t{top:0}#crosshair .b{bottom:0}
+  #crosshair .ch-ring{background:none;border:2px solid rgba(255,255,255,.82);border-radius:50%;box-sizing:border-box;display:none;box-shadow:0 0 2px rgba(0,0,0,.7),inset 0 0 2px rgba(0,0,0,.45)}
   #hitmarker{position:absolute;left:50%;top:50%;width:34px;height:34px;opacity:0;transition:opacity .1s,transform .07s;transform:translate(-50%,-50%) rotate(45deg)}
   #hitmarker span{position:absolute;background:#fff;border-radius:1.5px;box-shadow:0 0 3px rgba(0,0,0,.9)}
   #hitmarker .a,#hitmarker .b{left:50%;width:3px;height:11px;margin-left:-1.5px}
@@ -444,6 +445,7 @@
   <div id="crosshair">
     <span class="ch ch-l"></span><span class="ch ch-r"></span><span class="ch ch-t"></span><span class="ch ch-b"></span>
     <span class="ch-dot"></span>
+    <span class="ch-ring"></span>
   </div>
   <div id="hitmarker"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span></div>
   <div id="saberhit"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span></div>
@@ -1142,6 +1144,7 @@ function bakeBoxUV(mesh, period){
 const WEAPON_SVG = '<svg viewBox="0 0 64 22" fill="none"><rect x="2" y="8" width="44" height="6" rx="1" fill="#e2d96a"/><rect x="40" y="5" width="20" height="4" rx="1" fill="#35353f"/><rect x="10" y="13" width="6" height="7" rx="1" fill="#35353f"/><rect x="20" y="6" width="8" height="3" fill="#26262e"/></svg>';
 let crosshairCfg = { size:22, gap:7, th:2.5, expand:10, espeed:10 };
 let crosshairExpand = 0;
+let _wingmanReticle = false;
 function buildCrosshair(){
   const C = GAMECFG.CROSSHAIR || {}, U = cfg.crosshair || {};
   // les réglages JOUEUR (cfg.crosshair) priment sur les défauts de config
@@ -1178,7 +1181,30 @@ function updateCrosshair(dt){
   const moving = Math.hypot(me.vel.x, me.vel.z) > (CONFIG.WALK_SPEED*0.7);
   const want = ((!me.onGround) || (playing && alive && moving && !me.slide.active)) ? 1 : 0;
   crosshairExpand += (want - crosshairExpand) * Math.min(1, dt * crosshairCfg.espeed);
-  layoutCrosshair(crosshairExpand * crosshairCfg.expand);
+  const extra = crosshairExpand * crosshairCfg.expand;
+  // WINGMAN : viseur cercle fin + point central ; le cercle s'agrandit en courant (comme le crosshair).
+  const isWingman = (me.weaponIdx === 1) && (weapon.state === 'equipped');
+  const ring = document.querySelector('#crosshair .ch-ring');
+  const dot  = document.querySelector('#crosshair .ch-dot');
+  if(isWingman){
+    _wingmanReticle = true;
+    document.querySelectorAll('#crosshair .ch').forEach(l=>{ l.style.display = 'none'; });
+    if(ring){
+      const D = 2*(crosshairCfg.gap + extra) + crosshairCfg.size;   // diamètre : grandit avec l'expand
+      ring.style.display = 'block'; ring.style.width = D+'px'; ring.style.height = D+'px';
+      ring.style.marginLeft = (-D/2)+'px'; ring.style.marginTop = (-D/2)+'px';
+      ring.style.borderColor = crosshairCfg.color;
+    }
+    if(dot) dot.style.display = 'block';
+  } else {
+    if(_wingmanReticle){   // sortie du mode Wingman : on restaure le crosshair normal
+      _wingmanReticle = false;
+      if(ring) ring.style.display = 'none';
+      document.querySelectorAll('#crosshair .ch').forEach(l=>{ l.style.display = ''; });
+      if(dot) dot.style.display = dot._userDot ? 'block' : 'none';
+    }
+    layoutCrosshair(extra);
+  }
 }
 function applyHudScales(){
   const H = GAMECFG.HUD || {};
@@ -2696,6 +2722,14 @@ window.tuneLowerFrame = function(jumpFrame, crouchFrame){
   console.log('[tuneLowerFrame] jump_frame '+LP.jump_frame+' ('+(LP.jump_clip)+')  crouch_frame '+LP.crouch_frame+' ('+(LP.crouch_clip)+')  @'+(LP.fps||24)+'fps');
 };
 // ===== REGLAGE LIVE du delay de rotation haut/bas : tuneTurn(follow) (bas = + de delay) =====
+window.tuneYaw = function(deg){
+  GAMECFG.MODELS.character_yaw_deg = deg; const r = deg * Math.PI/180;
+  const ap = sol => { if(sol && sol.inst) sol.inst.rotation.y = r; };
+  try{ for(const [,b] of botMgr) ap(b.soldier); }catch(e){}
+  try{ if(typeof remote!=='undefined' && remote) ap(remote.soldier); }catch(e){}
+  try{ if(typeof spec!=='undefined' && spec && spec.soldiers) spec.soldiers.forEach(ap); }catch(e){}
+  return 'character_yaw_deg = ' + deg;
+};
 window.tuneTurn = function(follow){
   const AB = GAMECFG.MODELS && GAMECFG.MODELS.body_aim; if(!AB){ return; }
   if(follow != null) AB.turn_follow = +follow;
@@ -3039,8 +3073,7 @@ function animateSoldierRigged(s, anim, dt, t){
     const sideThresh = SIDE_DEG * Math.PI/180;
     // facing CIBLE des jambes : direction du DEPLACEMENT (root facing tourne de moveAng). Quand on va
     // tout droit, = facing visee ; en strafe/recul, les jambes pointent la ou on va (le haut twiste vers la visee).
-    if(sp > TR_WALK) anim._legFace = s.root.rotation.y + moveAng;
-    else delete anim._legFace;
+    delete anim._legFace;   // Phase 1.5 : le CORPS fait face a la VISEE (cible). Jambes vers le mvt = Phase 2 (IK).
 
     // BAS DU CORPS : priorite air > crouch > locomotion. VRAIS clips en boucle (plus de pose figee).
     let lowKey = 'Idle_Loop', lowBlend = null;   // lowBlend = {a,b,w} pour Jog<->Sprint
@@ -5173,6 +5206,8 @@ let meStepSide = 1; // alterne pied gauche/droit pour la spatialisation des pas
 let prevCrouchState = false; // pour le SFX de crouch
 let prevW1 = false, prevW2 = false, prevW3 = false, r3Down = false, r3DownAt = 0, r3Held = false; // binds armes
 let jumpShakeT = 0; // shake de saut (décroît)
+let landShake = 0, landShakePhase = 0, landShakeT = 0;            // shake caméra à l'atterrissage (court, basse fréquence)
+let switchWobbleRx = 0, switchWobbleRy = 0, switchWobbleRz = 0;   // wobble de l'arme au changement (style CoD)
 let wbKickT = 999;          // timer du "lean gauche" de l'arme au wall bounce (999 = inactif, 0 = déclenché)
 let wbShake = 0;            // shake caméra au wall bounce (enveloppe attack/decay)
 let wbShakePhase = 0, wbShakeT = 0;
@@ -6252,19 +6287,24 @@ function triggerDamageFeedback(){
   clearTimeout(v._dmgT); v._dmgT = setTimeout(()=>v.classList.remove('flash'), 140);
 }
 // Indicateur DIRECTIONNEL de dégât : arc rouge pointant vers le tireur (repère du joueur).
-let _dmgDirTimer = null;
+let _dmgDir = { pos: null, until: 0 };
 function showDamageDirection(pos){
-  const el = document.getElementById('dmgdir'); if(!el || !pos) return;
-  const dx = pos.x - me.pos.x, dz = pos.z - me.pos.z;
-  if(Math.abs(dx) < 1e-4 && Math.abs(dz) < 1e-4) return;
+  if(!pos) return;
+  _dmgDir.pos = (pos.clone ? pos.clone() : new THREE.Vector3(pos.x||0, pos.y||0, pos.z||0));
+  _dmgDir.until = performance.now() + (((GAMECFG.HUD||{}).dmgdir_ms) ?? 900);
+  const el = document.getElementById('dmgdir'); if(el) el.style.opacity = '1';
+}
+// Recalcule l'angle CHAQUE FRAME -> l'indicateur pointe le tireur en TEMPS RÉEL, même quand on tourne.
+function updateDamageDirection(){
+  const el = document.getElementById('dmgdir'); if(!el || !_dmgDir.pos) return;
+  const now = performance.now();
+  if(now >= _dmgDir.until){ el.style.opacity = '0'; _dmgDir.pos = null; return; }
+  const dx = _dmgDir.pos.x - me.pos.x, dz = _dmgDir.pos.z - me.pos.z;
   const sy = Math.sin(me.yaw), cy = Math.cos(me.yaw);
-  const fComp = dx*(-sy) + dz*(-cy);            // composante "devant" (+)
-  const rComp = dx*( cy) + dz*(-sy);            // composante "droite" (+)
-  const ang = Math.atan2(rComp, fComp) * 180/Math.PI;  // 0 = devant, +90 = droite, ±180 = derrière
+  const ang = Math.atan2(dx*cy - dz*sy, dx*(-sy) + dz*(-cy)) * 180/Math.PI;
   el.style.transform = 'translate(-50%,-50%) rotate(' + ang.toFixed(1) + 'deg)';
-  el.style.opacity = '1';
-  clearTimeout(_dmgDirTimer);
-  _dmgDirTimer = setTimeout(()=>{ el.style.opacity = '0'; }, 750);
+  const rem = _dmgDir.until - now;
+  el.style.opacity = String(Math.max(0, Math.min(1, rem/300)));   // fondu sur les 300 dernières ms
 }
 function updateAmmoUI(){
   const holstered = weapon.state !== 'equipped';
@@ -7459,7 +7499,17 @@ function updateWeaponAnimation(dt, sprinting, moving){
       dipZ = 0.08*(1-eo);
     }
     target.y += dipY; target.z += dipZ;
-  }
+    // Shake d'ARME (style CoD) : pendant que la nouvelle arme REMONTE, elle wobble un peu (amorti, s'efface).
+    const WSk = GAMECFG.WEAPON_SWITCH_SHAKE || {};
+    if(WSk.ENABLED !== false && switchAnim.t >= half){
+      const xr = Math.min(1, (switchAnim.t-half)/(dur-half));
+      const env = (1 - xr);                       // s'efface au fur et à mesure que l'arme se stabilise
+      const f = (WSk.freq ?? 20), aW = (WSk.amount ?? 0.07) * env;
+      switchWobbleRx = Math.sin(switchAnim.t*f) * aW;
+      switchWobbleRz = Math.cos(switchAnim.t*f*0.8) * aW * 0.8;
+      switchWobbleRy = Math.sin(switchAnim.t*f*0.55) * aW * 0.5;
+    } else { switchWobbleRx = switchWobbleRy = switchWobbleRz = 0; }
+  } else { switchWobbleRx = switchWobbleRy = switchWobbleRz = 0; }
 
   // Micro-vibrations de tir + balancement latéral (axe X façon Apex, viseur reste centré)
   const _W = (typeof curWeapon==='function') ? curWeapon() : {};
@@ -7526,12 +7576,12 @@ function updateWeaponAnimation(dt, sprinting, moving){
   const baseRy = _hr[1] + (_ar[1]-_hr[1])*adsAmount;
   const baseRz = _hr[2] + (_ar[2]-_hr[2])*adsAmount;
 
-  const finalRx = baseRx + rotKick*vmRot + swayY*1.4*swayVFactor*(GAMECFG.SWAY_AMOUNT ?? 1) + 0.22*spOut + Math.sin(bobT*1.05)*0.04*spOut + 0.55*mantlePose + 0.06*airPose*adsRecenter + 0.12*landKick*adsRecenter - vkickGun - rkickPitch + crouchAirRx*adsRecenter + airborneRx + jumpNoseDip*adsRecenter + cpRx;
+  const finalRx = baseRx + rotKick*vmRot + swayY*1.4*swayVFactor*(GAMECFG.SWAY_AMOUNT ?? 1) + 0.22*spOut + Math.sin(bobT*1.05)*0.04*spOut + 0.55*mantlePose + 0.06*airPose*adsRecenter + 0.12*landKick*adsRecenter - vkickGun - rkickPitch + crouchAirRx*adsRecenter + airborneRx + jumpNoseDip*adsRecenter + cpRx + switchWobbleRx;
   // En ADS, on réduit fortement TOUTE la perturbation de rotation yaw de l'arme (sway, airborne,
   // vibration) pour que le point rouge reste centré. Seul baseRy (la visée réelle) reste plein.
   const adsYawDamp = 1 - adsAmount*0.85;
-  const finalRy = baseRy + (swayX*1.8*swayHFactor*(GAMECFG.SWAY_AMOUNT ?? 1) + vibeYaw + airborneRy)*adsYawDamp + 0.38*spOut + rkickYaw + cpRy + wbRy;
-  const baseFinalRz = baseRz + cpRz + wbRz + Math.sin(bobT*0.55)*0.03*spOut + 0.2*mantlePose + rkickRoll + crouchAirRz*adsRecenter + airborneRz*adsRecenter;
+  const finalRy = baseRy + (swayX*1.8*swayHFactor*(GAMECFG.SWAY_AMOUNT ?? 1) + vibeYaw + airborneRy)*adsYawDamp + 0.38*spOut + rkickYaw + cpRy + wbRy + switchWobbleRy;
+  const baseFinalRz = baseRz + cpRz + wbRz + Math.sin(bobT*0.55)*0.03*spOut + 0.2*mantlePose + rkickRoll + crouchAirRz*adsRecenter + airborneRz*adsRecenter + switchWobbleRz;
 
   // Roll de tir autour du centre ADS : on ajoute le roll puis on compense la position pour que
   // le point rouge / axe du canon reste au même endroit à l'écran quand l'ADS est presque centré.
@@ -7696,6 +7746,21 @@ function applyCamera(dt){
     const ph = (1 - jumpShakeT) * Math.PI;
     camera.position.y -= Math.sin(ph)*env*1.4;
     camera.rotateZ(Math.sin(ph*0.8)*env*0.6);
+  }
+  // Shake caméra à l'ATTERRISSAGE : court, basse fréquence, fluide (amorti). Réglable via LAND_SHAKE.
+  if(landShake > 0.0001){
+    const LS = GAMECFG.LAND_SHAKE || {};
+    if(LS.ENABLED === false){ landShake = 0; }
+    else {
+      landShakeT += dt;
+      const env = Math.exp(-landShakeT * (LS.decay ?? 11));            // décroissance douce
+      const amp = (LS.amount ?? 0.05) * landShake * env;
+      landShakePhase += dt * (LS.freq ?? 9) * Math.PI * 2;             // basse fréquence = fluide, pas un buzz
+      camera.position.y -= Math.sin(landShakePhase) * amp * 0.6;       // léger affaissement vertical
+      camera.rotateX(Math.sin(landShakePhase) * amp);                  // tangage doux
+      camera.rotateZ(Math.cos(landShakePhase*0.8) * amp * 0.4);        // micro-roll
+      if(landShakeT > (LS.duration ?? 0.38)){ landShake = 0; }
+    }
   }
   // Shake caméra au WALL BOUNCE : enveloppe attack→decay fluide (même feel que switch/tir lourd)
   if(wbShake > 0.0001){
@@ -8174,6 +8239,8 @@ function playerUpdate(dt, g){
       // rebond unique amorti à l'atterrissage, proportionnel à la vitesse de chute
       landBounceT = 0;
       landBounceAmp = Math.min(1, Math.abs(me.vel.y)/14);
+      landShake = Math.min(1, Math.abs(me.vel.y)/13);   // shake caméra à l'atterrissage, proportionnel à la chute
+      landShakeT = 0; landShakePhase = 0;
       // Slide bufferisé : courir → sauter → s'accroupir en l'air → slide à l'atterrissage,
       // en conservant TOUTE la vitesse horizontale (enchaîne avec les slide jumps)
       const hSpd = Math.hypot(me.vel.x, me.vel.z);
@@ -8880,6 +8947,7 @@ function animate(){
   refreshOverbannerKey();  // popup attaque speciale : touche affichee en live (clavier/manette)
   updateRagdolls(dt);
   updateCrosshair(dt);
+  updateDamageDirection();
   updateMomentumHUD();
   updateHudSway(dt);
   updateSpeedFx(dt);

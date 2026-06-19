@@ -478,6 +478,10 @@
     BULLET_DROP: 10,
     BULLET_SPEED: 520,
     JUMP_SHAKE: 0.125,
+    // Shake caméra à l'ATTERRISSAGE : court, basse fréquence, fluide (amorti). amount=ampleur, freq=Hz (bas=doux), decay=vitesse d'extinction, duration=durée max (s).
+    LAND_SHAKE: { ENABLED: true, amount: 0.05, freq: 9, decay: 11, duration: 0.38 },
+    // Wobble de l'ARME quand elle remonte au changement d'arme (style Call of Duty). amount=ampleur (rad), freq=vitesse du wobble.
+    WEAPON_SWITCH_SHAKE: { ENABLED: true, amount: 0.07, freq: 20 },
     // ===== Effet au WALL BOUNCE =====
     // L'arme se penche vite à GAUCHE au contact du mur, puis revient doucement à sa position.
     WALLBOUNCE_KICK: {
