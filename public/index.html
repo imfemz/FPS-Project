@@ -204,9 +204,9 @@
   .toast.warn{color:#ffd27a;border-color:rgba(255,210,122,.3)}
   .toast.bad{color:var(--red);border-color:rgba(255,90,90,.35)}
   /* ===== Bannière de KILL (orange, centre un peu à gauche, animée 2 s) ===== */
-  #killbanner{position:absolute;left:42%;top:40%;transform:translate(-50%,-50%);z-index:7;pointer-events:none;
-    font-family:var(--font);font-weight:900;font-style:italic;font-size:clamp(30px,4.4vw,58px);letter-spacing:-1px;
-    color:#ff8a2c;text-shadow:0 2px 22px rgba(255,120,30,.55),0 0 2px rgba(0,0,0,.4);opacity:0;white-space:nowrap}
+  #killbanner{position:absolute;left:50%;top:66%;transform:translate(-50%,-50%);z-index:7;pointer-events:none;
+    font-family:var(--font);font-weight:900;font-style:normal;font-size:clamp(18px,2.3vw,32px);letter-spacing:0;
+    color:#ff8a2c;text-shadow:0 2px 14px rgba(255,120,30,.5),0 0 2px rgba(0,0,0,.55);opacity:0;white-space:nowrap}
   #killbanner.headshot{color:#ff3535;text-shadow:0 2px 22px rgba(255,40,40,.6),0 0 2px rgba(0,0,0,.45)}
   #killbanner.show{animation:killpop 2s cubic-bezier(.18,.9,.2,1) forwards}
   #overbanner{position:absolute;left:50%;bottom:82px;transform:translateX(-50%);z-index:7;pointer-events:none;text-align:center;opacity:0;white-space:nowrap}
@@ -216,12 +216,12 @@
   #overbanner.show{animation:obpop 2.6s cubic-bezier(.18,.9,.2,1) forwards}
   @keyframes obpop{0%{opacity:0;transform:translate(-50%,8px) scale(.9)}10%{opacity:1;transform:translate(-50%,0) scale(1.05)}18%{transform:translate(-50%,0) scale(1)}82%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-6px) scale(1)}}
   @keyframes killpop{
-    0%{opacity:0;transform:translate(-50%,-50%) scale(.55) rotate(-5deg)}
-    10%{opacity:1;transform:translate(-50%,-50%) scale(1.14) rotate(-3deg)}
-    18%{transform:translate(-50%,-50%) scale(.98) rotate(-3deg)}
-    24%{transform:translate(-50%,-50%) scale(1.02) rotate(-3deg)}
-    30%,76%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(-3deg)}
-    100%{opacity:0;transform:translate(-50%,-56%) scale(1.04) rotate(-3deg)}
+    0%{opacity:0;transform:translate(-50%,-50%) scale(.7)}
+    10%{opacity:1;transform:translate(-50%,-50%) scale(1.12)}
+    18%{transform:translate(-50%,-50%) scale(.98)}
+    24%{transform:translate(-50%,-50%) scale(1.02)}
+    30%,76%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+    100%{opacity:0;transform:translate(-50%,-54%) scale(1.02)}
   }
 
   /* ===== ÉCRANS (menu / lobby / options) — minimaliste premium ===== */
@@ -289,6 +289,11 @@
   .fr-meleeinfo{display:none;margin-top:14px;background:var(--panel-2);border:1px solid var(--brd-strong);border-radius:11px;padding:10px 16px;font:600 12px/1.3 var(--font);letter-spacing:.6px;color:var(--txt-dim);text-transform:uppercase;box-shadow:var(--shadow-sm)}
   .fr-meleeinfo b{color:var(--txt)}
   .fr-meleeinfo.show{display:inline-block;animation:frSlideUp .5s cubic-bezier(.2,.85,.2,1) both}
+  .fr-melee-live{display:block;margin-top:8px;font:700 12px/1.3 var(--font);letter-spacing:.3px;color:var(--accent);text-transform:none}
+  .fr-melee-live .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#36e07a;box-shadow:0 0 8px #36e07a;vertical-align:middle;margin-right:6px;animation:liveDot 1.6s ease-in-out infinite}
+  .fr-melee-live.full{color:#ff8a2c}
+  .fr-melee-live .dot.off{background:#ff5a5a;box-shadow:0 0 8px #ff5a5a;animation:none}
+  @keyframes liveDot{0%,100%{opacity:1}50%{opacity:.3}}
   @keyframes frBtnIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
   .fr-btn{position:relative;width:100%;padding:17px 24px;background:rgba(255,255,255,.025);border:1px solid var(--brd-strong);border-radius:11px;color:var(--txt-dim);font:600 16px/1 var(--font);letter-spacing:2.5px;text-transform:uppercase;cursor:pointer;text-align:center;transition:color .18s,border-color .18s,background .18s,transform .14s,box-shadow .25s}
   .fr-btn:hover{color:var(--txt);border-color:rgba(255,255,255,.45);background:rgba(255,255,255,.06);transform:translateY(-1px)}
@@ -513,7 +518,7 @@
         <div class="fr-screen"><div class="fr-canvas" id="menuPreview"></div><span class="fr-live">LIVE</span></div>
         <p class="fr-rules" id="frRules"></p>
         <button class="fr-launch" id="menuLaunch">Lancer</button>
-        <div class="fr-meleeinfo" id="frMeleeInfo">Mêlée en ligne · jusqu'à <b>6 joueurs</b> · premier à <b>10 éliminations</b></div>
+        <div class="fr-meleeinfo" id="frMeleeInfo">Mêlée en ligne · jusqu'à <b>6 joueurs</b> · premier à <b>10 éliminations</b><span class="fr-melee-live" id="frMeleeLive"></span></div>
       </section>
 
       <nav class="fr-nav">
@@ -5461,7 +5466,7 @@ function onKillMsg(m){
   const tag = m.head ? ' (tête)' : '';
   if(m.by === myId && m.victim !== myId){
     // bannière : HEADSHOT (rouge) si kill à la tête, sinon PERFECT KILL / NICE SHOTS (orange)
-    showKillBanner(reloadedSinceKill ? 'NICE SHOTS !' : 'PERFECT KILL !', !!m.head);
+    showKillBanner(vN, !!m.head);   // nom exact du joueur tué
     reloadedSinceKill = false;
   }
   if(m.by === myId)        killFeed('VOUS ☠ ' + vN + tag);
@@ -6215,7 +6220,7 @@ function applyLocalBotDamage(id, b, dmg, head, melee){
     if(b.mv && Math.random()<0.6) b.mv.strafeDir *= -1; }
   if(b.hp <= 0){
     onBotKill({ id, head: !!head });
-    showKillBanner(reloadedSinceKill ? 'NICE SHOTS !' : 'PERFECT KILL !', !!head);
+    showKillBanner('un bot', !!head);
     reloadedSinceKill = false;
     localBotKills++; const ps = document.getElementById('pscore'); if(ps) ps.textContent = localBotKills;
     checkOverchargeUnlock();   // 3 kills d'affilée → Overcharge dispo
@@ -6323,10 +6328,10 @@ function triggerAmmoPulse(){
   a.classList.remove('shoot'); void a.offsetWidth; a.classList.add('shoot');
 }
 // ===== Bannière de KILL : texte orange animé 2 s + jingle =====
-function showKillBanner(text, headshot){
+function showKillBanner(victimName, headshot){
   const el = document.getElementById('killbanner'); if(!el) return;
-  el.textContent = headshot ? 'HEADSHOT !' : text;     // headshot → texte ROUGE dédié
-  el.classList.toggle('headshot', !!headshot);
+  el.textContent = 'Vous avez tué ' + (victimName || 'un adversaire');   // un seul texte, nom exact de la victime
+  el.classList.toggle('headshot', !!headshot);   // headshot → même texte, teinte rouge
   el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); // relance l'anim
   playSfx('perfect_kill');
 }
@@ -6502,13 +6507,24 @@ document.getElementById('botbtnmenu').onclick = ()=>{
   if(pInp){ pInp.addEventListener('blur',pCommit); pInp.addEventListener('keydown',function(e){ if(e.key==='Enter'){e.preventDefault();pInp.blur();} }); }
   pSync();
 
+  var _meleePoll=null;
+  function refreshMeleeCount(){
+    var el=$('frMeleeLive'); if(!el) return;
+    fetch('/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){
+      var n=(s.seated|0), mx=(s.max||6);
+      el.className='fr-melee-live'+(n>=mx?' full':'');
+      el.innerHTML='<span class="dot"></span>'+n+' / '+mx+' joueur'+(n>1?'s':'')+' en partie';
+    }).catch(function(){ el.className='fr-melee-live'; el.innerHTML='<span class="dot off"></span>serveur hors-ligne'; });
+  }
+  function startMeleePoll(){ stopMeleePoll(); _meleePoll=setInterval(refreshMeleeCount,4000); }
+  function stopMeleePoll(){ if(_meleePoll){ clearInterval(_meleePoll); _meleePoll=null; } }
   function select(m){
     mode=m;
     $('mode-melee').classList.toggle('sel',m==='melee');
     $('mode-bots').classList.toggle('sel',m==='bots');
     $('frRules').innerHTML=RULES[m]||'';
     var DF=$('frDiff'); if(m==='bots'){ DF.classList.remove('show'); void DF.offsetWidth; DF.classList.add('show'); } else DF.classList.remove('show');
-    var MI=$('frMeleeInfo'); if(m==='melee'){ MI.classList.remove('show'); void MI.offsetWidth; MI.classList.add('show'); } else MI.classList.remove('show');
+    var MI=$('frMeleeInfo'); if(m==='melee'){ MI.classList.remove('show'); void MI.offsetWidth; MI.classList.add('show'); refreshMeleeCount(); startMeleePoll(); } else { MI.classList.remove('show'); stopMeleePoll(); }
     var P=$('frPreview'); P.classList.add('show'); P.classList.remove('anim'); void P.offsetWidth; P.classList.add('anim');
     if(pv)pv.t=0; pvStart();
   }

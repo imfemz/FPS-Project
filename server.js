@@ -59,6 +59,10 @@ const server = http.createServer((req, res) => {
     req.on('close', () => devClients.delete(res));
     return;
   }
+  if (url === '/status') {                       // compteur live pour le menu (joueurs en partie)
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify({ seated: playerCount(), max: N, phase }));
+  }
   if (url === '/') url = '/index.html';
   const base = url.startsWith('/shared/') ? __dirname : path.join(__dirname, 'public');
   const file = path.join(base, url);
