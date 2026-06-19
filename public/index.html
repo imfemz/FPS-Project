@@ -2736,9 +2736,9 @@ function createSoldierRigged(accent){
   // muzzle flash sur la main droite si on la trouve
   const flash = new THREE.Sprite(new THREE.SpriteMaterial({map:TEX_FLASH, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false}));
   flash.scale.set(.35,.35,1); flash.visible = false;
-  let hand = null;
-  inst.traverse(n=>{ const nm=(n.name||'').toLowerCase(); if(!hand && (nm==='hand.r'||nm.includes('righthand')||nm.includes('hand_r')||nm==='wrist.r')) hand = n; });
-  if(hand) hand.add(flash); else root.add(flash);
+  // flash sur root (echelle 1) : les bones ont une echelle monde ~99 (autoScale du rig) -> un flash
+  // enfant d'un bone serait gigantesque. On le REPOSITIONNE au canon a chaque tir (repere root).
+  root.add(flash);
 
   // Bones de la colonne -> visee haut du corps (pitch additif applique APRES le mixer)
   const _SA = (GAMECFG.MODELS && GAMECFG.MODELS.spine_aim) || {};
@@ -2770,7 +2770,6 @@ function createSoldierRigged(accent){
   if(index1R){
     weaponSocket = new THREE.Object3D(); weaponSocket.name = 'WeaponSocket_R';
     index1R.add(weaponSocket);
-    weaponSocket.add(flash);   // muzzle flash 3e pers. = au niveau de l'ARME (socket Index1.R), plus a la racine/tete
   } else {
     const dispo = []; inst.traverse(n=>{ if(n && n.name) dispo.push(n.name); });
     console.warn('[ANIM] bone Index1.R introuvable, bones dispo: ' + dispo.join(','));
@@ -4221,6 +4220,8 @@ let remoteFlashTimeout = null;
 function triggerRemoteMuzzleFlash(){
   if(!remote.soldier) return;
   const f = remote.soldier.flash;
+  const mz = soldierMuzzleWorld(remote.soldier, null);
+  if(mz && remote.soldier.root) remote.soldier.root.worldToLocal(f.position.copy(mz));   // flash au canon
   f.scale.set(.3+Math.random()*.15, .3+Math.random()*.15, 1);
   f.visible = true;
   if(remoteFlashTimeout) clearTimeout(remoteFlashTimeout);
@@ -5299,6 +5300,7 @@ function onRemoteShot(m){
   playSfxAt('shot', start, 1.5, { refDistance: 14, maxDistance: 150, rolloff: 0.7 });
   if(b && b.soldier && b.soldier.flash){
     const f = b.soldier.flash;
+    if(b.soldier.root) b.soldier.root.worldToLocal(f.position.copy(start));   // flash AU CANON (repere root, echelle 1)
     f.scale.set(.3+Math.random()*.15, .3+Math.random()*.15, 1);
     f.visible = true; setTimeout(()=>{ f.visible = false; }, 60);
   }
