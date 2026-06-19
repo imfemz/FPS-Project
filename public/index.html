@@ -5884,7 +5884,7 @@ const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist:
   ai: {
     difficulty: 'medium',     // 'easy' | 'medium' | 'hard'
     fire_range: 15,           // portee de tir des bots (m) -- ils ouvrent le feu en rafale des 15 m
-    view_range: 24,           // distance de detection (LOS) + poursuite
+    view_range: 24, view_fov_deg: 120, sense_radius: 3,           // distance de detection (LOS) + poursuite
     forget_time: 3.0,         // memoire (s) apres perte de vue
     preferred_dist: 4.0,      // distance de combat preferee
     damage_player: true,      // les tirs des bots t'infligent des degats reels
@@ -6024,7 +6024,14 @@ function botSeesPlayer(b){
   const d = _losDir.length(); if(d < 0.001) return true;
   _losDir.multiplyScalar(1/d);
   mapRay.set(_losO, _losDir); mapRay.far = d - 0.4;
-  return mapRay.intersectObjects(mapMeshes, false).length === 0;
+  if(mapRay.intersectObjects(mapMeshes, false).length !== 0) return false;   // mur -> pas vu
+  // CHAMP DE VISION : cone frontal (view_fov_deg), sauf a courte distance (sense_radius = 360deg).
+  const _A = LBOT.ai || {};
+  const _dx = me.pos.x - b.pos.x, _dz = me.pos.z - b.pos.z, _dd = Math.hypot(_dx, _dz);
+  if(_dd < (_A.sense_radius ?? 3)) return true;                                // < sense_radius : 360 deg
+  const _halfCos = Math.cos(((_A.view_fov_deg ?? 120) * Math.PI / 180) / 2);   // demi-angle du cone
+  const _cosAng = (-Math.sin(b.yaw) * _dx - Math.cos(b.yaw) * _dz) / (_dd || 1); // cos(angle facing<->joueur)
+  return _cosAng >= _halfCos;
 }
 function localPlayerDeath(){
   if(!alive) return;
