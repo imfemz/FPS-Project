@@ -540,7 +540,7 @@
       SLOWDOWN: 0.6,
       // Plafond ABSOLU du ralentissement (0.55 = caméra jamais en dessous de 45% de sa vitesse près
       // d'une cible) → garde la visée RÉACTIVE. Monte vers 0.8 pour plus collant, baisse pour plus brut.
-      SLOWDOWN_MAX: 0.45,
+      SLOWDOWN_MAX: 0.25,
       // Force du magnétisme rotationnel, en fraction de STRENGTH. 0 = slowdown pur (zéro rotation).
       // Garde-le bas pour rester "PC" : la rotation est ce qui se sent le plus "auto-aim".
       ROTATION: 1.2,
