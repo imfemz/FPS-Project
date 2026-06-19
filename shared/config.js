@@ -616,7 +616,7 @@
       // Pose ACCROUPIE (3e pers) plug au BAS du corps en mode couches. Jambes via sign ; lean torse (hips/abdomen)
       // compose par-dessus la visee. Reglable en live : tuneCrouch(upperlegX, lowerlegX, hipsX, abdomenX) en degres.
       crouch_pose: { enabled: true, blend: 10, sign: 1, upperleg: [0.9, 0, 0.12], lowerleg: [-1.3, 0, 0], hips: [-0.35, 0, 0], abdomen: [0.45, 0, 0], torso: [0, 0, 0] },
-      character_yaw_deg: 0,
+      character_yaw_deg: 180,   // nouveau rig Rigify : 'avant' inverse vs SWAT -> +180
       hitbox: {
         // Capsule ÉLARGIE pour bien englober le model 3D (torse ~0.34 de demi-largeur, haut ~1.79 m).
         // radius 0.42 = marge confortable autour du buste (avant 0.32 ≈ pile au centre) ; bottom 0 = jambes
