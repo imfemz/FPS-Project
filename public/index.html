@@ -2680,6 +2680,20 @@ window.tuneCrouch = function(ulX, llX, hipsX, abdX, ulZ){
   console.log('[tuneCrouch] upperlegX '+(CP.upperleg[0]*R).toFixed(0)+' upperlegZ '+(CP.upperleg[2]*R).toFixed(0)+
     ' lowerlegX '+(CP.lowerleg[0]*R).toFixed(0)+' hipsX '+(CP.hips[0]*R).toFixed(0)+' abdomenX '+(CP.abdomen[0]*R).toFixed(0));
 };
+// ===== REGLAGE LIVE pose bas du corps figee (frames) : tuneLowerFrame(jumpFrame, crouchFrame) =====
+// Live (lu chaque frame) : saute / accroupis-toi pour voir la frame, puis redonne-moi les valeurs.
+window.tuneLowerFrame = function(jumpFrame, crouchFrame){
+  const LP = GAMECFG.MODELS && GAMECFG.MODELS.lower_pose; if(!LP){ console.warn('[tuneLowerFrame] lower_pose absent'); return; }
+  if(jumpFrame != null) LP.jump_frame = +jumpFrame;
+  if(crouchFrame != null) LP.crouch_frame = +crouchFrame;
+  console.log('[tuneLowerFrame] jump_frame '+LP.jump_frame+' ('+(LP.jump_clip)+')  crouch_frame '+LP.crouch_frame+' ('+(LP.crouch_clip)+')  @'+(LP.fps||24)+'fps');
+};
+// ===== REGLAGE LIVE du delay de rotation haut/bas : tuneTurn(follow) (bas = + de delay) =====
+window.tuneTurn = function(follow){
+  const AB = GAMECFG.MODELS && GAMECFG.MODELS.body_aim; if(!AB){ return; }
+  if(follow != null) AB.turn_follow = +follow;
+  console.log('[tuneTurn] turn_follow '+AB.turn_follow+' (plus bas = plus de delay haut/bas)');
+};
 // Montre l'arme correspondant a l'index, cache les autres.
 function setSoldierWeapon(s, idx){
   if(!s) return;
@@ -2900,45 +2914,37 @@ function applyBodyAim(s, anim, dt){
   if(AB.enabled === false || !s.aim){ return; }
   const smooth = AB.smooth ?? 12;
   const maxOff = THREE.MathUtils.degToRad(AB.max_deg ?? 58);
-  // bodyYaw courant = ce que le jeu a mis dans root.rotation.y cette frame
-  s.bodyYaw = s.root.rotation.y;
-  const aimYaw = (anim && typeof anim.aimYaw === 'number') ? anim.aimYaw : s.bodyYaw;
+  // DELAY de rotation BAS/HAUT : le BAS du corps (root/jambes) rattrape PROGRESSIVEMENT le facing voulu
+  // (turn_follow), pendant que le HAUT (colonne) twiste vers la visee. Quand on tourne, le haut mene et
+  // le bas suit avec un retard -> plus realiste (le swat ne pivote plus d'un bloc).
+  const follow = AB.turn_follow ?? 7;
+  const targetFace = s.root.rotation.y;   // facing voulu par le jeu (regard pour le joueur, mouvement pour les bots)
+  const aimYaw = (anim && typeof anim.aimYaw === 'number') ? anim.aimYaw : targetFace;
   s.aimYaw = aimYaw;
-  let delta = wrapAngle(aimYaw - s.bodyYaw);
-  if(Math.abs(delta) > maxOff){
-    // tourne le corps vers la visee (lisse) puis reapplique a root
-    s.bodyYaw += wrapAngle(aimYaw - s.bodyYaw) * Math.min(1, dt * smooth);
-    s.root.rotation.y = s.bodyYaw;
-    delta = wrapAngle(aimYaw - s.bodyYaw);
-  }
-  const twist = Math.max(-maxOff, Math.min(maxOff, delta));
+  if(s.legYaw == null) s.legYaw = targetFace;
+  let dF = wrapAngle(targetFace - s.legYaw);
+  if(Math.abs(dF) > maxOff){ s.legYaw = targetFace - Math.sign(dF)*maxOff; dF = wrapAngle(targetFace - s.legYaw); }  // clamp dur (jamais > maxOff de retard)
+  s.legYaw += dF * Math.min(1, dt * follow);   // rattrapage progressif = LE DELAY
+  s.root.rotation.y = s.legYaw;                // BAS du corps tourne avec retard
+  s.bodyYaw = s.legYaw;
+  const twist = Math.max(-maxOff, Math.min(maxOff, wrapAngle(aimYaw - s.legYaw)));  // HAUT vers la visee, depuis le bas
   s.twistYaw = (s.twistYaw || 0) + (twist - (s.twistYaw || 0)) * Math.min(1, dt * smooth);
-  // Repartition du twist (rotation autour de Y local). IMPORTANT : applySpineAim a deja ecrit
-  // le PITCH sur Abdomen/Torso (= qRest*pitch). Pour ces bones partages on MULTIPLIE le twist
-  // par-dessus (conserve le pitch) ; pour Hips (non touche par le pitch) on part de qRest.
+  // Repartition du twist (rotation autour de Y local). applySpineAim a deja ecrit le PITCH sur
+  // Abdomen/Torso (= qRest*pitch) -> on MULTIPLIE le twist par-dessus ; pour Hips on part de qRest.
   const SA = (GAMECFG.MODELS && GAMECFG.MODELS.spine_aim) || {};
   const spineSet = (SA.bones || ['Abdomen','Torso','Chest']);
   const dist = AB.dist || { Hips:0.45, Abdomen:0.35, Torso:0.20 };
-  const CP = (GAMECFG.MODELS && GAMECFG.MODELS.crouch_pose) || {};
-  const cw = s.crouchW || 0;
   for(const name in dist){
     const b = s.aim[name]; if(!b || !b.userData.qRest) continue;
     _aimQ.setFromAxisAngle(_aimY, s.twistYaw * dist[name]);
     if(spineSet.indexOf(name) !== -1 && SA.enabled !== false){
       b.quaternion.multiply(_aimQ);                       // pitch deja applique -> compose le twist
     } else if(s.layered && s.bodyBone && s.bodyBone.userData.qRest){
-      // Hips en mode COUCHES : on ANNULE le lean de Body (rotation du clip de course) -> le HAUT du
-      // corps est pilote uniquement par la visee (separation propre), les jambes gardent le mouvement
-      // de Body. Hips_local = Body_local⁻¹ × Body_rest × Hips_rest × twist.
+      // Hips en mode COUCHES : on ANNULE le lean de Body (rotation du clip bas) -> haut pilote uniquement par la visee.
       _leanInv.copy(s.bodyBone.quaternion).invert().multiply(s.bodyBone.userData.qRest);
       b.quaternion.copy(_leanInv).multiply(b.userData.qRest).multiply(_aimQ);
     } else {
-      b.quaternion.copy(b.userData.qRest).multiply(_aimQ); // fallback plein-corps : pas d'annulation
-    }
-    // LEAN CROUCH : penche bassin/abdomen quand accroupi, COMPOSE par-dessus la visee (garde l'aim).
-    if(cw > 0.01){
-      const cl = (name === 'Hips') ? CP.hips : (name === 'Abdomen') ? CP.abdomen : (name === 'Torso') ? CP.torso : null;
-      if(cl){ _crLeanE.set(cl[0]*cw, cl[1]*cw, cl[2]*cw); b.quaternion.multiply(_crLeanQ.setFromEuler(_crLeanE)); }
+      b.quaternion.copy(b.userData.qRest).multiply(_aimQ); // fallback plein-corps
     }
   }
 }

@@ -587,7 +587,9 @@
       // ===== ANIM EN COUCHES (third-person bots & remotes) =====
       // Visee CORPS (twist procedural Hips/Abdomen/Torso vers la cible) : le perso ne tourne plus
       // le dos en tirant. max_deg = torsion max avant que le corps pivote ; smooth = lissage.
-      body_aim: { enabled: true, max_deg: 58, smooth: 12, dist: { Hips: 0.45, Abdomen: 0.35, Torso: 0.20 } },
+      body_aim: { enabled: true, max_deg: 58, smooth: 12, turn_follow: 7, dist: { Hips: 0.45, Abdomen: 0.35, Torso: 0.20 } },  // turn_follow = vitesse a laquelle le BAS rattrape le regard (bas = + de delay haut/bas)
+      // Bas du corps par INPUT : saut & crouch = clips FIGES sur une frame (pose statique). Live: tuneLowerFrame(jumpFrame, crouchFrame).
+      lower_pose: { fps: 24, jump_clip: 'Run', jump_frame: 4, crouch_clip: 'Death', crouch_frame: 7 },
       // Seuils de vitesse LOCALE (m/s) pour le choix du clip de jambes (course/marche/idle).
       layer_anim: { run_thresh: 0.6, walk_thresh: 0.2 },
       // Saut : pose procedurale (plus de roulade). euler [x,y,z] rad par bone. sign: -1 si jambes a l'envers.
