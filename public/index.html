@@ -2434,7 +2434,7 @@ function loadRiggedTemplate(){
     scene.userData.clips = g.animations || []; // les 24 animations du GLB
     RIG_TEMPLATE = scene;
     RIG_READY = true;
-    console.log('[NEON] ✓ perso SWAT chargé — hauteur', h.toFixed(2), '→ échelle', scene.userData.autoScale.toFixed(3), '|', (g.animations||[]).length, 'animations');
+    console.log('[NEON] ✓ perso chargé —', M.character, '| hauteur', h.toFixed(2), '→ échelle', scene.userData.autoScale.toFixed(3), '|', (g.animations||[]).length, 'animations');
     swapSoldiersToRigged();
   },
   xhr=>{ if(xhr.total){ const pct=Math.round(xhr.loaded/xhr.total*100); if(pct%25===0) console.log('[NEON] perso riggé', pct+'%'); } },
@@ -2876,6 +2876,13 @@ function crossfadeLayer(s, layer, key, fade){
   next.paused = false; next.setEffectiveWeight(1); next.play();
   if(s[curProp] && s[curProp] !== next) s[curProp].crossFadeTo(next, fade != null ? fade : 0.10, false);
   s[curProp] = next; s[curKeyProp] = key;
+  if(layer === 'lower') _clearLowerPair(s, next, fade);   // sortie d'un blend Jog/Sprint -> coupe l'action residuelle
+}
+// Coupe en douceur l'action du blend BAS qui n'est PAS conservee (evite qu'un poids residuel persiste).
+function _clearLowerPair(s, keep, fade){
+  if(!s._lowerPair) return;
+  for(const act of s._lowerPair){ if(act && act !== keep){ act.crossFadeTo ? act.fadeOut(fade != null ? fade : 0.12) : act.stop(); } }
+  s._lowerPair = null;
 }
 // Blend LOWER de DEUX actions simultanees (ex: Jog<->Sprint par la vitesse). wA = poids de keyA, (1-wA) = keyB.
 // Les deux actions tournent en boucle avec poids complementaires ; toute autre action basse est coupee en douceur.
@@ -2885,14 +2892,19 @@ function blendLowerPair(s, keyA, keyB, wA){
   const a = map[keyA], b = map[keyB];
   const tag = 'BLEND:'+keyA+'+'+keyB;
   const fresh = (s.lowerKey !== tag);
-  for(const act of [a,b]){
-    if(fresh || !act.isRunning()){ act.reset(); act.enabled = true; act.setLoop(THREE.LoopRepeat, Infinity); act.paused = false; act.play(); }
+  if(fresh){
+    // fond sortant de l'ancienne action simple (PAS de crossFadeTo : il forcerait un poids 1 et
+    // lutterait avec les poids manuels du blend). On synchronise les phases a/b pour eviter le glissement.
+    if(s.lowerCur && s.lowerCur !== a && s.lowerCur !== b) s.lowerCur.fadeOut(0.14);
+    for(const act of [a,b]){ act.reset(); act.enabled = true; act.setLoop(THREE.LoopRepeat, Infinity); act.paused = false; act.play(); }
+    b.time = a.time;
+  } else {
+    for(const act of [a,b]){ if(!act.isRunning()){ act.reset(); act.enabled = true; act.setLoop(THREE.LoopRepeat, Infinity); act.paused = false; act.play(); } }
+    b.time = a.time;   // garde Jog et Sprint en phase (pieds synchro malgre des durees differentes)
   }
-  // crossfade depuis l'ancienne action simple (si differente) vers la paire
-  if(fresh && s.lowerCur && s.lowerCur !== a && s.lowerCur !== b){ s.lowerCur.crossFadeTo(a, 0.14, false); }
-  a.setEffectiveWeight(wA); b.setEffectiveWeight(1 - wA);
+  a.setEffectiveWeight(wA); b.setEffectiveWeight(1 - wA);   // poids complementaires, pilotes chaque frame
   s.lowerCur = (wA >= 0.5 ? a : b);   // pour les transitions futures
-  s.lowerKey = tag;
+  s.lowerKey = tag; s._lowerPair = [a, b];
   return true;
 }
 // Fige une couche BASSE sur une frame precise (pose statique : crouch=Death f7, saut=Run f4). Crossfade fluide.
@@ -2901,7 +2913,7 @@ function freezeLowerPose(s, key, time){
   if(s.lowerKey !== key || !s.lowerCur){
     a.reset(); a.enabled = true; a.setLoop(THREE.LoopRepeat, Infinity); a.setEffectiveWeight(1); a.play();
     if(s.lowerCur && s.lowerCur !== a) s.lowerCur.crossFadeTo(a, 0.14, false);
-    s.lowerCur = a; s.lowerKey = key;
+    s.lowerCur = a; s.lowerKey = key; _clearLowerPair(s, a, 0.14);
   }
   a.paused = true; a.time = time;   // fige a la frame voulue (pose tenue)
 }
