@@ -816,8 +816,8 @@
       hideBox: true,        // cache la boite d'origine (la collision reste active)
       byType: {
         container: '/models/container.glb',
-        metal:     '/models/metal.glb',
-        wall:      '/models/crate.glb',
+        metal:     '/models/wall.glb',
+        wall:      '/models/wall.glb',
         crate:     '/models/crate.glb',
       },
     },
