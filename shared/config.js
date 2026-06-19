@@ -686,7 +686,7 @@
     // volume = multiplicateur du son de CETTE surface ; master_volume = volume de TOUS les impacts.
     IMPACT_SFX: {
       use_files: true,        // true = jouer tes fichiers ci-dessous au lieu de la synthèse
-      master_volume: 0.5,      // volume global de tous les impacts de surface
+      master_volume: 0.2,      // volume global de tous les impacts de surface
       surfaces: {
         wall:  { file: '/audio/impact/wall.mp3',  volume: 1.0 },
         crate: { file: '/audio/impact/crate.mp3', volume: 1.0 },
