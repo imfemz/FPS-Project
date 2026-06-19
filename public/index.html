@@ -8709,23 +8709,6 @@ document.getElementById('pseudo').value = myName;
 clock = { _last: performance.now(), getDelta(){ const n = performance.now(); const d = (n - this._last) / 1000; this._last = n; return d; } }; // minuteur natif : remplace THREE.Clock (deprecie) sans dependance
 updateHPShieldUI(); updateAmmoUI();
 animate();
-/* DIAG SOLDATS TEMP */
-window.__sd=function(){try{
- var bots=(typeof botMgr!=='undefined'&&botMgr)?botMgr.size:'?';
- var rr=(typeof RIG_READY!=='undefined')?RIG_READY:'?';
- var info='bots='+bots+' RIG='+rr;
- var b=null; if(typeof botMgr!=='undefined'&&botMgr){for(const v of botMgr.values()){if(v&&v.soldier){b=v;break;}}}
- if(b&&b.soldier){var s=b.soldier,root=s.root;
-  info+=' | rigged='+s.rigged+' vis='+(root?root.visible:'?')+' dead='+b.dead;
-  if(root){info+=' pos='+root.position.x.toFixed(1)+','+root.position.y.toFixed(1)+','+root.position.z.toFixed(1);
-   try{var bb=new THREE.Box3().setFromObject(root);var sz=bb.getSize(new THREE.Vector3());info+=' size='+sz.x.toFixed(2)+','+sz.y.toFixed(2)+','+sz.z.toFixed(2);}catch(e){info+=' boxErr';}
-   var mt=0,mv=0;root.traverse(function(o){if(o.isMesh||o.isSkinnedMesh){mt++;if(o.visible)mv++;}});info+=' meshes='+mv+'/'+mt;
-   var inSc=false,pp=root;while(pp){if(typeof scene!=='undefined'&&pp===scene){inSc=true;break;}pp=pp.parent;}info+=' inScene='+inSc;}
- } else { info+=' | AUCUN bot avec soldier'; }
- var d=document.getElementById('__sdbox');if(!d){d=document.createElement('div');d.id='__sdbox';d.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:2147483647;background:rgba(60,0,80,.94);color:#f3c8ff;font:12px/1.4 monospace;padding:6px 12px;white-space:pre-wrap;pointer-events:none';(document.body||document.documentElement).appendChild(d);}
- d.textContent='SOLDAT > '+info;
-}catch(e){var d2=document.getElementById('__sdbox');if(d2)d2.textContent='SD ERR: '+e;}};
-setInterval(window.__sd,1500);
 // ---------- PRÉCHARGEMENT : on n'ouvre le menu qu'une fois TOUT chargé (armes, perso, audio) ----------
 (function preloadGate(){
   const el = document.getElementById('preload'); if(!el) return;
