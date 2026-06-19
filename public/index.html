@@ -2524,7 +2524,7 @@ function makeLayerClip(srcClip, boneSetFn, suffix, posOnlyFn){
 const _isBodyBone = (n)=> n === 'Body';   // bone porteur du bob (position seule en couche basse)
 // Cache des clips de couche (calcule une fois sur le template). Cle = nom de clip source.
 let LAYER_CLIPS = null;   // { lower:{name:clip}, upper:{name:clip} } ou null si pas pret
-const LOWER_CLIP_SOURCES = ['Run_Right','Run_Left','Run_Shoot','Walk','Idle_Neutral'];
+const LOWER_CLIP_SOURCES = ['Run','Run_Back','Run_Left','Run_Right','Walk','Idle_Neutral','Death'];   // Death=pose crouch figee (frame), Run aussi fige pour le saut
 const UPPER_CLIP_SOURCES = ['Gun_Shoot','Idle_Sword','Sword_Slash','Idle_Neutral'];
 function _findClipByShortName(clips, shortName){
   // les clips sont prefixes "CharacterArmature|" -> on matche le suffixe
@@ -2856,6 +2856,16 @@ function crossfadeLayer(s, layer, key, fade){
   if(s[curProp] && s[curProp] !== next) s[curProp].crossFadeTo(next, fade != null ? fade : 0.10, false);
   s[curProp] = next; s[curKeyProp] = key;
 }
+// Fige une couche BASSE sur une frame precise (pose statique : crouch=Death f7, saut=Run f4). Crossfade fluide.
+function freezeLowerPose(s, key, time){
+  const a = s.lower && s.lower[key]; if(!a) return;
+  if(s.lowerKey !== key || !s.lowerCur){
+    a.reset(); a.enabled = true; a.setLoop(THREE.LoopRepeat, Infinity); a.setEffectiveWeight(1); a.play();
+    if(s.lowerCur && s.lowerCur !== a) s.lowerCur.crossFadeTo(a, 0.14, false);
+    s.lowerCur = a; s.lowerKey = key;
+  }
+  a.paused = true; a.time = time;   // fige a la frame voulue (pose tenue)
+}
 // Joue l'action HAUT en FREEZE FRAME 1 (pose tenue) : Gun_Shoot fige = pose de combat.
 function freezeUpper(s, key){
   const a = s.upper && s.upper[key];
@@ -2966,19 +2976,25 @@ function animateSoldierRigged(s, anim, dt, t){
     const sp = Math.hypot(vx, vz);
     const TR_RUN = (GAMECFG.MODELS.layer_anim && GAMECFG.MODELS.layer_anim.run_thresh) || 0.6;
     const TR_WALK = (GAMECFG.MODELS.layer_anim && GAMECFG.MODELS.layer_anim.walk_thresh) || 0.2;
-    // BAS DU CORPS
-    let lowKey = 'Idle_Neutral';
-    if(!grounded || slide){ lowKey = 'Idle_Neutral'; }     // en l'air : pas de jambes qui courent
-    else if(sp < TR_WALK){ lowKey = 'Idle_Neutral'; }
+    // BAS DU CORPS : par input. Priorite saut > crouch > locomotion directionnelle. Clips, crossfade fluide.
+    // Saut et crouch = clips FIGES sur une frame precise (pose statique). Le reste = clips en boucle.
+    const FR = (GAMECFG.MODELS && GAMECFG.MODELS.lower_pose) || {};
+    const _fps = FR.fps || 24;
+    let lowKey = 'Idle_Neutral', lowFreeze = -1;   // lowFreeze >= 0 -> fige le clip a ce temps (s)
+    if(!grounded){ lowKey = FR.jump_clip || 'Run'; lowFreeze = (FR.jump_frame ?? 4) / _fps; }          // saut/air = Run fige (frame 4)
+    else if(crouch){ lowKey = FR.crouch_clip || 'Death'; lowFreeze = (FR.crouch_frame ?? 7) / _fps; }  // crouch = Death fige (frame 7)
+    else if(sp < TR_WALK){ lowKey = 'Idle_Neutral'; }                                                  // immobile
     else {
       const ax = Math.abs(vx), az = Math.abs(vz);
-      if(az >= ax && vz > TR_RUN) lowKey = 'Run_Shoot';      // avance
-      else if(ax > az && vx > TR_RUN) lowKey = 'Run_Left';   // droite -> clip Run_Left (mapping inverse : le clip etait a l'envers)
-      else if(ax > az && vx < -TR_RUN) lowKey = 'Run_Right'; // gauche -> clip Run_Right
-      else lowKey = 'Walk';                                  // vitesse moderee / oblique
+      if(az >= ax && vz > TR_RUN) lowKey = 'Run';            // avancer (course)
+      else if(az >= ax && vz < -TR_RUN) lowKey = 'Run_Back'; // reculer
+      else if(ax > az && vx > TR_RUN) lowKey = 'Run_Left';   // strafe droite -> clip Run_Left (mapping inverse)
+      else if(ax > az && vx < -TR_RUN) lowKey = 'Run_Right'; // strafe gauche -> clip Run_Right
+      else lowKey = 'Walk';                                  // vitesse moderee / oblique / marche
     }
-    if(!s.lower[lowKey]) lowKey = s.lower['Idle_Neutral'] ? 'Idle_Neutral' : Object.keys(s.lower)[0];
-    crossfadeLayer(s, 'lower', lowKey, 0.12);
+    if(!s.lower[lowKey]){ lowKey = s.lower['Idle_Neutral'] ? 'Idle_Neutral' : Object.keys(s.lower)[0]; lowFreeze = -1; }
+    if(lowFreeze >= 0) freezeLowerPose(s, lowKey, lowFreeze);   // pose figee (crouch / saut)
+    else crossfadeLayer(s, 'lower', lowKey, 0.12);            // locomotion en boucle (crossfade fluide)
 
     // HAUT DU CORPS
     if(isSaber){
@@ -3009,16 +3025,9 @@ function animateSoldierRigged(s, anim, dt, t){
     s._wasFiring = firing;
 
     if(s.mixer) s.mixer.update(dt);
-    // pose de saut procedurale sur les jambes (par-dessus la couche basse) en l'air
-    const _jb = (GAMECFG.MODELS.jump_pose && GAMECFG.MODELS.jump_pose.blend) || 12;
-    s.jumpW = (s.jumpW || 0) + ((!grounded ? 1 : 0) - (s.jumpW || 0)) * Math.min(1, dt * _jb);
-    applyJumpPose(s, s.jumpW || 0);
-    // pose ACCROUPIE sur le BAS du corps (jambes), par-dessus la locomotion, quand on input crouch au sol
-    const _cb = (GAMECFG.MODELS.crouch_pose && GAMECFG.MODELS.crouch_pose.blend) || 10;
-    s.crouchW = (s.crouchW || 0) + ((crouch && grounded ? 1 : 0) - (s.crouchW || 0)) * Math.min(1, dt * _cb);
-    applyCrouchPose(s, s.crouchW || 0);
-    applySpineAim(s, anim);     // pitch (regard haut/bas) conserve
-    applyBodyAim(s, anim, dt);  // twist + rotation corps vers la visee (+ lean crouch du torse via crouchW)
+    // (saut/crouch = clips FIGES sur le bas — plus de rotation manuelle des jambes)
+    applySpineAim(s, anim);     // pitch (regard haut/bas)
+    applyBodyAim(s, anim, dt);  // twist + DELAY de rotation haut/bas vers la visee
     return;
   }
 
