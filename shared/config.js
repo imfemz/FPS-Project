@@ -540,10 +540,10 @@
       SLOWDOWN: 0.5,
       // Plafond ABSOLU du ralentissement (0.55 = caméra jamais en dessous de 45% de sa vitesse près
       // d'une cible) → garde la visée RÉACTIVE. Monte vers 0.8 pour plus collant, baisse pour plus brut.
-      SLOWDOWN_MAX: 0.25,
+      SLOWDOWN_MAX: 0.15,
       // Force du magnétisme rotationnel, en fraction de STRENGTH. 0 = slowdown pur (zéro rotation).
       // Garde-le bas pour rester "PC" : la rotation est ce qui se sent le plus "auto-aim".
-      ROTATION: 1,
+      ROTATION: 1.5,
       // Taille de la bulle autour de l'ennemi, en DEGRÉS. Le réticule doit entrer dedans pour que
       // l'assist s'active. Plus grand = s'accroche de plus loin. (Avant : ~8° en dur.)
       BUBBLE_DEG: 0,
