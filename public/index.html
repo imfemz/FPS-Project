@@ -5208,6 +5208,13 @@ function updateAnimDebug(){
     'firing: ' + (a.f?'OUI':'non') + '   grounded: ' + (a.grounded===false?'NON':(a.grounded?'oui':'?')) + '\n' +
     'localVel vx,vz: ' + fmt(a.vx) + ', ' + fmt(a.vz) + '\n' +
     'aimYaw: ' + fmt(a.aimYaw) + '  bodyYaw: ' + fmt(s.bodyYaw) + '  twist: ' + fmt(s.twistYaw) + '\n' +
+    'legs LIVE: ' + (function(){
+      if(!s._dbgShin && s.inst){ s.inst.traverse(function(n){ if(n.name==='DEF-shin.L') s._dbgShin=n; else if(n.name==='DEF-thigh.L') s._dbgThigh=n; }); }
+      var d=function(b){ return b ? (b.rotation.x*57.2958).toFixed(0)+'deg' : '-'; };
+      var lw = s.lowerCur && s.lowerCur.getEffectiveWeight ? s.lowerCur.getEffectiveWeight().toFixed(2) : '-';
+      var lr = s.lowerCur && s.lowerCur.isRunning ? (s.lowerCur.isRunning()?'play':'stop') : '-';
+      return 'shin '+d(s._dbgShin)+' thigh '+d(s._dbgThigh)+' | lowerW '+lw+' '+lr;
+    })() + '\n' +
     'DEF-hand.R: ' + idx1 + '   armes: ' + watt + '\n' +
     'layered: ' + (s.layered?'OUI':'non');
 }
