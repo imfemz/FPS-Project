@@ -2565,7 +2565,7 @@ function buildLayerClips(){
    extrait du modele arms.glb les meshes 'saber'/'lightsaber'.
    ============================================================ */
 const WEAPON_ATTACH_CONFIG = {
-  R69:     { file:'/models/weapon.glb',  bone:'Index1.R', position:{x:0,y:0,z:0}, rotation:{x:0,y:Math.PI,z:0}, scale:0.429 },  // valeurs de R69_swat.glb (rot 180Y, scale 0.429) ; scale x compensation = taille native x0.429
+  R69:     { file:'/models/weapon.glb',  bone:'Index1.R', position:{x:0,y:0.001,z:0}, rotation:{x:100*Math.PI/180,y:-22*Math.PI/180,z:95*Math.PI/180}, scale:0.35 },  // cale en jeu (tuneWeapon): rotDeg 100,-22,95
   WINGMAN: { file:'/models/wingman.glb', bone:'Index1.R', position:{x:0,y:0,z:0}, rotation:{x:0,y:0,z:0}, scale:1 },
   SABER:   { fromArms:true,              bone:'Index1.R', position:{x:0,y:0,z:0}, rotation:{x:0,y:0,z:0}, scale:1 },
 };
