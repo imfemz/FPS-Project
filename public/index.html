@@ -2743,7 +2743,12 @@ function createSoldierRigged(accent){
     console.warn('[ANIM] bone Index1.R introuvable, bones dispo: ' + dispo.join(','));
   }
 
-  const s = { root, inst, rigged:true, mixer, actions, flash, accent, spine, legs, aim, jumpW:0,
+  // Bone 'Body' (parent de Hips ET des jambes) : on capture sa pose de repos pour ANNULER son lean
+  // de course sur le HAUT du corps (separation propre haut/bas), tout en le gardant sur les jambes/pieds.
+  let bodyBone = null;
+  inst.traverse(n=>{ if(!bodyBone && n && n.name === 'Body'){ bodyBone = n; if(!n.userData.qRest) n.userData.qRest = n.quaternion.clone(); } });
+
+  const s = { root, inst, rigged:true, mixer, actions, flash, accent, spine, legs, aim, bodyBone, jumpW:0,
               lower, upper, lowerCur:null, lowerKey:null, upperCur:null, upperKey:null,
               upperOneShot:false, weaponSocket, index1R, weapons:{}, weaponIdx:-1,
               bodyYaw:0, aimYaw:0, twistYaw:0, layered:false,
@@ -2860,7 +2865,7 @@ function fireUpperShoot(s){
 
 const _wrapTwoPi = Math.PI*2;
 function wrapAngle(a){ a = a % _wrapTwoPi; if(a > Math.PI) a -= _wrapTwoPi; else if(a < -Math.PI) a += _wrapTwoPi; return a; }
-const _aimQ = new THREE.Quaternion(), _aimY = new THREE.Vector3(0,1,0);
+const _aimQ = new THREE.Quaternion(), _aimY = new THREE.Vector3(0,1,0), _leanInv = new THREE.Quaternion();
 // Phase 4 : twist procedural du corps (Hips/Abdomen/Torso) vers la visee, APRES mixer.update.
 // Tourne progressivement le facing du corps si l'ecart depasse maxOff ; repartit le reste en twist.
 // Combine avec le pitch (applySpineAim conserve son additif sur les vertebres).
@@ -2893,8 +2898,14 @@ function applyBodyAim(s, anim, dt){
     _aimQ.setFromAxisAngle(_aimY, s.twistYaw * dist[name]);
     if(spineSet.indexOf(name) !== -1 && SA.enabled !== false){
       b.quaternion.multiply(_aimQ);                       // pitch deja applique -> compose le twist
+    } else if(s.layered && s.bodyBone && s.bodyBone.userData.qRest){
+      // Hips en mode COUCHES : on ANNULE le lean de Body (rotation du clip de course) -> le HAUT du
+      // corps est pilote uniquement par la visee (separation propre), les jambes gardent le mouvement
+      // de Body. Hips_local = Body_local⁻¹ × Body_rest × Hips_rest × twist.
+      _leanInv.copy(s.bodyBone.quaternion).invert().multiply(s.bodyBone.userData.qRest);
+      b.quaternion.copy(_leanInv).multiply(b.userData.qRest).multiply(_aimQ);
     } else {
-      b.quaternion.copy(b.userData.qRest).multiply(_aimQ); // Hips : qRest * twist
+      b.quaternion.copy(b.userData.qRest).multiply(_aimQ); // fallback plein-corps : pas d'annulation
     }
   }
 }
