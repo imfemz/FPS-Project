@@ -2939,8 +2939,8 @@ function animateSoldierRigged(s, anim, dt, t){
     else {
       const ax = Math.abs(vx), az = Math.abs(vz);
       if(az >= ax && vz > TR_RUN) lowKey = 'Run_Shoot';      // avance
-      else if(ax > az && vx > TR_RUN) lowKey = 'Run_Right';  // droite
-      else if(ax > az && vx < -TR_RUN) lowKey = 'Run_Left';  // gauche
+      else if(ax > az && vx > TR_RUN) lowKey = 'Run_Left';   // droite -> clip Run_Left (mapping inverse : le clip etait a l'envers)
+      else if(ax > az && vx < -TR_RUN) lowKey = 'Run_Right'; // gauche -> clip Run_Right
       else lowKey = 'Walk';                                  // vitesse moderee / oblique
     }
     if(!s.lower[lowKey]) lowKey = s.lower['Idle_Neutral'] ? 'Idle_Neutral' : Object.keys(s.lower)[0];

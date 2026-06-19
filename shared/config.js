@@ -583,7 +583,7 @@
       character_scale: 1,
       // Visee haut-du-corps de l'adversaire : la colonne suit le pitch (regard haut/bas).
       // sign: -1 si ca penche a l'envers ; pitch_gain: amplitude ; bones: vertebres concernees.
-      spine_aim: { enabled: true, pitch_gain: 0.65, sign: 1, axis: 'x', bones: ['Abdomen','Torso','Chest'], max: 1.3 },
+      spine_aim: { enabled: true, pitch_gain: 0.65, sign: -1, axis: 'x', bones: ['Abdomen','Torso','Chest'], max: 1.3 },
       // ===== ANIM EN COUCHES (third-person bots & remotes) =====
       // Visee CORPS (twist procedural Hips/Abdomen/Torso vers la cible) : le perso ne tourne plus
       // le dos en tirant. max_deg = torsion max avant que le corps pivote ; smooth = lissage.
