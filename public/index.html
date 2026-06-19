@@ -2507,11 +2507,13 @@ function makeLayerClip(srcClip, boneSetFn, suffix){
   if(!srcClip) return null;
   const tracks = [];
   for(const tr of srcClip.tracks){
-    const [node, prop] = _trackNodeAndProp(tr.name);
-    if(prop !== 'quaternion') continue;                 // rotation uniquement
-    // tolerance noms sans points (au cas ou GLTFLoader strip) : compare brut ET strip
+    const [node] = _trackNodeAndProp(tr.name);
+    // tolerance des conventions de nommage (UpperLeg.L / UpperLeg_L / UpperLegL)
     const ok = boneSetFn(node) || boneSetFn(node.replace(/_/g,'.'));
     if(!ok) continue;
+    // On garde TOUTES les tracks du bone (quaternion + POSITION + scale). Les anims Run/Walk
+    // bakees depuis de l'IK ont des tracks de POSITION sur jambes/pieds : les droper deformait
+    // (etirait) les jambes. Aucun drift racine : ni LOWER ni UPPER n'inclut le Hips/Root.
     tracks.push(tr.clone());
   }
   if(!tracks.length) return null;
@@ -2621,7 +2623,14 @@ function attachWeaponsToSoldier(s){
       const m = _cloneWeaponModel(tpl);
       m.position.set(cfg.position.x, cfg.position.y, cfg.position.z);
       m.rotation.set(cfg.rotation.x, cfg.rotation.y, cfg.rotation.z);
-      const sc = cfg.scale || 1; m.scale.multiplyScalar(sc);
+      // COMPENSE l'echelle MONDE du bone : le modele est auto-scale -> Index1.R a une grosse echelle,
+      // donc une arme a scale 1 apparaissait ENORME. On rend l'arme a sa taille NATIVE x cfg.scale,
+      // independamment de l'echelle du rig. cfg.scale reste le reglage fin de taille.
+      s.weaponSocket.updateWorldMatrix(true, false);
+      const _ws = new THREE.Vector3(); s.weaponSocket.getWorldScale(_ws);
+      const _inv = 1 / (_ws.x || 1);
+      m.scale.multiplyScalar((cfg.scale || 1) * _inv);
+      if(ANIM_DEBUG) console.log('[ANIM] arme '+key+' boneWorldScale='+_ws.x.toFixed(3)+' -> localScale='+((cfg.scale||1)*_inv).toFixed(4));
       m.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.frustumCulled = false; } });
       m.visible = false;
       s.weapons[key] = m;
