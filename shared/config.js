@@ -591,7 +591,7 @@
       // Bas du corps par INPUT : saut & crouch = clips FIGES sur une frame (pose statique). Live: tuneLowerFrame(jumpFrame, crouchFrame).
       lower_pose: { fps: 24, jump_clip: 'Run', jump_frame: 4, crouch_clip: 'Death', crouch_frame: 7 },
       // Seuils de vitesse LOCALE (m/s) pour le choix du clip de jambes (course/marche/idle).
-      layer_anim: { run_thresh: 0.6, walk_thresh: 0.2 },
+      layer_anim: { run_thresh: 0.15, walk_thresh: 0.2 },
       // Saut : pose procedurale (plus de roulade). euler [x,y,z] rad par bone. sign: -1 si jambes a l'envers.
       jump_pose: { enabled: true, blend: 12, sign: 1, upperleg: [0.85, 0, 0.08], lowerleg: [-0.95, 0, 0] },
       // Accroupi : flexion procedurale des jambes (squat), MEME convention que jump_pose.
