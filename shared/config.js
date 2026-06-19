@@ -594,7 +594,9 @@
       jump_pose: { enabled: true, blend: 12, sign: 1, upperleg: [0.85, 0, 0.08], lowerleg: [-0.95, 0, 0] },
       // Accroupi : flexion procedurale des jambes (squat), MEME convention que jump_pose.
       // upperleg = cuisse vers l'avant/ecartee, lowerleg = genou plie. blend = vitesse d'entree/sortie.
-      crouch_pose: { enabled: true, blend: 10, sign: 1, upperleg: [0.5, 0, 0.16], lowerleg: [-0.85, 0, 0] },
+      // Pose ACCROUPIE (3e pers) plug au BAS du corps en mode couches. Jambes via sign ; lean torse (hips/abdomen)
+      // compose par-dessus la visee. Reglable en live : tuneCrouch(upperlegX, lowerlegX, hipsX, abdomenX) en degres.
+      crouch_pose: { enabled: true, blend: 10, sign: 1, upperleg: [0.9, 0, 0.12], lowerleg: [-1.3, 0, 0], hips: [-0.35, 0, 0], abdomen: [0.45, 0, 0], torso: [0, 0, 0] },
       character_yaw_deg: 0,
       hitbox: {
         // Capsule ÉLARGIE pour bien englober le model 3D (torse ~0.34 de demi-largeur, haut ~1.79 m).

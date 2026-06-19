@@ -2667,6 +2667,19 @@ window.tuneWeapon = function(key, px,py,pz, rxDeg,ryDeg,rzDeg, sc){
   console.log('[tuneWeapon] '+key+'  pos('+cfg.position.x+','+cfg.position.y+','+cfg.position.z+')  rotDeg('+
     (cfg.rotation.x*R).toFixed(1)+','+(cfg.rotation.y*R).toFixed(1)+','+(cfg.rotation.z*R).toFixed(1)+')  scale '+cfg.scale+'  | applique a '+n+' soldat(s)');
 };
+// ===== REGLAGE LIVE de la pose ACCROUPIE (console) — angles en DEGRES, axe X (lean avant/arriere) =====
+// Ex: tuneCrouch(50, -75, -20, 25)  (upperlegX, lowerlegX, hipsX, abdomenX) ; 5e arg optionnel = upperlegZ (ecartement).
+// Mise a jour LIVE (la pose lit le config chaque frame) : accroupis-toi pour voir, puis redonne-moi les valeurs.
+window.tuneCrouch = function(ulX, llX, hipsX, abdX, ulZ){
+  const CP = GAMECFG.MODELS && GAMECFG.MODELS.crouch_pose; if(!CP){ console.warn('[tuneCrouch] crouch_pose absent'); return; }
+  const D = Math.PI/180, R = 180/Math.PI;
+  if(ulX != null) CP.upperleg = [ulX*D, 0, (ulZ != null ? ulZ : (CP.upperleg[2]||0)*R) * D];
+  if(llX != null) CP.lowerleg = [llX*D, 0, 0];
+  if(hipsX != null) CP.hips = [hipsX*D, 0, 0];
+  if(abdX != null) CP.abdomen = [abdX*D, 0, 0];
+  console.log('[tuneCrouch] upperlegX '+(CP.upperleg[0]*R).toFixed(0)+' upperlegZ '+(CP.upperleg[2]*R).toFixed(0)+
+    ' lowerlegX '+(CP.lowerleg[0]*R).toFixed(0)+' hipsX '+(CP.hips[0]*R).toFixed(0)+' abdomenX '+(CP.abdomen[0]*R).toFixed(0));
+};
 // Montre l'arme correspondant a l'index, cache les autres.
 function setSoldierWeapon(s, idx){
   if(!s) return;
@@ -2867,6 +2880,7 @@ function fireUpperShoot(s){
 const _wrapTwoPi = Math.PI*2;
 function wrapAngle(a){ a = a % _wrapTwoPi; if(a > Math.PI) a -= _wrapTwoPi; else if(a < -Math.PI) a += _wrapTwoPi; return a; }
 const _aimQ = new THREE.Quaternion(), _aimY = new THREE.Vector3(0,1,0), _leanInv = new THREE.Quaternion();
+const _crLeanE = new THREE.Euler(), _crLeanQ = new THREE.Quaternion();   // lean crouch (bassin/abdomen)
 // Phase 4 : twist procedural du corps (Hips/Abdomen/Torso) vers la visee, APRES mixer.update.
 // Tourne progressivement le facing du corps si l'ecart depasse maxOff ; repartit le reste en twist.
 // Combine avec le pitch (applySpineAim conserve son additif sur les vertebres).
@@ -2894,6 +2908,8 @@ function applyBodyAim(s, anim, dt){
   const SA = (GAMECFG.MODELS && GAMECFG.MODELS.spine_aim) || {};
   const spineSet = (SA.bones || ['Abdomen','Torso','Chest']);
   const dist = AB.dist || { Hips:0.45, Abdomen:0.35, Torso:0.20 };
+  const CP = (GAMECFG.MODELS && GAMECFG.MODELS.crouch_pose) || {};
+  const cw = s.crouchW || 0;
   for(const name in dist){
     const b = s.aim[name]; if(!b || !b.userData.qRest) continue;
     _aimQ.setFromAxisAngle(_aimY, s.twistYaw * dist[name]);
@@ -2907,6 +2923,11 @@ function applyBodyAim(s, anim, dt){
       b.quaternion.copy(_leanInv).multiply(b.userData.qRest).multiply(_aimQ);
     } else {
       b.quaternion.copy(b.userData.qRest).multiply(_aimQ); // fallback plein-corps : pas d'annulation
+    }
+    // LEAN CROUCH : penche bassin/abdomen quand accroupi, COMPOSE par-dessus la visee (garde l'aim).
+    if(cw > 0.01){
+      const cl = (name === 'Hips') ? CP.hips : (name === 'Abdomen') ? CP.abdomen : (name === 'Torso') ? CP.torso : null;
+      if(cl){ _crLeanE.set(cl[0]*cw, cl[1]*cw, cl[2]*cw); b.quaternion.multiply(_crLeanQ.setFromEuler(_crLeanE)); }
     }
   }
 }
@@ -2928,7 +2949,7 @@ function animateSoldierRigged(s, anim, dt, t){
 
   // --- Mode COUCHES (si les clips de couche sont prets) : sinon fallback plein-corps ---
   const canLayer = s.lower && s.upper && Object.keys(s.lower).length && Object.keys(s.upper).length
-                   && !crouch && !slide && !climb;   // crouch/slide/climb -> plein-corps procedural existant
+                   && !slide && !climb;   // crouch GERE dans la couche (pose accroupie sur le bas) ; slide/climb -> plein-corps
 
   if(canLayer){
     // bascule depuis le plein-corps : on coupe l'action idle full-body (sinon ses tracks luttent)
@@ -2991,9 +3012,12 @@ function animateSoldierRigged(s, anim, dt, t){
     const _jb = (GAMECFG.MODELS.jump_pose && GAMECFG.MODELS.jump_pose.blend) || 12;
     s.jumpW = (s.jumpW || 0) + ((!grounded ? 1 : 0) - (s.jumpW || 0)) * Math.min(1, dt * _jb);
     applyJumpPose(s, s.jumpW || 0);
-    s.crouchW = (s.crouchW || 0) + (0 - (s.crouchW || 0)) * Math.min(1, dt * 10);
+    // pose ACCROUPIE sur le BAS du corps (jambes), par-dessus la locomotion, quand on input crouch au sol
+    const _cb = (GAMECFG.MODELS.crouch_pose && GAMECFG.MODELS.crouch_pose.blend) || 10;
+    s.crouchW = (s.crouchW || 0) + ((crouch && grounded ? 1 : 0) - (s.crouchW || 0)) * Math.min(1, dt * _cb);
+    applyCrouchPose(s, s.crouchW || 0);
     applySpineAim(s, anim);     // pitch (regard haut/bas) conserve
-    applyBodyAim(s, anim, dt);  // twist + rotation corps vers la visee
+    applyBodyAim(s, anim, dt);  // twist + rotation corps vers la visee (+ lean crouch du torse via crouchW)
     return;
   }
 
