@@ -5706,6 +5706,7 @@ const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist:
     damage_player: true,      // les tirs des bots t'infligent des degats reels
     move_full_speed: 9,       // vitesse joueur (m/s) ou le malus de MOUVEMENT est au max (statique = 0 malus)
     far_hit_mult: 0.6,        // hit a portee MAX = base x ce mult ; au CONTACT = base -> loin = un peu moins
+    evade_react: 0.3,         // s : DELAI de reaction avant que le bot esquive apres avoir ete touche (plus = plus facile a viser)
     evade_jump_chance: 0.3,   // proba de SAUTER en esquive quand on touche un bot (pas a chaque tir)
     evade_jump_cd: 1200,      // ms : delai mini entre 2 sauts d'esquive
     gravity: 22, jump_vel: 6.6,
@@ -5949,6 +5950,13 @@ function updateLocalBots(dt){
       b.yaw = Math.atan2(-vx, -vz); run = true;
     }
 
+    // Reaction RETARDEE au hit : apres le delai, declenche l'esquive (+ saut eventuel) -> pas de dodge instantane
+    if(ai.hitReactT > 0){ ai.hitReactT -= dt;
+      if(ai.hitReactT <= 0 && ai.pendEvade){ ai.pendEvade = false; ai.evadeT = Math.max(ai.evadeT||0, 0.7);
+        const _nw = performance.now();
+        if(Math.random() < (A.evade_jump_chance ?? 0.3) && !ai.air && _nw > (ai._evadeJumpAt||0)){ ai.jumpQueued = true; ai._evadeJumpAt = _nw + (A.evade_jump_cd ?? 1200); }
+      }
+    }
     // Esquive (sous le feu) : juke lateral renforce
     if(ai.evadeT > 0){ ai.evadeT -= dt;
       const px = dxp/distP, pz = dzp/distP;
@@ -6029,8 +6037,11 @@ function applyLocalBotDamage(id, b, dmg, head, melee){
     b.knockX = (dx/d) * kdist * kd;   // v0 = distance × taux de décroissance → intègre à ~kdist mètres
     b.knockZ = (dz/d) * kdist * kd;
   }
-  if(b.ai && b.hp > 0){ b.ai.evadeT = Math.max(b.ai.evadeT||0, 0.7); const _A=LBOT.ai||{}; const _now=performance.now();
-    if(Math.random() < (_A.evade_jump_chance ?? 0.3) && !b.ai.air && _now > (b.ai._evadeJumpAt||0)){ b.ai.jumpQueued = true; b.ai._evadeJumpAt = _now + (_A.evade_jump_cd ?? 1200); }
+  if(b.ai && b.hp > 0){ const _A=LBOT.ai||{};
+    // REACTION RETARDEE au hit : on ne dodge PAS a l'instant du tir -> petit delai avant l'esquive
+    // (+ saut), declenche dans updateLocalBots. Sinon le bot juke instantanement = trop dur a viser.
+    b.ai.hitReactT = Math.max(b.ai.hitReactT||0, _A.evade_react ?? 0.3);
+    b.ai.pendEvade = true;
     if(b.mv && Math.random()<0.6) b.mv.strafeDir *= -1; }
   if(b.hp <= 0){
     onBotKill({ id, head: !!head });
