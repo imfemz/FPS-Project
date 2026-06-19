@@ -6052,6 +6052,20 @@ function _rR(a){ return a[0] + Math.random()*(a[1]-a[0]); }
 function _rI(a){ return a[0] + Math.floor(Math.random()*(a[1]-a[0]+1)); }
 function botShoot(b, tier, playerSpeed, distP){
   b.ai.fireFlash = 0.08;
+  // visuel de tir 3e personne (comme les adversaires en ligne) : muzzle flash au canon + tracer vers le joueur
+  if(b.soldier){
+    const _eye = new THREE.Vector3(me.pos.x, me.pos.y + (me.eye || 1.62), me.pos.z);
+    const _bp  = new THREE.Vector3(b.pos.x, b.pos.y + 1.4, b.pos.z);
+    const _dir = _eye.clone().sub(_bp).normalize();
+    const _start = soldierMuzzleWorld(b.soldier, _dir) || _bp;
+    spawnTracer(_start, _eye, 0xffd27a);                     // tracer JAUNE vers le joueur
+    if(b.soldier.flash){
+      const f = b.soldier.flash;
+      if(b.soldier.root) b.soldier.root.worldToLocal(f.position.copy(_start));   // flash AU CANON
+      f.scale.set(.3+Math.random()*.15, .3+Math.random()*.15, 1);
+      f.visible = true; setTimeout(()=>{ f.visible = false; }, 60);
+    }
+  }
   const A = LBOT.ai || {};
   // Precision = base x MOUVEMENT x DISTANCE :
   //  - plus le joueur va vite, moins ca touche (statique = max de hit)
