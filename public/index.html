@@ -2486,7 +2486,12 @@ function _isUpperBone(name){
   for(const p of _UPPER_PREFIX){ if(name === p || name.indexOf(p) === 0) return true; }
   return false;
 }
-function _isLowerBone(name){ return LOWER_BONES.indexOf(name) !== -1; }
+// Normalise un nom de bone (retire . _ espaces) pour matcher QUELLE QUE SOIT la convention
+// d'export : 'UpperLeg.L' / 'UpperLeg_L' / 'UpperLegL'. Le rig SWAT reel exporte SANS separateur
+// (UpperLegL, Index1R, WristR...) -> sans ca, les tracks LOWER ne matchaient pas (jambes en fallback).
+function _normBone(n){ return (n||'').replace(/[._\s]/g,''); }
+const _LOWER_NORM = LOWER_BONES.map(_normBone);
+function _isLowerBone(name){ return _LOWER_NORM.indexOf(_normBone(name)) !== -1; }
 
 // Nom de node d'une track Three : "<NodeName>.<prop>". Les bones contiennent des '.'
 // (UpperLeg.L) -> on split sur le DERNIER point. Robuste aux deux conventions de nommage
@@ -2692,7 +2697,8 @@ function createSoldierRigged(accent){
 
   // Bone d'attache des armes (Index1.R) + socket
   let index1R = null;
-  inst.traverse(n=>{ if(!index1R && n && n.name === 'Index1.R') index1R = n; });
+  const _wantBone = _normBone((WEAPON_ATTACH_CONFIG.R69 && WEAPON_ATTACH_CONFIG.R69.bone) || 'Index1.R');
+  inst.traverse(n=>{ if(!index1R && n && n.name && _normBone(n.name) === _wantBone) index1R = n; });   // match tolerant (Index1R vs Index1.R)
   let weaponSocket = null;
   if(index1R){
     weaponSocket = new THREE.Object3D(); weaponSocket.name = 'WeaponSocket_R';
