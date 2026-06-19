@@ -822,8 +822,8 @@
       },
     },
     TEXTURES: {
-      sky: '/textures/moon_sky.jpg', floor: '/textures/floor.jpg',
-      wall: '/textures/wall.jpg', crate: '/textures/crate.jpg',
+      sky: '/textures/moon_sky.jpg', floor: '/textures/Asphalt_001_COLOR.png',
+      wall: '/textures/Asphalt_001_COLOR.png', crate: '/textures/crate.jpg',
       platform: '/textures/platform.jpg', ramp: '/textures/ramp.jpg',
     },
     TEXTURE_REPEAT: { floor: 10, wall: 3, crate: 1, platform: 2, ramp: 2 },
