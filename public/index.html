@@ -2540,7 +2540,10 @@ function buildLayerClips(){
   for(const sn of LOWER_CLIP_SOURCES){
     const src = _findClipByShortName(clips, sn);
     if(!src){ console.warn('[ANIM] clip manquant (LOWER):', sn); continue; }
-    const c = makeLayerClip(src, _isLowerBone, '_LOWER', _isBodyBone);   // + bob du corps (position de Body)
+    // Inclut Body ENTIEREMENT (position + rotation) : le bob ET le lean de course. Les jambes (sous Body)
+    // doivent suivre exactement le mouvement du corps comme dans l'anim plein-corps, sinon cheville (bout
+    // de LowerLeg) et pied (Foot, sous Root) se decalent -> pied deforme. La visee (Hips, enfant de Body) compose par-dessus.
+    const c = makeLayerClip(src, (n)=> _isLowerBone(n) || _isBodyBone(n), '_LOWER');
     if(c) lower[sn] = c; else console.warn('[ANIM] aucune track LOWER pour', sn);
   }
   for(const sn of UPPER_CLIP_SOURCES){
@@ -2615,33 +2618,54 @@ function _cloneWeaponModel(tpl){
   let skinned = false; tpl.traverse(o=>{ if(o.isSkinnedMesh) skinned = true; });
   return skinned ? cloneRigged(tpl) : tpl.clone(true);
 }
+// Applique pos/rot/scale (config) a une arme attachee. COMPENSE l'echelle monde du bone (auto-scale du rig
+// -> Index1.R a une grosse echelle, sinon l'arme est enorme). Repart de l'echelle NATIVE du GLB -> re-appelable.
+function _applyWeaponOffset(s, key){
+  const cfg = WEAPON_ATTACH_CONFIG[key], m = s && s.weapons && s.weapons[key];
+  if(!cfg || !m || !s.weaponSocket) return;
+  m.position.set(cfg.position.x, cfg.position.y, cfg.position.z);
+  m.rotation.set(cfg.rotation.x, cfg.rotation.y, cfg.rotation.z);
+  s.weaponSocket.updateWorldMatrix(true, false);
+  const ws = new THREE.Vector3(); s.weaponSocket.getWorldScale(ws);
+  const nat = m.userData._natScale || new THREE.Vector3(1,1,1);
+  m.scale.set(nat.x, nat.y, nat.z).multiplyScalar((cfg.scale || 1) / (ws.x || 1));
+}
 // Attache (asynchrone) les 3 armes au socket du soldat, cachees ; applique offsets de config.
 function attachWeaponsToSoldier(s){
   if(!s || !s.weaponSocket) return;   // pas de bone Index1.R -> deja warn
   for(const key of ['R69','WINGMAN','SABER']){
-    const cfg = WEAPON_ATTACH_CONFIG[key];
     getThirdPersonWeapon(key).then(tpl=>{
       if(!tpl || !s.weaponSocket) return;
       const m = _cloneWeaponModel(tpl);
-      m.position.set(cfg.position.x, cfg.position.y, cfg.position.z);
-      m.rotation.set(cfg.rotation.x, cfg.rotation.y, cfg.rotation.z);
-      // COMPENSE l'echelle MONDE du bone : le modele est auto-scale -> Index1.R a une grosse echelle,
-      // donc une arme a scale 1 apparaissait ENORME. On rend l'arme a sa taille NATIVE x cfg.scale,
-      // independamment de l'echelle du rig. cfg.scale reste le reglage fin de taille.
-      s.weaponSocket.updateWorldMatrix(true, false);
-      const _ws = new THREE.Vector3(); s.weaponSocket.getWorldScale(_ws);
-      const _inv = 1 / (_ws.x || 1);
-      m.scale.multiplyScalar((cfg.scale || 1) * _inv);
-      if(ANIM_DEBUG) console.log('[ANIM] arme '+key+' boneWorldScale='+_ws.x.toFixed(3)+' -> localScale='+((cfg.scale||1)*_inv).toFixed(4));
+      m.userData._natScale = m.scale.clone();   // echelle native du GLB (avant offsets), pour re-tuning live
       m.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.frustumCulled = false; } });
       m.visible = false;
       s.weapons[key] = m;
       s.weaponSocket.add(m);
-      // si l'arme courante du soldat est deja celle-ci, l'afficher
+      _applyWeaponOffset(s, key);
       if(s.weaponIdx >= 0 && _weaponKeyForIdx(s.weaponIdx) === key) m.visible = true;
     });
   }
 }
+// ===== REGLAGE LIVE des offsets d'arme 3e pers. (console) — rotation en DEGRES =====
+// Ex: tuneWeapon('R69', 0,0,0, 0,90,0, 0.43)  puis lis les valeurs loggees et redonne-les moi.
+// Sans args de valeurs: tuneWeapon('R69') reapplique + affiche les valeurs courantes.
+window.tuneWeapon = function(key, px,py,pz, rxDeg,ryDeg,rzDeg, sc){
+  key = String(key||'R69').toUpperCase();
+  const cfg = WEAPON_ATTACH_CONFIG[key];
+  if(!cfg){ console.warn('[tuneWeapon] arme inconnue:', key, '— cles:', Object.keys(WEAPON_ATTACH_CONFIG).join(',')); return; }
+  const D = Math.PI/180, R = 180/Math.PI;
+  if(arguments.length >= 8){
+    cfg.position = { x:+px, y:+py, z:+pz };
+    cfg.rotation = { x:rxDeg*D, y:ryDeg*D, z:rzDeg*D };
+    cfg.scale = +sc;
+  }
+  let n = 0; const apply = (sol)=>{ if(sol && sol.weapons && sol.weapons[key]){ _applyWeaponOffset(sol, key); n++; } };
+  if(typeof botMgr !== 'undefined' && botMgr) for(const b of botMgr.values()){ if(b) apply(b.soldier); }
+  if(typeof remote !== 'undefined' && remote) apply(remote.soldier);
+  console.log('[tuneWeapon] '+key+'  pos('+cfg.position.x+','+cfg.position.y+','+cfg.position.z+')  rotDeg('+
+    (cfg.rotation.x*R).toFixed(1)+','+(cfg.rotation.y*R).toFixed(1)+','+(cfg.rotation.z*R).toFixed(1)+')  scale '+cfg.scale+'  | applique a '+n+' soldat(s)');
+};
 // Montre l'arme correspondant a l'index, cache les autres.
 function setSoldierWeapon(s, idx){
   if(!s) return;
