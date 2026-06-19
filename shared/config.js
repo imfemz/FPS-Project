@@ -515,11 +515,11 @@
     // rejoint sa vitesse cible en douceur → micro-ajustements fluides au centre, et léger glissement
     // quand on relâche le stick (la visée ne s'arrête pas net, comme sur Apex).
     // ↑ = plus de glisse/douceur (mais plus de latence) ; 0 = arrêt instantané (sec, non-Apex).
-    GAMEPAD_SMOOTH: 0.02,
+    GAMEPAD_SMOOTH: 0.00,
     // Anti-deadzone : compense un éventuel "trou" matériel au centre du stick (la manette/le
     // navigateur peut avaler les tout petits mouvements). 0 = off. Monte par petits pas (0.02-0.06)
     // SEULEMENT si tu sens encore une zone morte au centre malgré le lissage.
-    GAMEPAD_ANTIDEADZONE: 0.05,
+    GAMEPAD_ANTIDEADZONE: 0.06,
     // ===== Vitesses de visée façon Apex ALC (degrés/seconde au stick à fond) =====
     // Fourchettes recommandées : Yaw 220-310, Pitch 160-200, Extra Yaw/Pitch 0, Ramp-up 0 (linéaire).
     GAMEPAD_YAW_SPEED: 220,        // hipfire horizontal (milieu de 220-310)
@@ -537,7 +537,7 @@
       STRENGTH: 1,
       // Profondeur du ralentissement au centre, en fraction de STRENGTH. 1.0 = au plus près la
       // caméra tombe à (1 - STRENGTH) de sa vitesse (ex 0.3 => 70%). 0 = pas de slowdown du tout.
-      SLOWDOWN: 0.3,
+      SLOWDOWN: 0.6,
       // Plafond ABSOLU du ralentissement (0.55 = caméra jamais en dessous de 45% de sa vitesse près
       // d'une cible) → garde la visée RÉACTIVE. Monte vers 0.8 pour plus collant, baisse pour plus brut.
       SLOWDOWN_MAX: 0.45,
