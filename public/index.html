@@ -2887,7 +2887,7 @@ function animateSoldierRigged(s, anim, dt, t){
   if(s.weaponIdx !== wi) setSoldierWeapon(s, wi);
 
   // --- Mode COUCHES (si les clips de couche sont prets) : sinon fallback plein-corps ---
-  const canLayer = s.lower && s.upper && Object.keys(s.lower).length && Object.keys(s.upper).length
+  const canLayer = false && s.lower && s.upper && Object.keys(s.lower).length && Object.keys(s.upper).length
                    && !crouch && !slide && !climb;   // crouch/slide/climb -> plein-corps procedural existant
 
   if(canLayer){
