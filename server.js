@@ -430,6 +430,8 @@ wss.on('connection', (ws) => {
       const now = Date.now();
       if (now - (att.lastMelee || 0) < CONFIG.MELEE.interval) return;
       att.lastMelee = now;
+      // anime le swing sabre chez les autres clients (touche OU manque) -> Sword_Slash 3e pers
+      broadcastExcept(c.id, { t: 'swing', seat: c.seat });
       const d = m.d || [0, 0, -1];
       const dl = Math.hypot(d[0], d[1], d[2]) || 1;
       const dir = [d[0] / dl, d[1] / dl, d[2] / dl];

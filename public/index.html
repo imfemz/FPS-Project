@@ -1459,9 +1459,12 @@ function buildMap(){
       m.material.envMapIntensity = _ge;
     }
   }
-  // DA industrielle : look low-poly piloté par les matériaux (béton/acier/conteneur/caillebotis).
-  // applyCustomTextures() est volontairement désactivé (les textures désert écraseraient les couleurs).
+  // TEXTURES de la map : applique GAMECFG.TEXTURES (sol/mur/caisse/plateforme/rampe) sur tous les meshes.
+  // Pilotable depuis shared/config.js (TEXTURES + TEXTURE_REPEAT). Live : window.applyMapTextures().
+  applyCustomTextures();
 }
+// Re-applique les textures de la map a la volee (apres edition de GAMECFG.TEXTURES en console).
+window.applyMapTextures = function(){ try{ applyCustomTextures(); console.log('[map] textures re-appliquees'); }catch(e){ console.warn(e); } };
 function collide(pos, radius, feetY){
   pos.x = Math.max(-MAP.HALF+0.6, Math.min(MAP.HALF-0.6, pos.x));
   pos.z = Math.max(-MAP.HALF+0.6, Math.min(MAP.HALF-0.6, pos.z));
@@ -2525,7 +2528,7 @@ const _isBodyBone = (n)=> n === 'Body';   // bone porteur du bob (position seule
 // Cache des clips de couche (calcule une fois sur le template). Cle = nom de clip source.
 let LAYER_CLIPS = null;   // { lower:{name:clip}, upper:{name:clip} } ou null si pas pret
 const LOWER_CLIP_SOURCES = ['Run','Run_Back','Run_Left','Run_Right','Walk','Idle_Neutral','Death'];   // Death=pose crouch figee (frame), Run aussi fige pour le saut
-const UPPER_CLIP_SOURCES = ['Gun_Shoot','Idle_Sword','Sword_Slash','Idle_Neutral'];
+const UPPER_CLIP_SOURCES = ['Gun_Shoot','Idle_Sword','Sword_Slash','Idle_Neutral','HitRecieve'];
 function _findClipByShortName(clips, shortName){
   // les clips sont prefixes "CharacterArmature|" -> on matche le suffixe
   for(const c of clips){
@@ -2567,8 +2570,8 @@ function buildLayerClips(){
    ============================================================ */
 const WEAPON_ATTACH_CONFIG = {
   R69:     { file:'/models/weapon.glb',  bone:'Index1.R', position:{x:0,y:0.001,z:0}, rotation:{x:100*Math.PI/180,y:-22*Math.PI/180,z:95*Math.PI/180}, scale:0.35 },  // cale en jeu (tuneWeapon): rotDeg 100,-22,95
-  WINGMAN: { file:'/models/Wingman_swat.glb', bone:'Index1.R', position:{x:0,y:0,z:0}, rotation:{x:0,y:0,z:0}, scale:1 },  // place dans Blender (transform bake) ; affiner avec tuneWeapon('WINGMAN',...)
-  SABER:   { file:'/models/Saber_swat.glb',   bone:'Index1.R', position:{x:0,y:0,z:0}, rotation:{x:0,y:0,z:0}, scale:1 },  // place dans Blender (transform bake) ; affiner avec tuneWeapon('SABER',...)
+  WINGMAN: { file:'/models/Wingman_swat.glb', bone:'Index1.R', position:{x:0,y:0.001,z:0}, rotation:{x:100*Math.PI/180,y:-22*Math.PI/180,z:95*Math.PI/180}, scale:1 },  // MEME rotation que R69 ; scale 1 = taille bakee Blender. Affiner: tuneWeapon('WINGMAN',...)
+  SABER:   { file:'/models/Saber_swat.glb',   bone:'Index1.R', position:{x:0,y:0.001,z:0}, rotation:{x:100*Math.PI/180,y:-22*Math.PI/180,z:95*Math.PI/180}, scale:1 },  // MEME rotation que R69 ; scale 1 = taille bakee Blender. Affiner: tuneWeapon('SABER',...)
 };
 // weaponIdx (config WEAPONS) -> cle de WEAPON_ATTACH_CONFIG
 function _weaponKeyForIdx(idx){ return idx === 1 ? 'WINGMAN' : (idx === 2 ? 'SABER' : 'R69'); }
@@ -2767,6 +2770,7 @@ function createSoldierRigged(accent){
   if(index1R){
     weaponSocket = new THREE.Object3D(); weaponSocket.name = 'WeaponSocket_R';
     index1R.add(weaponSocket);
+    weaponSocket.add(flash);   // muzzle flash 3e pers. = au niveau de l'ARME (socket Index1.R), plus a la racine/tete
   } else {
     const dispo = []; inst.traverse(n=>{ if(n && n.name) dispo.push(n.name); });
     console.warn('[ANIM] bone Index1.R introuvable, bones dispo: ' + dispo.join(','));
@@ -2901,6 +2905,15 @@ function fireUpperShoot(s){
   if(s.upperCur && s.upperCur !== a) s.upperCur.crossFadeTo(a, 0.05, false);
   s.upperCur = a; s.upperKey = 'Gun_Shoot'; s.upperOneShot = true;
 }
+// Joue un clip HAUT en one-shot (slash sabre, reaction de douleur) sans toucher au bas du corps.
+function playUpperOnce(s, key, fade){
+  const a = s.upper && s.upper[key];
+  if(!a) return;
+  a.reset(); a.enabled = true; a.paused = false; a.setLoop(THREE.LoopOnce, 1);
+  a.clampWhenFinished = true; a.setEffectiveWeight(1); a.play();
+  if(s.upperCur && s.upperCur !== a) s.upperCur.crossFadeTo(a, fade ?? 0.06, false);
+  s.upperCur = a; s.upperKey = key; s.upperOneShot = true;
+}
 
 const _wrapTwoPi = Math.PI*2;
 function wrapAngle(a){ a = a % _wrapTwoPi; if(a > Math.PI) a -= _wrapTwoPi; else if(a < -Math.PI) a += _wrapTwoPi; return a; }
@@ -3003,16 +3016,14 @@ function animateSoldierRigged(s, anim, dt, t){
     else crossfadeLayer(s, 'lower', lowKey, 0.12);            // locomotion en boucle (crossfade fluide)
 
     // HAUT DU CORPS
-    if(isSaber){
-      // attaque sabre (hook futur) : anim.saber_attack -> Sword_Slash one-shot, sinon Idle_Sword
+    const hitUpper = s.hitUpperUntil && performance.now() < s.hitUpperUntil && s.upper['HitRecieve'];
+    if(hitUpper){
+      // reaction de douleur (HitRecieve) sur le HAUT seulement : les jambes gardent leur anim d'input
+      if(s.upperKey !== 'HitRecieve' || !s.upperOneShot) playUpperOnce(s, 'HitRecieve', 0.05);
+    } else if(isSaber){
+      // attaque sabre : anim.saber_attack -> Sword_Slash one-shot, sinon Idle_Sword
       if(anim.saber_attack && s.upper['Sword_Slash']){
-        if(s.upperKey !== 'Sword_Slash' || !s.upperOneShot){
-          const a = s.upper['Sword_Slash'];
-          a.reset(); a.enabled = true; a.paused = false; a.setLoop(THREE.LoopOnce, 1);
-          a.clampWhenFinished = true; a.setEffectiveWeight(1); a.play();
-          if(s.upperCur && s.upperCur !== a) s.upperCur.crossFadeTo(a, 0.06, false);
-          s.upperCur = a; s.upperKey = 'Sword_Slash'; s.upperOneShot = true;
-        }
+        if(s.upperKey !== 'Sword_Slash' || !s.upperOneShot) playUpperOnce(s, 'Sword_Slash', 0.06);
       } else {
         if(s.upperOneShot && s.upperCur && s.upperCur.isRunning()){ /* laisse finir le slash */ }
         else crossfadeLayer(s, 'upper', 'Idle_Sword', 0.12);
@@ -3088,7 +3099,14 @@ function playDeathAnim(s){
 }
 // Réaction de douleur courte (one-shot) qui revient ensuite à l'anim normale
 function playHitAnim(s){
-  if(!s || !s.actions || !s.actions.hit || s.currentKey==='death') return false;
+  if(!s || s.currentKey==='death') return false;
+  // Mode COUCHES : HitRecieve sur le HAUT du corps uniquement -> les jambes gardent leur anim d'input
+  if(s.layered && s.upper && s.upper['HitRecieve']){
+    s.hitUpperUntil = performance.now() + 420;
+    return true;
+  }
+  // Fallback PLEIN-CORPS (couches pas pretes ou clip upper absent)
+  if(!s.actions || !s.actions.hit) return false;
   _stopLayers(s);
   const a = s.actions.hit;
   a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = false;
@@ -4302,6 +4320,7 @@ function connect(){
       case 'playerleft': onPlayerLeft(m); break;
       case 'snap': onSnapshot(m); break;
       case 'shot': onRemoteShot(m); break;
+      case 'swing': onRemoteSwing(m); break;
       case 'hit': onHit(m); break;
       case 'kill': onKillMsg(m); break;
       case 'respawn': onRespawn(m); break;
@@ -5260,14 +5279,24 @@ function startReload(){
   stopReloadSfx();                                        // coupe un éventuel son de reload encore en cours
   reloadSfxSource = playSfx(W.sfx_reload || 'reload', 1); // son PROPRE à l'arme, pitch 1.0 (synchro anim)
 }
+// Point "canon" 3e pers d'un soldat = monde du socket d'arme (Index1.R) avance vers la cible.
+const _solMuzV = new THREE.Vector3();
+function soldierMuzzleWorld(s, dir){
+  if(!s || !s.weaponSocket) return null;
+  s.weaponSocket.getWorldPosition(_solMuzV);
+  const out = _solMuzV.clone();
+  if(dir) out.add(dir.clone().multiplyScalar(0.5));   // avance le depart au bout du canon
+  return out;
+}
 function onRemoteShot(m){
   const o = new THREE.Vector3(...m.o), d = new THREE.Vector3(...m.d).normalize();
   const end = traceBulletOnMap(o, d);
-  spawnTracer(o, end, 0x8fd8ff);
-  // tir adverse plus AUDIBLE, même de loin : volume up + portée plus large (refDistance/maxDistance) + falloff doux
-  playSfxAt('shot', o, 1.5, { refDistance: 14, maxDistance: 150, rolloff: 0.7 });
   // flash au canon de l'entité qui tire (siège m.seat)
   const b = (m.seat !== undefined) ? botMgr.get(m.seat) : null;
+  const start = soldierMuzzleWorld(b && b.soldier, d) || o;   // depart = ARME 3e pers (sinon fallback oeil)
+  spawnTracer(start, end, 0x8fd8ff);
+  // tir adverse plus AUDIBLE, même de loin : volume up + portée plus large (refDistance/maxDistance) + falloff doux
+  playSfxAt('shot', start, 1.5, { refDistance: 14, maxDistance: 150, rolloff: 0.7 });
   if(b && b.soldier && b.soldier.flash){
     const f = b.soldier.flash;
     f.scale.set(.3+Math.random()*.15, .3+Math.random()*.15, 1);
@@ -5567,6 +5596,12 @@ function enrichNetAnim(b, dt){
   b.anim.grounded = !(b.anim.a);                 // 'a' = en l'air (inverse de grounded)
   b.anim.wi = (b.netW != null ? b.netW : 0);     // arme reseau (champ 'w'), defaut R69
   b.anim.aimYaw = bodyYaw;                        // remote : la visee = le facing reseau
+  b.anim.saber_attack = !!(b.saberSwingUntil && performance.now() < b.saberSwingUntil);  // swing sabre 3e pers -> Sword_Slash
+}
+// Un autre joueur a donne un coup de sabre -> declenche son Sword_Slash 3e pers (touche ou manque).
+function onRemoteSwing(m){
+  const b = (m.seat !== undefined) ? botMgr.get(m.seat) : null;
+  if(b) b.saberSwingUntil = performance.now() + 450;
 }
 // Entrée en jeu / promotion spectateur->joueur / relance auto après victoire.
 function onJoinGame(m){
