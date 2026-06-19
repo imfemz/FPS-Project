@@ -2727,6 +2727,7 @@ window.tuneLowerFrame = function(jumpFrame, crouchFrame){
   console.log('[tuneLowerFrame] jump_frame '+LP.jump_frame+' ('+(LP.jump_clip)+')  crouch_frame '+LP.crouch_frame+' ('+(LP.crouch_clip)+')  @'+(LP.fps||24)+'fps');
 };
 // ===== REGLAGE LIVE du delay de rotation haut/bas : tuneTurn(follow) (bas = + de delay) =====
+window.tuneTwist = function(deg){ if(GAMECFG.MODELS.body_aim) GAMECFG.MODELS.body_aim.max_deg = deg; return 'body_aim.max_deg = '+deg+' (twist max du buste vers la visee)'; };
 window.tuneYaw = function(deg){
   GAMECFG.MODELS.character_yaw_deg = deg; const r = deg * Math.PI/180;
   const ap = sol => { if(sol && sol.inst) sol.inst.rotation.y = r; };

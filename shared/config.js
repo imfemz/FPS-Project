@@ -602,7 +602,7 @@
       // ===== ANIM EN COUCHES (third-person bots & remotes) =====
       // Visee CORPS (twist procedural Hips/Abdomen/Torso vers la cible) : le perso ne tourne plus
       // le dos en tirant. max_deg = torsion max avant que le corps pivote ; smooth = lissage.
-      body_aim: { enabled: true, max_deg: 58, smooth: 12, turn_follow: 7, dist: { 'DEF-spine.001': 0.55, 'DEF-spine.002': 0.45 } },  // twist sur spine.001/002 (DEF-hips porte le bob, role 'Body'). turn_follow = vitesse a laquelle le BAS rattrape le regard.
+      body_aim: { enabled: true, max_deg: 90, smooth: 12, turn_follow: 7, dist: { 'DEF-spine.001': 0.55, 'DEF-spine.002': 0.45 } },  // twist sur spine.001/002 (DEF-hips porte le bob, role 'Body'). turn_follow = vitesse a laquelle le BAS rattrape le regard.
       // Bas du corps par INPUT : VRAIS clips en boucle (Crouch_*, Jump_Loop) -> plus de pose figee.
       // lower_pose conserve (compat tuneLowerFrame) mais n'est plus lu par le driver en couches.
       lower_pose: { fps: 24, jump_clip: 'Jump_Loop', jump_frame: 0, crouch_clip: 'Crouch_Idle_Loop', crouch_frame: 0 },
