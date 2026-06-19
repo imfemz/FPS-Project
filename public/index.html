@@ -2730,7 +2730,8 @@ function createSoldierRigged(accent){
   inst.traverse(n=>{ if(n && n.name && _spineNames.indexOf(n.name) !== -1){ n.userData.qRest = n.quaternion.clone(); spine.push(n); } });
   // Bones de jambes -> saut procedural (pose normale, plus de roulade)
   const legs = {}; const _legMap = { ulL:'UpperLeg.L', ulR:'UpperLeg.R', llL:'LowerLeg.L', llR:'LowerLeg.R' };
-  inst.traverse(n=>{ if(!n || !n.name) return; for(const k in _legMap){ if(n.name === _legMap[k]){ n.userData.qRest = n.quaternion.clone(); legs[k] = n; } } });
+  const _legNorm = {}; for(const k in _legMap) _legNorm[k] = _normBone(_legMap[k]);   // match tolerant: rig reel = UpperLegL (sans point)
+  inst.traverse(n=>{ if(!n || !n.name) return; const nn = _normBone(n.name); for(const k in _legMap){ if(nn === _legNorm[k]){ n.userData.qRest = n.quaternion.clone(); legs[k] = n; } } });
 
   // --- Bones de VISEE (Hips/Abdomen/Torso) : twist procedural du corps vers la cible (Phase 4).
   // Capture qRest pour chacun (Abdomen/Torso le sont deja via spine, mais on referme proprement ici).
