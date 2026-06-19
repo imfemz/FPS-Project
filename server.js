@@ -48,15 +48,26 @@ const CONFIG = {
 
 /* ---------- Serveur HTTP statique ---------- */
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.ico': 'image/x-icon', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.webp': 'image/webp', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.obj': 'text/plain' };
+const DEV = !process.env.RENDER;            // dev local (pas sur Render) -> auto-reload + pas de cache
+const devClients = new Set();                // connexions SSE pour le live-reload
 const server = http.createServer((req, res) => {
   let url = req.url.split('?')[0];
+  if (DEV && url === '/__dev_reload') {       // canal Server-Sent Events : le navigateur ecoute les changements
+    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+    res.write('retry: 1000\n\n');
+    devClients.add(res);
+    req.on('close', () => devClients.delete(res));
+    return;
+  }
   if (url === '/') url = '/index.html';
   const base = url.startsWith('/shared/') ? __dirname : path.join(__dirname, 'public');
   const file = path.join(base, url);
   if (!file.startsWith(__dirname)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); return res.end('404'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+    const headers = { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' };
+    if (DEV) headers['Cache-Control'] = 'no-store';   // toujours frais en local
+    res.writeHead(200, headers);
     res.end(data);
   });
 });
@@ -504,6 +515,15 @@ setInterval(() => {
   broadcast({ t: 'snap', n: tickN, ts: nowT, scores, players: snapshotPlayers() });
 }, CONFIG.TICK_MS);
 
+if (DEV) {                                   // surveille public/ et shared/ -> recharge le navigateur
+  let _t = null;
+  const notify = () => { for (const r of devClients) { try { r.write('data: reload\n\n'); } catch (e) {} } };
+  const onChange = (ev, fn) => { if (fn && (/\.bak|~$|\.swp$/.test(fn))) return; clearTimeout(_t); _t = setTimeout(notify, 150); };
+  try {
+    fs.watch(path.join(__dirname, 'public'), { recursive: true }, onChange);
+    fs.watch(path.join(__dirname, 'shared'), { recursive: true }, onChange);
+  } catch (e) { console.warn('[dev] fs.watch KO', e); }
+}
 server.listen(CONFIG.PORT, () => {
   console.log(`NEON COMPOUND v9 (FFA) — serveur prêt : http://localhost:${CONFIG.PORT}`);
   console.log(`Free-for-all : jusqu'à ${N} joueurs + spectateurs (max ${CONFIG.MAX_CLIENTS} connectés). Premier à ${CONFIG.WIN_SCORE} kills gagne.`);

@@ -426,6 +426,7 @@
 </style>
 </head>
 <body>
+<script>(function(){var h=location.hostname;if(h!=='localhost'&&h!=='127.0.0.1')return;try{var es=new EventSource('/__dev_reload');es.onmessage=function(){location.reload();};}catch(e){}})();</script>
 <!-- Écran de CHARGEMENT : bloque le menu tant que tous les assets ne sont pas prêts -->
 <div id="preload" style="position:fixed;inset:0;z-index:9999;background:#0a0d12;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity .35s ease;font-family:inherit;color:#dfe7ef">
   <div style="font-size:30px;font-weight:800;letter-spacing:4px">FEMZ <b style="color:#36e3ff">FPS</b></div>
@@ -2077,7 +2078,7 @@ function addDamage(key, dmg, head, worldPos, shield){
   if(!cnt || now - cnt.lastAt > winMs){ // nouvelle rafale → nouveau compteur
     if(cnt){ scene.remove(cnt.sprite); if(cnt.sprite.material.map) cnt.sprite.material.map.dispose(); }
     cnt = dmgCounters[key] = { sprite: new THREE.Sprite(new THREE.SpriteMaterial({transparent:true, depthTest:false})), value: 0, lastAt: now, head:false, shield:false, rise:0, pop:0 };
-    cnt.sprite.layers.set(DMG_OVERLAY_LAYER);   // hors-bloom : rendu en overlay apres le composer
+    cnt.sprite.layers.set(AO_SKIP_LAYER);   // [FIX] rendu dans la passe normale
     scene.add(cnt.sprite);
   }
   cnt.value += dmg; cnt.lastAt = now; cnt.head = !!head; cnt.shield = !!shield; cnt.rise = 0; cnt.pop = 0;
@@ -8684,11 +8685,7 @@ function animate(){
     catch(e){ console.warn('[NEON] post-FX render erreur → rendu standard', e); composer = null; }
   }
   if(!worldDrawn) renderer.render(scene, camera);
-  // Nombres de degats : rendus APRES le post-FX -> jamais touches par le bloom (zero glow), nets et par-dessus.
-  { const _dmgMask = camera.layers.mask; camera.layers.set(DMG_OVERLAY_LAYER);
-    renderer.autoClear = false; renderer.clearDepth();
-    renderer.render(scene, camera);
-    renderer.autoClear = true; camera.layers.mask = _dmgMask; }
+  // [FIX] overlay degats desactive (test rendu) — numeros rendus dans la passe normale
   // l'arme par-dessus, avec son FOV propre. Masquée en 3e personne, visible en killcam (arme du tueur).
   const showVM = !deathCam.active || deathCam.phase === 'killcam';
   if(gunCam && gunScene && showVM){
