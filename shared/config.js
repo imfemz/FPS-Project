@@ -756,14 +756,14 @@
         '/audio/footsteps/concrete/step_06.mp3',
       ],
       // gauche/droite subtil en première personne. Trop haut = cartoon.
-      spread: 0.18,
-      min_speed: 0.2,
+      spread: 0.12,
+      min_speed: 0.35,
       // cadence selon vitesse
-      interval_walk: 0.60,
-      interval_run: 0.30,
-      interval_crouch: 0.62,
-      speed_walk: 3.0,
-      speed_run: 8.0,
+      interval_walk: 0.52,
+      interval_run: 0.28,
+      interval_crouch: 0.68,
+      speed_walk: 3.8,
+      speed_run: 7.6,
       // volumes
       vol_walk: 0.44,
       vol_run: 0.78,
