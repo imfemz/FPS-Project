@@ -2605,7 +2605,7 @@ function buildLayerClips(){
    ============================================================ */
 const WEAPON_ATTACH_CONFIG = {
   R69:     { file:'/models/weapon.glb',  bone:'DEF-hand.R', position:{x:-0.0002,y:0.0015,z:0.0005}, rotation:{x:100*Math.PI/180,y:-10*Math.PI/180,z:0}, scale:0.35 },  // +45deg roll (rz 95->140) : redresse le lean lateral
-  WINGMAN: { file:'/models/Wingman_swat.glb', bone:'DEF-hand.R', position:{x:-0.0002,y:0.0015,z:0.0005}, rotation:{x:100*Math.PI/180,y:-10*Math.PI/180,z:0}, scale:1 },  // R69 retourne 180deg (canon vers l'AVANT). Si pas bon: tuneWeapon('WINGMAN',0,0.001,0, 100,-22,-85, 1) ou (...,-80,22,-95,1)
+  WINGMAN: { file:'/models/Wingman_swat.glb', bone:'DEF-hand.R', position:{x:-0.0002,y:0.0015,z:0.0008}, rotation:{x:90*Math.PI/180,y:-180*Math.PI/180,z:0}, scale:1 },  // R69 retourne 180deg (canon vers l'AVANT). Si pas bon: tuneWeapon('WINGMAN',0,0.001,0, 100,-22,-85, 1) ou (...,-80,22,-95,1)
   SABER:   { file:'/models/Saber_swat.glb',   bone:'DEF-hand.R', position:{x:-0.0002,y:0.0008,z:0.0005}, rotation:{x:50*Math.PI/180,y:-10*Math.PI/180,z:0}, scale:1 },  // MEME rotation que R69 ; scale 1 = taille bakee Blender. Affiner: tuneWeapon('SABER',...)
 };
 // weaponIdx (config WEAPONS) -> cle de WEAPON_ATTACH_CONFIG
