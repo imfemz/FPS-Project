@@ -824,7 +824,7 @@
 
       // Dosage Apex-like : le son FPS reste sec et lisible.
       SHOT_WET: 0.04,      // tirs en première personne : très léger
-      WORLD_WET: 0.10,     // tirs ennemis/bots + sons du monde : un peu plus d'espace
+      WORLD_WET: 0.50,     // tirs ennemis/bots + sons du monde : un peu plus d'espace
       FOOTSTEP_WET: 0.03,  // pas : très subtil
       DEFAULT_WET: 0.05,   // reload, holster, equip, UI/audio non positionné
       DRY: 1.0,
