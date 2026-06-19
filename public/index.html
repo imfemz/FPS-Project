@@ -5955,7 +5955,11 @@ function updateLocalBots(dt){
     b.anim.vz = (b.anim.vz != null ? b.anim.vz : _vzL) + (_vzL - (b.anim.vz != null ? b.anim.vz : _vzL)) * Math.min(1, dt*14);
     b.anim.grounded = !ai.air;
     b.anim.wi = (b.weaponIdx != null ? b.weaponIdx : 0);   // bots: pas de champ arme -> defaut R69 (0)
-    b.anim.aimYaw = Math.atan2(dxp, dzp);              // visee = direction bot -> joueur
+    // visee = direction bot -> joueur, PRE-LISSEE (chemin court) pour eviter les sauts du twist
+    // du torse a chaque tick d'IA — harmonise avec le lissage vx/vz (dt*14) et bodyYaw (dt*12).
+    const _aimT = Math.atan2(dxp, dzp);
+    const _aimS = (GAMECFG.MODELS.body_aim && GAMECFG.MODELS.body_aim.aim_smooth) || 11;
+    b.anim.aimYaw = (b.anim.aimYaw != null) ? lerpAngle(b.anim.aimYaw, _aimT, Math.min(1, dt*_aimS)) : _aimT;
   }
 }
 function applyLocalBotDamage(id, b, dmg, head, melee){
