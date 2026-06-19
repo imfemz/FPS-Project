@@ -817,8 +817,8 @@
       byType: {
         container: '/models/container.glb',
         metal:     '/models/metal.glb',
-        concrete:  '/models/concrete.glb',
-        grate:     '/models/grate.glb',
+        concrete:  '/models/container.glb',
+        crate:     '/models/crate.glb',
       },
     },
     TEXTURES: {
