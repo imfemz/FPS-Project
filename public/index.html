@@ -4423,7 +4423,7 @@ const remote = {
 let botActive = false;
 const botMgr = new Map();
 function clearBots(){
-  for(const b of botMgr.values()){ if(b.soldier && b.soldier.root) scene.remove(b.soldier.root); if(b.drone) scene.remove(b.drone); }
+  for(const b of botMgr.values()){ if(b.soldier && b.soldier.root) scene.remove(b.soldier.root); if(b.drone){ stopDroneSound(b); scene.remove(b.drone); } }
   botMgr.clear();
   botActive = false;
 }
@@ -4441,7 +4441,7 @@ function ensureBot(id, accent){
 function removeEntity(id){
   const b = botMgr.get(id);
   if(b && b.soldier && b.soldier.root) scene.remove(b.soldier.root);
-  if(b && b.drone) scene.remove(b.drone);
+  if(b && b.drone){ stopDroneSound(b); scene.remove(b.drone); }
   botMgr.delete(id);
   try{ killHealthBar('bot'+id); }catch(e){}
 }
@@ -4513,7 +4513,7 @@ function setBotType(b, type){
     b.fov_deg = T.view_fov_deg || 40; b.sense = T.sense_radius || 5;
     b.hover = T.hover || 4; b.followR = T.follow_radius || 6; b.droneSpeed = T.speed || 7;
   } else {
-    if(b.drone) b.drone.visible = false;
+    if(b.drone){ stopDroneSound(b); b.drone.visible = false; }
     b.isDrone = false;
     if(!b.soldier && RIG_READY && RIG_TEMPLATE){ b.soldier = createSoldierRigged(b.accent||0xff7755); scene.add(b.soldier.root); }
     if(b.soldier && b.soldier.root){ if(!b.soldier.root.parent) scene.add(b.soldier.root); b.soldier.root.visible = true; }
@@ -4563,12 +4563,35 @@ function spawnDroneExplosion(point){
   const light = new THREE.PointLight(0xff5a2a, 12, 9); light.position.copy(point); scene.add(light);
   impactParticles.push({ light, life:0.25 });
 }
-// Tir du drone : tracer rouge depuis l'orbe + degats R69.
+// Son de bourdonnement du drone : boucle SPATIALE attachee a l'orbe (du spawn a la mort).
+function startDroneSound(b){
+  if(!audioCtx || !audioBuffers['drone_sound'] || b.droneSnd) return;
+  try{
+    const src = audioCtx.createBufferSource(); src.buffer = audioBuffers['drone_sound']; src.loop = true;
+    const pan = audioCtx.createPanner(); pan.panningModel='equalpower'; pan.distanceModel='linear';
+    pan.refDistance=7; pan.maxDistance=55; pan.rolloffFactor=1;
+    const g = audioCtx.createGain(); g.gain.value = GAMECFG.SFX_VOLUME * 0.5 * sfxGain('drone_sound');
+    if(pan.positionX){ pan.positionX.value=b.pos.x; pan.positionY.value=b.pos.y; pan.positionZ.value=b.pos.z; } else pan.setPosition(b.pos.x,b.pos.y,b.pos.z);
+    src.connect(g).connect(pan).connect(audioCtx.destination); src.start();
+    b.droneSnd = { src, pan, g };
+  }catch(e){}
+}
+function stopDroneSound(b){
+  if(b && b.droneSnd){ try{ b.droneSnd.src.stop(); }catch(e){} try{ b.droneSnd.src.disconnect(); b.droneSnd.g.disconnect(); b.droneSnd.pan.disconnect(); }catch(e){} b.droneSnd = null; }
+}
+// Ligne de tir du drone : depuis son CENTRE vers le joueur, rouge vif, un peu plus longue a l'ecran.
+function spawnDroneTracer(a, c){
+  const geo = new THREE.BufferGeometry().setFromPoints([a.clone(), c.clone()]);
+  const mat = new THREE.LineBasicMaterial({ color: 0xff2a14, transparent:true, opacity:0.95 }); mat.toneMapped = false;
+  const line = new THREE.Line(geo, mat); scene.add(line);
+  tracers.push({ line, life:0.12, maxLife:0.12, attached:false });
+}
+// Tir du drone : ligne de tir depuis son centre + degats R69.
 function droneShoot(b){
   const A = LBOT.ai || {};
   const _eye = new THREE.Vector3(me.pos.x, me.pos.y + (me.eye || 1.62), me.pos.z);
   const _bp = new THREE.Vector3(b.pos.x, b.pos.y, b.pos.z);
-  spawnTracer(_bp, _eye, 0xff4a2a);
+  spawnDroneTracer(_bp, _eye);   // ligne de tir depuis le CENTRE du drone
   const tier = (A.tiers && (A.tiers[A.difficulty] || A.tiers.medium)) || {};
   const playerSpeed = Math.hypot(me.vel.x, me.vel.z);
   const moveF = 1 - Math.min(1, playerSpeed / (A.move_full_speed ?? 9)) * (tier.move_pen ?? 0.4);
@@ -4582,11 +4605,15 @@ function droneShoot(b){
 function updateDrone(b, dt){
   b.ai = b.ai || {}; const ai = b.ai;
   ai.orbit = (ai.orbit || Math.random()*6.28) + dt*0.8;
+  ai.bobT = (ai.bobT || 0) + dt*2.6;                                  // leger haut-bas vertical continu
+  ai.jukeT = (ai.jukeT == null ? 4 : ai.jukeT) - dt;                 // toutes les 4s : se decale de 3 m (aleatoire) s'il n'est pas touche
+  if(ai.jukeT <= 0){ ai.jukeT = 4; const _ja = Math.random()*6.2832; ai.jukeX = Math.cos(_ja)*3; ai.jukeZ = Math.sin(_ja)*3; }
   const fr = b.followR || 6, hov = b.hover || 4, sp = b.droneSpeed || 7;
-  const ox = me.pos.x + Math.cos(ai.orbit)*fr*0.6, oz = me.pos.z + Math.sin(ai.orbit)*fr*0.6, oy = (me.pos.y||0) + hov;
+  const ox = me.pos.x + Math.cos(ai.orbit)*fr*0.6 + (ai.jukeX||0), oz = me.pos.z + Math.sin(ai.orbit)*fr*0.6 + (ai.jukeZ||0), oy = (me.pos.y||0) + hov + Math.sin(ai.bobT)*0.22;
   const dx = ox - b.pos.x, dy = oy - b.pos.y, dz = oz - b.pos.z, d = Math.hypot(dx,dy,dz) || 1e-4;
   const step = Math.min(d, sp*dt);
   b.pos.x += dx/d*step; b.pos.y += dy/d*step; b.pos.z += dz/d*step; b.buf.length = 0;
+  if(!b.droneSnd) startDroneSound(b); else { const _p = b.droneSnd.pan; if(_p.positionX){ _p.positionX.value=b.pos.x; _p.positionY.value=b.pos.y; _p.positionZ.value=b.pos.z; } else _p.setPosition(b.pos.x,b.pos.y,b.pos.z); }
   b.yaw = Math.atan2(-(me.pos.x - b.pos.x), -(me.pos.z - b.pos.z));
   const distP = Math.hypot(me.pos.x - b.pos.x, me.pos.z - b.pos.z);
   const see = alive && playing && (botSeesPlayer(b) || distP < (b.sense || 5));
@@ -6067,7 +6094,7 @@ function onBotKill(m){
   const b = botMgr.get(m.id);
   if(b && b.type === 'drone'){
     b.dead = true;
-    if(b.drone){ spawnDroneExplosion(b.drone.position.clone()); b.drone.visible = false; }
+    if(b.drone){ spawnDroneExplosion(b.drone.position.clone()); b.drone.visible = false; } stopDroneSound(b);
     const _T = (LBOT.types && LBOT.types.drone) || {};
     playSfxAt(_T.explode_sfx || 'drone_explode', b.pos, 1.0);
     killHealthBar('bot'+m.id); killFeed('VOUS ☠ DRONE');
@@ -6718,6 +6745,7 @@ function applyLocalBotDamage(id, b, dmg, head, melee){
   if(!b || b.dead) return;
   b.playerHit = true;   // le joueur a touche ce bot -> fin du bonus 'premier coup'
   if(b.ai) b.ai.noHitSeenT = 0;   // touche -> reset le timer d'agressivite
+  if(b.type === 'drone' && b.ai) b.ai.jukeT = 4;   // drone touche -> repousse le prochain decalage de 3 m
   if(b.type !== 'drone' && b.pos){   // gerbe de SANG (bot 1 & 2 ; pas le drone)
     const _bp = new THREE.Vector3(b.pos.x, (b.pos.y||0) + 1.3*(b.sizeMul||1), b.pos.z);
     const _bd = new THREE.Vector3(me.pos.x - b.pos.x, 0.3, me.pos.z - b.pos.z); if(_bd.lengthSq()>1e-6) _bd.normalize();
