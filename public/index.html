@@ -8957,6 +8957,20 @@ function applyCamera(dt){
     camera.rotateY(Math.cos(ts*11.3)*a*0.7);
     camera.rotateZ(Math.sin(ts*9.1)*a*0.5);
   }
+  // FILET ANTI-NaN CAMÉRA (dernier rempart) : si un shake/visée a corrompu la caméra (ex: wall-bounce au saut),
+  // on neutralise les accumulateurs et on reconstruit une pose saine -> JAMAIS d'écran gris.
+  if(!(isFinite(camera.position.x)&&isFinite(camera.position.y)&&isFinite(camera.position.z)
+     && isFinite(camera.quaternion.x)&&isFinite(camera.quaternion.y)&&isFinite(camera.quaternion.z)&&isFinite(camera.quaternion.w))){
+    try{ vkickCam=0; vkickGun=0; slideRoll=0; strafeRoll=0; swayPhase=0; swayW=0; jumpShakeT=0; landShake=0; landShakeT=0;
+         wbShake=0; wbShakeT=0; fireCamShake=0; fireShake=0; fireShakeT=0; meleeShake=0; meleeKickPitch=0; meleeKickYaw=0;
+         switchShake=0; switchShakeT=0; mantlePose=0; crouchTilt=0; }catch(e){}
+    if(!isFinite(me.eye)) me.eye = CONFIG.EYE_STAND || 1.62;
+    if(!isFinite(me.pitch)) me.pitch = 0;
+    if(!isFinite(me.yaw)) me.yaw = 0;
+    const _px=isFinite(me.pos.x)?me.pos.x:0, _py=isFinite(me.pos.y)?me.pos.y:0, _pz=isFinite(me.pos.z)?me.pos.z:0;
+    camera.position.set(_px, _py + me.eye, _pz);
+    camera.rotation.set(0,0,0); camera.rotateY(me.yaw); camera.rotateX(me.pitch);
+  }
 }
 
 /* ---------- Boucle joueur ---------- */
