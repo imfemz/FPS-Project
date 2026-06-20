@@ -1673,19 +1673,25 @@ function findLedge(){
   const f = new THREE.Vector3(-Math.sin(me.yaw),0,-Math.cos(me.yaw));
   const px = me.pos.x + f.x*CONFIG.MANTLE_RANGE, pz = me.pos.z + f.z*CONFIG.MANTLE_RANGE;
   const p = MAP.platform;
+  // AABB d'un bloc, qu'il soit AABB ou ORIENTÉ (OBB : cx/cz/hw/hd/c/s) -> sinon minx/maxx undefined = NaN dans le mantle
+  const _bnd = bl => (bl.c !== undefined)
+    ? { minx: bl.cx-(Math.abs(bl.c)*bl.hw+Math.abs(bl.s)*bl.hd), maxx: bl.cx+(Math.abs(bl.c)*bl.hw+Math.abs(bl.s)*bl.hd),
+        minz: bl.cz-(Math.abs(bl.s)*bl.hw+Math.abs(bl.c)*bl.hd), maxz: bl.cz+(Math.abs(bl.s)*bl.hw+Math.abs(bl.c)*bl.hd) }
+    : bl;
   const cands = [...colliders, {minx:p.x-p.w/2,maxx:p.x+p.w/2,minz:p.z-p.d/2,maxz:p.z+p.d/2,h:p.h}];
-  let best = null;
+  let best = null, bestB = null;
   for(const b of cands){
-    if(px < b.minx-0.1 || px > b.maxx+0.1 || pz < b.minz-0.1 || pz > b.maxz+0.1) continue;
+    const bb = _bnd(b);
+    if(px < bb.minx-0.1 || px > bb.maxx+0.1 || pz < bb.minz-0.1 || pz > bb.maxz+0.1) continue;
     if(b.h > 4) continue; // pas les murs d'enceinte
     const rel = b.h - me.pos.y;
     if(rel < CONFIG.MANTLE_MIN_H || rel > CONFIG.MANTLE_MAX_H) continue;
-    if(b.maxx-b.minx < 0.9 || b.maxz-b.minz < 0.9) continue; // trop étroit pour se tenir dessus
-    if(!best || b.h < best.h) best = b;
+    if(bb.maxx-bb.minx < 0.9 || bb.maxz-bb.minz < 0.9) continue; // trop étroit pour se tenir dessus
+    if(!best || b.h < best.h){ best = b; bestB = bb; }
   }
   if(!best) return null;
-  const dx = Math.max(best.minx+0.45, Math.min(px + f.x*0.25, best.maxx-0.45));
-  const dz2 = Math.max(best.minz+0.45, Math.min(pz + f.z*0.25, best.maxz-0.45));
+  const dx = Math.max(bestB.minx+0.45, Math.min(px + f.x*0.25, bestB.maxx-0.45));
+  const dz2 = Math.max(bestB.minz+0.45, Math.min(pz + f.z*0.25, bestB.maxz-0.45));
   return { to: new THREE.Vector3(dx, best.h, dz2) };
 }
 /* ---------- GRIMPE DE MUR (wall climb) : monte le long d'un mur en l'air, retombe si trop haut ---------- */
@@ -9977,9 +9983,6 @@ function animate(){
   if(playing && alive && !botFrozen) playerUpdate(dt, aMenuIsOpen() ? null : g);
   // FILET ANTI-NaN GLOBAL : neutralise tout NaN de mécanique (slide/wall-bounce) AVANT caméra/FX/tracers
   // -> caméra jamais NaN (plus d'écran gris) et géométries jamais NaN.
-  if(!(isFinite(me.vel.x)&&isFinite(me.vel.y)&&isFinite(me.vel.z)&&isFinite(me.pos.x)&&isFinite(me.pos.y)&&isFinite(me.pos.z))){
-    console.warn('[NaN-DIAG] vel='+me.vel.x+','+me.vel.y+','+me.vel.z+' pos='+me.pos.x+','+me.pos.y+','+me.pos.z+' | wb='+me.wallBounced+' boost='+me.wbBoostT+' slide='+(me.slide&&me.slide.active)+' climb='+(me.climb&&me.climb.active)+' mantle='+(me.mantle&&me.mantle.active)+' onGround='+me.onGround+' eye='+me.eye+' pitch='+me.pitch+' yaw='+me.yaw);
-  }
   if(!(isFinite(me.vel.x)&&isFinite(me.vel.y)&&isFinite(me.vel.z))) me.vel.set(0,0,0);
   if(!(isFinite(me.pos.x)&&isFinite(me.pos.y)&&isFinite(me.pos.z))){
     if(isFinite(me._lgx)&&isFinite(me._lgy)&&isFinite(me._lgz)){ me.pos.set(me._lgx, me._lgy, me._lgz); }   // RETOUR à la dernière position valide (micro-accroc, pas de téléport au spawn)
