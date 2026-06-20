@@ -4701,11 +4701,15 @@ function clearBots(){
   botMgr.clear();
   botActive = false;
 }
+const BOT_WEAPON_COLOR = [0x9aa0a8, 0xff4444, 0x4aa3ff];   // R69=gris, Wingman=rouge, Sabre=bleu
 function ensureBot(id, accent){
   let b = botMgr.get(id);
   if(!b){
+    let wi = 0;
+    if(localBotMode){ wi = (Math.random()*3)|0; accent = BOT_WEAPON_COLOR[wi]; }   // arme aléatoire (R69/Wingman/Sabre) + couleur par arme
     b = { soldier: null, buf: [], pos: new THREE.Vector3(), yaw: 0,
-          anim: {m:0,c:0,a:0,r:0,sl:0,h:0,cl:0,f:0,ad:0}, dead: false, stepT: 0, accent };
+          anim: {m:0,c:0,a:0,r:0,sl:0,h:0,cl:0,f:0,ad:0}, dead: false, stepT: 0, accent,
+          weaponIdx: wi, rush: (wi === 2) };   // sabre -> charge (rush), ne tire pas
     if(RIG_READY && RIG_TEMPLATE){ b.soldier = createSoldierRigged(accent); scene.add(b.soldier.root); }
     botMgr.set(id, b);
   }
@@ -6939,7 +6943,7 @@ function updateLocalBots(dt){
     const sentHold = b.rush && ai.spotted && !ai.charged;            // figé (telegraphe) tant qu'il n'a pas (re)vu apres le delai
     const sentWander = b.rush && !ai.spotted;                        // pas encore repere : erre
     const inFire = (b.rush ? (charging && see) : see) && alive && distP <= fireRange;   // sentinel : tire en charge ET avec LOS reelle
-    const canFire = inFire && !feared;   // un bot apeure ne tire pas (il fuit)
+    const canFire = inFire && !feared && b.weaponIdx !== 2;   // bot apeuré ne tire pas ; sabre (idx 2) ne tire jamais (il charge)
     // AGRESSIVITE : vu sans etre touche pendant aggro_time -> rush + tir continu (Sentinel : charge differee)
     if(see){ ai.noHitSeenT = (ai.noHitSeenT||0) + dt; } else { ai.noHitSeenT = 0; }
     const aggro = b.rush ? charging : (knows && ((ai.noHitSeenT||0) >= (A.aggro_time ?? 2)));
@@ -7054,7 +7058,8 @@ function updateLocalBots(dt){
     // Horizontale + collision
     let spd;
     if(b.type === 'sentinel'){
-      spd = (run ? (LBOT.run_speed ?? 4.6) : LBOT.speed) * (b.speedMul || 1);
+      { const _sab = (b.weaponIdx === 2);
+        spd = Math.min((run ? (_sab ? 6 : (LBOT.run_speed ?? 4.6)) : LBOT.speed) * (b.speedMul || 1), _sab ? 6 : 4); }   // vitesse max 4 (6 au sabre)
     } else {
       // Bots normaux : base 4, monte vers ~5.7 (aleatoire, lisse) quand ils engagent le joueur.
       if(b._spd == null) b._spd = 4;
@@ -7093,6 +7098,7 @@ function updateLocalBots(dt){
     b.anim.a = ai.air ? 1 : 0; b.anim.sl = 0; b.anim.c = 0;
     b.anim.f = (canFire && ai.reactT <= 0) ? 1 : 0;
     b.anim.bot = 1; b.anim.aiming = knows ? 1 : 0;   // bot : marche formelle (<=4) + pose de visee tant qu'il est CONSCIENT du joueur (tient l'arme levee entre 2 tirs)
+    b.anim.engaged = see ? 1 : 0;   // LOS RÉELLE sur le joueur (m'engage) : pas de demi-tour, pas d'anim hit
     // --- Anim en couches : vitesse LOCALE (repere du corps), grounded, arme, visee ---
     const _bodyYaw = b.yaw + Math.PI;                 // meme facing que le rendu (root.rotation.y)
     const _sB = Math.sin(_bodyYaw), _cB = Math.cos(_bodyYaw);
