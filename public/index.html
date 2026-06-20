@@ -5891,6 +5891,8 @@ const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist:
   ai: {
     difficulty: 'medium',     // 'easy' | 'medium' | 'hard'
     fire_range: 15,           // portee de tir des bots (m) -- ils ouvrent le feu en rafale des 15 m
+    flee_below: 0.5,          // PV < 50% -> le bot fuit le joueur
+    first_hit_mult: 1.6,      // degats x1.6 tant que le joueur ne l'a pas touche (premier coup)
     view_range: 24, view_fov_deg: 120, sense_radius: 3,           // distance de detection (LOS) + poursuite
     forget_time: 3.0,         // memoire (s) apres perte de vue
     preferred_dist: 4.0,      // distance de combat preferee
@@ -5937,6 +5939,7 @@ function initLocalBotAI(b){
   b.ai = { reactT: 0.3, fireT: 0.3+Math.random()*0.5, shotsLeft: 0, reloadT: 0,
            vy: 0, air: false, evadeT: 0, jumpCD: 1.5+Math.random()*2.5,
            seenT: 0, fireFlash: 0, lastX: b.pos?b.pos.x:0, lastZ: b.pos?b.pos.z:0, jumpQueued: false };
+  b.playerHit = false;   // nouveau spawn -> a de nouveau le bonus premier coup
 }
 function lbotSpawnPoint(i, n, extra){ // >= MIN du joueur ET >= spawn_sep des autres bots
   const lim = (MAP.HALF || 30) - 4;
@@ -6090,7 +6093,8 @@ function botShoot(b, tier, playerSpeed, distP){
   const distF = 1 - Math.min(1, (distP||0) / fr) * (1 - (A.far_hit_mult ?? 0.6));
   if(Math.random() < (tier.hit_chance ?? 0.7) * moveF * distF){
     const W = (GAMECFG.WEAPONS && GAMECFG.WEAPONS[b.weaponIdx||0]) || {};
-    if((LBOT.ai && LBOT.ai.damage_player) !== false) damagePlayerLocal((W.damage_body ?? 15) * (tier.dmg_mult ?? 1), b.pos);
+    const _fhm = (!b.playerHit) ? ((LBOT.ai && LBOT.ai.first_hit_mult) ?? 1.6) : 1;   // bonus si le bot frappe AVANT d'etre touche
+    if((LBOT.ai && LBOT.ai.damage_player) !== false) damagePlayerLocal((W.damage_body ?? 15) * (tier.dmg_mult ?? 1) * _fhm, b.pos);
   }
   playSfxAt('shot', b.pos, 0.7, { refDistance: 8, maxDistance: 60, rolloff: 0.8 });
 }
@@ -6140,7 +6144,14 @@ function updateLocalBots(dt){
 
     // Decision de deplacement
     let vx=0, vz=0, run=false;
-    if(see && distP <= (A.fire_range ?? 15)){
+    const _flee = knows && (b.hp < maxHp * (A.flee_below ?? 0.5));   // PV bas -> fuite
+    if(_flee){
+      const px = dxp/distP, pz = dzp/distP;
+      vx = -px - pz*mv.strafeDir*0.4;          // s'eloigne du joueur (+ un peu de zigzag)
+      vz = -pz + px*mv.strafeDir*0.4;
+      b.yaw = Math.atan2(-vx, -vz);            // face la direction de fuite
+      run = true;
+    } else if(see && distP <= (A.fire_range ?? 15)){
       const px = dxp/distP, pz = dzp/distP, sx = -pz, sz = px;
       vx = sx*mv.strafeDir; vz = sz*mv.strafeDir;
       const pref = A.preferred_dist ?? 4;
@@ -6237,6 +6248,7 @@ function updateLocalBots(dt){
 }
 function applyLocalBotDamage(id, b, dmg, head, melee){
   if(!b || b.dead) return;
+  b.playerHit = true;   // le joueur a touche ce bot -> fin du bonus 'premier coup'
   let rest = dmg;
   if(b.sh > 0){ const a = Math.min(b.sh, rest); b.sh -= a; rest -= a; }
   if(rest > 0) b.hp -= rest;
