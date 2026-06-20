@@ -1964,9 +1964,11 @@ function startRapierRagdoll(s, hitDir){
   }
   const dl = Math.hypot(hitDir?hitDir.x:0, hitDir?hitDir.z:0) || 1;
   const ix = hitDir ? hitDir.x/dl : 0, iz = hitDir ? hitDir.z/dl : 0;
-  for(const k in parts){ parts[k].body.setLinvel({x:ix*(2+Math.random()*1.5), y:1.2+Math.random()*1.2, z:iz*(2+Math.random()*1.5)}, true);
-    parts[k].body.setAngvel({x:(Math.random()*2-1)*2.5, y:(Math.random()*2-1)*2.5, z:(Math.random()*2-1)*2.5}, true); }
-  if(parts['DEF-spine.003']) parts['DEF-spine.003'].body.setLinvel({x:ix*4.5, y:2.6, z:iz*4.5}, true);
+  const LB = 4.5;   // force de projection ARRIERE (direction du tir)
+  for(const k in parts){ parts[k].body.setLinvel({x:ix*(LB+Math.random()*2), y:1.4+Math.random()*1.2, z:iz*(LB+Math.random()*2)}, true);
+    parts[k].body.setAngvel({x:(Math.random()*2-1)*3, y:(Math.random()*2-1)*3, z:(Math.random()*2-1)*3}, true); }
+  if(parts['DEF-spine.003']) parts['DEF-spine.003'].body.setLinvel({x:ix*(LB+3.5), y:3.0, z:iz*(LB+3.5)}, true);
+  if(parts['DEF-hips']) parts['DEF-hips'].body.setLinvel({x:ix*(LB+3.5), y:2.6, z:iz*(LB+3.5)}, true);
   s.rapierRagdoll = true;
   const bones = []; s.inst.traverse(o=>{ if(o.isBone){ o.matrixAutoUpdate = false; bones.push(o); } });
   rapierRagdolls.push({ s, parts, bones, born: performance.now() });
@@ -4744,7 +4746,7 @@ function droneShoot(b){
   spawnDroneTracer(_bp, _eye);   // ligne de tir depuis le CENTRE du drone
   const tier = (A.tiers && (A.tiers[A.difficulty] || A.tiers.medium)) || {};
   const playerSpeed = Math.hypot(me.vel.x, me.vel.z);
-  const moveF = 1 - Math.min(1, playerSpeed / (A.move_full_speed ?? 9)) * (tier.move_pen ?? 0.4);
+  const moveF = botMoveAcc(b);   // velocite du joueur -> bots ratent plus (sauf Sentinel)
   if(Math.random() < (tier.hit_chance ?? 0.7) * moveF * 0.9){
     const W = (GAMECFG.WEAPONS && GAMECFG.WEAPONS[b.weaponIdx || 0]) || {};
     if((A.damage_player) !== false) damagePlayerLocal((W.damage_body ?? 13) * (tier.dmg_mult ?? 1), b.pos);
@@ -6422,7 +6424,7 @@ function startInsaneDeathCam(){
     deathCam.myBody.root.position.set(me.pos.x, me.pos.y, me.pos.z);
     deathCam.myBody.root.rotation.set(0, me.yaw + Math.PI, 0);
     scene.add(deathCam.myBody.root);
-    if(deathCam.myBody.rigged) playDeathAnim(deathCam.myBody);
+    if(!startRapierRagdoll(deathCam.myBody, { x: Math.sin(me.yaw), z: Math.cos(me.yaw) })){ if(deathCam.myBody.rigged) playDeathAnim(deathCam.myBody); }
   }
   const hud = document.getElementById('hud'); if(hud) hud.style.opacity = '0';
 }
@@ -6714,6 +6716,13 @@ function damagePlayerLocal(dmg, fromPos){
 }
 function _rR(a){ return a[0] + Math.random()*(a[1]-a[0]); }
 function _rI(a){ return a[0] + Math.floor(Math.random()*(a[1]-a[0]+1)); }
+// Precision des bots vs vitesse du joueur : 0 malus sous 6 m/s, -30% a partir de 11 m/s. Sentinel exempt.
+function botMoveAcc(b){
+  if(b && b.rush) return 1;                                   // Sentinel : precision inchangee
+  const sp = Math.hypot(me.vel.x, me.vel.z);
+  const k = Math.max(0, Math.min(1, (sp - 6) / 5));           // 6 -> debut, 11 -> max
+  return 1 - k * 0.30;                                        // jusqu'a -30% de chance de toucher
+}
 function botShoot(b, tier, playerSpeed, distP){
   b.ai.fireFlash = 0.08;
   // visuel de tir 3e personne (comme les adversaires en ligne) : muzzle flash au canon + tracer vers le joueur
@@ -6733,7 +6742,7 @@ function botShoot(b, tier, playerSpeed, distP){
   const A = LBOT.ai || {};
   // Precision = base x MOUVEMENT x DISTANCE :
   //  - plus le joueur va vite, moins ca touche (statique = max de hit)
-  const moveF = 1 - Math.min(1, playerSpeed / (A.move_full_speed ?? 9)) * (tier.move_pen ?? 0.4);
+  const moveF = botMoveAcc(b);   // velocite du joueur -> bots ratent plus (sauf Sentinel)
   //  - un peu moins de hit a longue portee (au contact = max)
   const fr = A.fire_range ?? 15;
   const distF = 1 - Math.min(1, (distP||0) / fr) * (1 - (A.far_hit_mult ?? 0.6));
@@ -9181,7 +9190,7 @@ function startDeathCam(killerSeat, head){
     deathCam.myBody.root.position.set(me.pos.x, me.pos.y, me.pos.z);
     deathCam.myBody.root.rotation.set(0, me.yaw + Math.PI, 0);
     scene.add(deathCam.myBody.root);
-    if(deathCam.myBody.rigged) playDeathAnim(deathCam.myBody);
+    if(!startRapierRagdoll(deathCam.myBody, { x: Math.sin(me.yaw), z: Math.cos(me.yaw) })){ if(deathCam.myBody.rigged) playDeathAnim(deathCam.myBody); }
   }
   // masquer le viewmodel et le HUD de jeu
   const hud = document.getElementById('hud'); if(hud) hud.style.opacity = '0';
@@ -9211,7 +9220,7 @@ function updateDeathCam(dt, g){
   }
   deathCam.prevJump = jumpNow;
   // avancer l'anim de mort de mon corps
-  if(deathCam.myBody && deathCam.myBody.mixer) deathCam.myBody.mixer.update(dt);
+  if(deathCam.myBody && deathCam.myBody.mixer && !deathCam.myBody.rapierRagdoll) deathCam.myBody.mixer.update(dt);
 
   if(deathCam.phase === 'tp'){
     // caméra orbitale autour de mon corps qui tombe
@@ -9255,7 +9264,7 @@ function endDeathCam(){
   deathCam.active = false;
   deathCam.phase = null;
   deathCam.insane = false;
-  if(deathCam.myBody){ scene.remove(deathCam.myBody.root); deathCam.myBody = null; }
+  if(deathCam.myBody){ if(typeof disposeRagdollFor==='function') disposeRagdollFor(deathCam.myBody); scene.remove(deathCam.myBody.root); deathCam.myBody = null; }
   if(deathCam.kcBody){ scene.remove(deathCam.kcBody.root); deathCam.kcBody = null; }
   if(deathCam.kcEnemyBody){ scene.remove(deathCam.kcEnemyBody.root); deathCam.kcEnemyBody = null; }
   deathCam.kcFrames = null;
@@ -9325,7 +9334,7 @@ function startKillCam(){
   deathCam.kcDbg = null; deathCam.kcElapsed = 0;
   console.log('[NEON] killcam start : frames =', frames.length, '| durée =', (deathCam.kcEnd/1000).toFixed(2), 's');
   // retirer mon corps 3e personne
-  if(deathCam.myBody){ scene.remove(deathCam.myBody.root); deathCam.myBody = null; }
+  if(deathCam.myBody){ if(typeof disposeRagdollFor==='function') disposeRagdollFor(deathCam.myBody); scene.remove(deathCam.myBody.root); deathCam.myBody = null; }
   // créer les deux corps : le TUEUR (en) et la VICTIME (moi)
   deathCam.kcEnemyBody = createSoldierRigged(entColor(deathCam.killerSeat >= 0 ? deathCam.killerSeat : 0));
   scene.add(deathCam.kcEnemyBody.root);
