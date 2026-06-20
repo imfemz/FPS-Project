@@ -8803,7 +8803,8 @@ function applyCamera(dt){
   camera.position.set(me.pos.x, me.pos.y + me.eye, me.pos.z);
   camera.rotation.set(0,0,0);
   camera.rotateY(me.yaw); camera.rotateX(me.pitch + vkickCam);
-  camera.rotateZ(slideRoll + strafeRoll);
+  let _roll = slideRoll + strafeRoll; if(!isFinite(_roll)) _roll = 0;   // garde anti-NaN -> jamais de caméra cassée (écran gris)
+  camera.rotateZ(_roll);
   // ===== SWAY "VIVANT" : balancement DIAGONAL gauche↔droite en course =====
   // Couche de base permanente (par-dessus l'orientation, sous les shakes d'événements).
   // Rotationnel : yaw + pitch + roll EN PHASE → la vue balaie une diagonale. Fréquence et
@@ -9349,6 +9350,17 @@ function playerUpdate(dt, g){
     }
     collide(me.pos, .5, me.pos.y);   // re-borne après poussée (jamais dans un mur)
   }
+  // SÉCURITÉ anti-écran-gris : NaN ou SORTIE d'arène (slide/wall-bounce par-dessus un mur, chute) -> on remet le joueur DANS la map
+  { const _h = ((typeof MAP!=='undefined' && MAP && MAP.HALF) ? MAP.HALF : 45), _lim = _h - 8;
+    const _nan = !(isFinite(me.pos.x)&&isFinite(me.pos.y)&&isFinite(me.pos.z)&&isFinite(me.vel.x)&&isFinite(me.vel.y)&&isFinite(me.vel.z));
+    if(_nan || me.pos.y < -15 || Math.abs(me.pos.x) > _lim || Math.abs(me.pos.z) > _lim){
+      const _in = Math.max(8, _h - 20);
+      me.pos.x = isFinite(me.pos.x) ? Math.max(-_in, Math.min(_in, me.pos.x)) : 0;
+      me.pos.z = isFinite(me.pos.z) ? Math.max(-_in, Math.min(_in, me.pos.z)) : 0;
+      me.vel.set(0,0,0);
+      me.pos.y = (localGroundAt(me.pos.x, me.pos.z, 60) || 0) + 0.05;
+      me.onGround = true; me.slide.active = false; me.wallBounced = false; me.wbBoostT = 0; if(me.mantle) me.mantle.active = false;
+    } }
   const ground = localGroundAt(me.pos.x, me.pos.z, me.pos.y);
   if(me.pos.y <= ground){
     me.pos.y = ground;

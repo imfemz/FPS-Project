@@ -113,12 +113,17 @@ const server = http.createServer((req, res) => {
   const base = url.startsWith('/shared/') ? __dirname : path.join(__dirname, 'public');
   const file = path.join(base, url);
   if (!file.startsWith(__dirname)) { res.writeHead(403); return res.end(); }
-  fs.readFile(file, (err, data) => {
-    if (err) { res.writeHead(404); return res.end('404'); }
-    const headers = { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' };
-    if (DEV) headers['Cache-Control'] = 'no-store';   // toujours frais en local
+  // STREAMING (pas fs.readFile) : sert les gros .glb/.jpg sans tout charger en RAM -> robuste sous charge (fini les 503).
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) { res.writeHead(404); return res.end('404'); }
+    const headers = { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Content-Length': st.size };
+    if (DEV) headers['Cache-Control'] = 'no-store';                 // toujours frais en local
+    else headers['Cache-Control'] = 'public, max-age=3600';         // prod : cache navigateur (allège le serveur)
     res.writeHead(200, headers);
-    res.end(data);
+    const stream = fs.createReadStream(file);
+    stream.on('error', () => { try { res.destroy(); } catch (e) {} });
+    req.on('close', () => stream.destroy());                        // client parti -> on stoppe la lecture
+    stream.pipe(res);
   });
 });
 
