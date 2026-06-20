@@ -185,6 +185,11 @@
   #ping{position:absolute;top:22px;right:26px;font-family:var(--mono);font-size:11px;color:var(--txt-faint);letter-spacing:1px}
   #gamepadicon{position:absolute;top:42px;right:26px;font-family:var(--mono);font-size:10px;color:var(--txt-dim);display:none;letter-spacing:1px}
   #damage{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(255,40,60,.5) 100%);opacity:0;transition:opacity .25s}
+  #healflash{position:fixed;inset:0;pointer-events:none;z-index:6;opacity:0;background:radial-gradient(ellipse at center,rgba(90,180,255,.35) 0%,rgba(120,210,255,.12) 60%,transparent 100%);transition:opacity .5s ease}
+  #lowhp{position:fixed;inset:0;pointer-events:none;z-index:5;opacity:0;background:radial-gradient(ellipse at center,transparent 50%,rgba(200,20,30,.42) 100%);transition:opacity .4s ease}
+  #regenmsg{position:fixed;left:50%;bottom:15%;transform:translateX(-50%);z-index:8;pointer-events:none;display:none;font-family:var(--mono);font-size:15px;font-weight:700;letter-spacing:2px;color:#7fd4ff;text-shadow:0 0 12px rgba(90,180,255,.7),0 2px 6px rgba(0,0,0,.6);white-space:nowrap}
+  #regenmsg.show{display:block;animation:regenBlink 1s ease-in-out infinite}
+  @keyframes regenBlink{0%,100%{opacity:1}50%{opacity:.22}}
   #buffhalo{position:fixed;inset:0;pointer-events:none;z-index:6;opacity:0;background:radial-gradient(ellipse at center,transparent 60%,rgba(150,60,255,.42) 100%);transition:opacity .35s}
   #buffhalo.on{animation:buffpulse 1.15s ease-in-out infinite}
   @keyframes buffpulse{0%,100%{opacity:.30}50%{opacity:.80}}
@@ -545,6 +550,9 @@
   <div id="gamepadicon">🎮 MANETTE</div>
 </div>
 <div id="damage"></div>
+<div id="healflash"></div>
+<div id="lowhp"></div>
+<div id="regenmsg">RÉGÉNÉREZ VOTRE VIE AVEC UNE ORB BLEUE !</div>
 <div id="dmgdir"><svg viewBox="-150 -150 300 300"><path class="ddarc" d="M -46 -116 A 124.8 124.8 0 0 1 46 -116"/></svg></div>
 <div id="countdown"></div>
 <div id="buffhalo"></div>
@@ -2110,7 +2118,7 @@ function updateOrbs(dt){
       const dx = me.pos.x - g.x, dy = (me.pos.y + 1) - g.y, dz = me.pos.z - g.z;
       if(dx*dx + dy*dy + dz*dz < 1.8*1.8){
         me.hp = maxHp; me.sh = maxShield; updateHPShieldUI();
-        playSfxAt('orb_pickup', g.clone(), 1);
+        onShieldRestored();
         removeOrb(id);
       }
     }
@@ -2120,11 +2128,12 @@ function onOrbTaken(m){
   const o = orbsFx[m.id];
   const pos = o ? o.grp.position.clone() : null;
   removeOrb(m.id);
-  if(pos) playSfxAt('orb_pickup', pos, 1);
   if(m.by === myId){
     me.hp = m.hp; me.sh = m.sh;
     updateHPShieldUI();
+    onShieldRestored();                        // flash bleu + shield_full (mon pickup)
   } else {
+    if(pos) playSfxAt('orb_pickup', pos, 1);   // pickup d'un autre : cue spatial
     const b = botMgr.get(m.by);
     if(b){ b.hp = m.hp; b.sh = m.sh; b._shPrev = m.sh; } // son bouclier est de nouveau plein
   }
@@ -6891,6 +6900,28 @@ function triggerDamageFeedback(){
   v.classList.add('hurt','flash');
   clearTimeout(v._dmgT); v._dmgT = setTimeout(()=>v.classList.remove('flash'), 140);
 }
+// Ramassage d'orbe bleue (MON pickup) : flash bleu + son dedie shield_full.
+function onShieldRestored(){
+  const hf = document.getElementById('healflash');
+  if(hf){ hf.style.transition='none'; hf.style.opacity='0.7'; void hf.offsetWidth; hf.style.transition='opacity .5s ease'; hf.style.opacity='0'; }
+  if(typeof playSfx==='function') playSfx('shield_full');
+}
+// Feedback santé (tous modes) : message regen (>5s pas full), overlay rouge sans shield, tremblement <20 PV.
+let _notFullT = 0, _lowHpPulseT = 0;
+function updateHealthFeedback(dt){
+  const live = playing && alive;
+  const regen = document.getElementById('regenmsg');
+  if(live && (me.hp < maxHp || me.sh < maxShield)){
+    _notFullT += dt;
+    if(regen) regen.classList.toggle('show', _notFullT > 5);
+  } else { _notFullT = 0; if(regen) regen.classList.remove('show'); }
+  const low = document.getElementById('lowhp');
+  if(low) low.style.opacity = (live && me.sh <= 0 && me.hp > 0) ? '1' : '0';
+  if(live && me.hp < 20){
+    _lowHpPulseT -= dt;
+    if(_lowHpPulseT <= 0){ _lowHpPulseT = 3; landShake = Math.max(landShake, 0.6); landShakeT = 0; landShakePhase = 0; }   // tremblement pulsé toutes les 3 s
+  } else _lowHpPulseT = 0;
+}
 // Indicateur DIRECTIONNEL de dégât : arc rouge pointant vers le tireur (repère du joueur).
 let _dmgDir = { pos: null, until: 0 };
 function showDamageDirection(pos){
@@ -9575,6 +9606,7 @@ function animate(){
   updateImpactEffects(dt);
   if(soulFx.length) updateSoulFx(dt);
   updateBuffItem(dt);
+  updateHealthFeedback(dt);
   updateHealthBars(dt);
   updateDamageNumbers(dt);
   updateCorpseFades(dt);
