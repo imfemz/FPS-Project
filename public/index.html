@@ -136,16 +136,16 @@
   #ammo.saber.over-ready .sb-charge{animation:sbOverPulse .7s ease-in-out infinite}
   #ammo.saber.over-ready .sb-wpn .sb-name{color:#ff6a6a;text-shadow:0 0 10px rgba(255,80,80,.7)}
   /* BONUS ROUGE actif sur un FLINGUE : SEULEMENT l'icône + le nom de l'arme passent rouge & pulsent (cadre inchangé) */
-  @keyframes redNamePulse{0%,100%{color:#ff6a6a;text-shadow:0 0 6px rgba(255,80,80,.45)}50%{color:#ff3636;text-shadow:0 0 14px rgba(255,50,50,.95)}}
+  @keyframes redNamePulse{0%,100%{color:#c98bff;text-shadow:0 0 6px rgba(160,80,255,.45)}50%{color:#a64dff;text-shadow:0 0 14px rgba(150,60,255,.95)}}
   #ammo.red-active #wpnname{animation:redNamePulse .7s ease-in-out infinite}
   @keyframes redIconPulse{
-    0%,100%{filter:brightness(0) saturate(100%) invert(34%) sepia(96%) saturate(4500%) hue-rotate(345deg) brightness(98%) contrast(98%) drop-shadow(0 0 4px rgba(255,60,60,.5))}
-    50%{filter:brightness(0) saturate(100%) invert(34%) sepia(96%) saturate(4500%) hue-rotate(345deg) brightness(112%) contrast(98%) drop-shadow(0 0 12px rgba(255,40,40,.95))}
+    0%,100%{filter:brightness(0) saturate(100%) invert(34%) sepia(96%) saturate(4500%) hue-rotate(265deg) brightness(98%) contrast(98%) drop-shadow(0 0 4px rgba(160,80,255,.5))}
+    50%{filter:brightness(0) saturate(100%) invert(34%) sepia(96%) saturate(4500%) hue-rotate(265deg) brightness(112%) contrast(98%) drop-shadow(0 0 12px rgba(150,60,255,.95))}
   }
   #ammo.red-active #wpnicon img,#ammo.red-active #wpnicon svg{animation:redIconPulse .7s ease-in-out infinite}
   /* Embers (braises) : petites particules chaudes qui montent et s'évaporent du HUD ("truc cool débloqué") */
   .ember{position:absolute;border-radius:50%;pointer-events:none;z-index:7;opacity:0;
-    background:radial-gradient(circle,#ffe1a6 0%,#ff8a3c 55%,rgba(255,80,30,0) 100%);
+    background:radial-gradient(circle,#e6c8ff 0%,#a64dff 55%,rgba(150,60,255,0) 100%);
     filter:blur(.4px);animation:emberRise 1.5s ease-out forwards}
   @keyframes emberRise{0%{opacity:0;transform:translate(0,0) scale(.5)}18%{opacity:.85}100%{opacity:0;transform:translate(var(--dx,0),-48px) scale(1.05)}}
   /* ===== REFONTE DA : cartes HUD rétro-futuristes (coins chanfreinés, bordure fine bleue en dégradé,
@@ -185,6 +185,9 @@
   #ping{position:absolute;top:22px;right:26px;font-family:var(--mono);font-size:11px;color:var(--txt-faint);letter-spacing:1px}
   #gamepadicon{position:absolute;top:42px;right:26px;font-family:var(--mono);font-size:10px;color:var(--txt-dim);display:none;letter-spacing:1px}
   #damage{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(255,40,60,.5) 100%);opacity:0;transition:opacity .25s}
+  #buffhalo{position:fixed;inset:0;pointer-events:none;z-index:6;opacity:0;background:radial-gradient(ellipse at center,transparent 60%,rgba(150,60,255,.42) 100%);transition:opacity .35s}
+  #buffhalo.on{animation:buffpulse 1.15s ease-in-out infinite}
+  @keyframes buffpulse{0%,100%{opacity:.30}50%{opacity:.80}}
   /* Indicateur directionnel de dégât : arc rouge pointant vers le tireur, tourne autour du centre écran */
   #dmgdir{position:fixed;left:50%;top:50%;width:0;height:0;z-index:6;pointer-events:none;opacity:0;transition:opacity .35s ease;transform:translate(-50%,-50%) rotate(0deg)}
   #dmgdir svg{position:absolute;left:-150px;top:-150px;width:300px;height:300px;overflow:visible}
@@ -521,6 +524,7 @@
 <div id="damage"></div>
 <div id="dmgdir"><svg viewBox="-150 -150 300 300"><path class="ddarc" d="M -46 -116 A 124.8 124.8 0 0 1 46 -116"/></svg></div>
 <div id="countdown"></div>
+<div id="buffhalo"></div>
 <div id="gpcursor"></div>
 
 <div class="screen show" id="menu">
@@ -3625,7 +3629,8 @@ let redUntil = [0, 0, 0];   // timestamp de fin du bonus rouge, par index d'arme
 function redActive(idx){ return performance.now() < (redUntil[idx] || 0); }
 function activateGunRed(idx){
   redUntil[idx] = performance.now() + ((GAMECFG.RED_BONUS && GAMECFG.RED_BONUS.duration) ?? 10) * 1000;
-  if(typeof showHUDToast === 'function') showHUDToast('BONUS ROUGE', 'bad', 2200);
+  if(typeof playSfx === 'function') playSfx('buff_activate');   // son de deblocage du buff
+  if(typeof showHUDToast === 'function') showHUDToast('SURCHARGE', 'bad', 2200);
   if(typeof sfx === 'function'){ sfx(230, 180, 0.16, 0.05, 'square'); sfx(110, 260, 0.20, 0.05, 'sawtooth'); }
 }
 // À chaque kill : 3 kills (toutes armes confondues) → arme l'arme EN MAIN
@@ -3666,7 +3671,7 @@ function getRedEnergyTexture(){
 const redSkin = { model:null, mats:[], orig:[], weight:0 };
 function applyRedSkin(model){
   if(!model) return; clearRedSkin();
-  const tex=getRedEnergyTexture(), col=new THREE.Color(0xff2a16);
+  const tex=getRedEnergyTexture(), col=new THREE.Color(0x9b30ff);   // peau energie VIOLETTE (buff)
   const exclude=(model.userData && model.userData.saber && model.userData.saber.bladeMats) || [];  // sabre : garder la lame cyan
   model.traverse(o=>{ if(!o.isMesh) return;
     const mats=Array.isArray(o.material)?o.material:[o.material];
@@ -4247,6 +4252,8 @@ function updateRedBuffUI(){
   const ammoEl = document.getElementById('ammo'); if(!ammoEl) return;
   const on = !!(playing && alive && !isSaber() && redActive(me.weaponIdx));
   if(on !== ammoEl._red){ ammoEl.classList.toggle('red-active', on); ammoEl._red = on; }
+  const halo = document.getElementById('buffhalo');   // halo violet pendant TOUT le buff (arme OU overcharge)
+  if(halo){ const hw = (typeof redSkinWanted==='function') ? redSkinWanted() : on; halo.classList.toggle('on', !!hw); }
   // Embers : tant qu'un état "rouge débloqué" est actif (bonus flingue OU overcharge sabre dispo) → braises qui s'évaporent
   const redState = on || ammoEl.classList.contains('over-ready');
   if(redState){
@@ -4498,8 +4505,8 @@ function setBotType(b, type){
       b.sizeMul = T.scale || 1.5; b.maxHpType = Math.round(maxHp * (T.hp_mult || 1.8));
       b.view_range = T.view_range || 45; b.wallhack = !!T.wallhack; b.fireRange = T.fire_range || 30;
       b.rush = !!T.rush; b.nonstopFire = !!T.nonstop_fire; b.noFlee = !!T.no_flee;
-      b.dodgeJumpBelow = T.dodge_jump_below || 0; b.speedMul = T.speed_mult || 2;
-      b.fov_deg = 0; b.sense = 0;
+      b.dodgeJumpBelow = T.dodge_jump_below || 0; b.speedMul = T.speed_mult || 1.5;
+      b.alertTime = T.alert_time || 4; b.fov_deg = T.view_fov_deg || 280; b.sense = 0;
     } else {
       if(b.soldier && b.soldier.root) b.soldier.root.scale.setScalar(1);
       tintSoldier(b.soldier, null);
@@ -6115,13 +6122,13 @@ LBOT.types = {
     from_wave: 3, max: 3, per: 2,      // des la vague 3 ; jusqu'a 3 ; +1 toutes les 2 vagues
     color: 0x080808, scale: 1.5, hp_mult: 1.8,   // mesh noir, taille/hitbox x1.5, plus resistant
     weapon: 1,                         // WINGMAN (memes degats que le wingman : 70 corps)
-    speed_mult: 2.0,                   // vitesse de course x2
-    view_range: 45, wallhack: true,    // detecte/poursuit le joueur a travers les murs (40m+)
+    speed_mult: 1.5,                   // vitesse de course x1.5
+    view_range: 90, wallhack: true, alert_time: 4, view_fov_deg: 280,   // repere de loin ; charge alert_time s apres l'alerte
     fire_range: 30, rush: true, nonstop_fire: true,   // fonce des qu'il connait + tir continu (sur LOS reel)
     no_flee: true, dodge_jump_below: 0.2              // ne fuit jamais ; < 20% PV -> sauts G/D
   },
   drone: {                             // BOT 3 — sonde cybernetique rouge volante
-    from_wave: 5, max: 2, per: 3,
+    from_wave: 3, max: 2, per: 3,
     color: 0xff2a2a, hp: 60,
     hover: 4.0, follow_radius: 6.0, speed: 7,   // flotte 4m au-dessus, suit dans 6m, velocite 7
     view_fov_deg: 40, sense_radius: 5,          // FOV 40deg ; detecte a travers mur si < 5m
@@ -6269,9 +6276,9 @@ function initLocalBotAI(b){
            seenT: 0, fireFlash: 0, lastX: b.pos?b.pos.x:0, lastZ: b.pos?b.pos.z:0, jumpQueued: false };
   b.playerHit = false;   // nouveau spawn -> a de nouveau le bonus premier coup
 }
-function lbotSpawnPoint(i, n, extra){ // >= MIN du joueur ET >= spawn_sep des autres bots
+function lbotSpawnPoint(i, n, extra, minDist){ // >= MIN du joueur ET >= spawn_sep des autres bots
   const lim = (MAP.HALF || 30) - 4;
-  const MIN = 10;
+  const MIN = minDist || 10;
   const SEP = LBOT.spawn_sep ?? 15;
   const px = (me && me.pos) ? me.pos.x : 0, pz = (me && me.pos) ? me.pos.z : 0;
   function botClear(x, z){
@@ -6331,7 +6338,7 @@ function spawnBotWave(n){
     let b = botMgr.get(id); if(!b) b = ensureBot(id, 0xff7755);
     const type = (i < nDrone) ? 'drone' : (i < nDrone + nSent) ? 'sentinel' : 'normal';
     setBotType(b, type);
-    const p = lbotSpawnPoint(i, n, _placed); _placed.push([p[0], p[2]]);
+    const p = lbotSpawnPoint(i, n, _placed, type==='sentinel' ? 60 : 0); _placed.push([p[0], p[2]]);
     b.hp = b.maxHpType || maxHp; b.sh = (type === 'drone') ? 0 : maxShield; b._shPrev = b.sh;
     onBotRespawn({ id, p:[p[0], p[1]||0, p[2]], yaw: Math.random()*Math.PI*2 });
     initLocalBotAI(b);
@@ -6458,10 +6465,18 @@ function updateLocalBots(dt){
     ai.seenT = (see || wallKnow) ? (A.forget_time ?? 3) : Math.max(0, ai.seenT - dt);
     if(see || wallKnow){ ai.lastX = me.pos.x; ai.lastZ = me.pos.z; }
     const knows = see || wallKnow || ai.seenT > 0;
-    const inFire = see && alive && distP <= fireRange;
-    // AGRESSIVITE : vu sans etre touche pendant aggro_time -> rush + tir continu (Sentinel : rush direct)
+    // SENTINEL : 1ere vue (LOS) -> son d'alerte, puis il CHARGE alert_time s plus tard (s'il voit encore)
+    if(b.rush){
+      if(see && !ai.spotted){ ai.spotted = true; ai.alertT = (b.alertTime || 4); if(typeof playSfx==='function') playSfx('sentinel'); }
+      if(ai.spotted && ai.alertT > 0) ai.alertT -= dt;
+    }
+    const charging = b.rush ? (ai.spotted && (ai.alertT||0) <= 0 && knows) : false;
+    const sentHold = b.rush && ai.spotted && (ai.alertT||0) > 0;     // telegraphe : fige avant de charger
+    const sentWander = b.rush && !ai.spotted;                        // pas encore repere : erre
+    const inFire = (b.rush ? charging : see) && alive && distP <= fireRange;   // sentinel ne tire qu'en charge
+    // AGRESSIVITE : vu sans etre touche pendant aggro_time -> rush + tir continu (Sentinel : charge differee)
     if(see){ ai.noHitSeenT = (ai.noHitSeenT||0) + dt; } else { ai.noHitSeenT = 0; }
-    const aggro = b.rush ? knows : (knows && ((ai.noHitSeenT||0) >= (A.aggro_time ?? 2)));
+    const aggro = b.rush ? charging : (knows && ((ai.noHitSeenT||0) >= (A.aggro_time ?? 2)));
 
     // Tir + accuracy
     ai.fireT -= dt; ai.reloadT -= dt; ai.fireFlash = Math.max(0, ai.fireFlash - dt);
@@ -6488,7 +6503,15 @@ function updateLocalBots(dt){
     // Decision de deplacement
     let vx=0, vz=0, run=false;
     const _flee = !b.noFlee && knows && (b.hp < maxHp * (A.flee_below ?? 0.5));   // PV bas -> fuite (sauf Sentinel)
-    if(_flee){
+    if(sentHold){
+      // SENTINEL : vous a repere -> se fige et vous fixe (alert_time) avant de charger
+      vx = 0; vz = 0; run = false; b.yaw = Math.atan2(-dxp, -dzp);
+    } else if(sentWander){
+      // SENTINEL pas encore repere : erre lentement (ne charge pas)
+      if(mv.retarget <= 0){ mv.retarget = 1.8 + Math.random()*2.6; mv.tx = (Math.random()*2-1)*lim; mv.tz = (Math.random()*2-1)*lim; }
+      const dxt = mv.tx - b.pos.x, dzt = mv.tz - b.pos.z, dt2 = Math.hypot(dxt,dzt) || 0.0001;
+      vx = dxt/dt2; vz = dzt/dt2; if(dt2 < 1.5) mv.retarget = 0; b.yaw = Math.atan2(-vx, -vz); run = false;
+    } else if(_flee){
       const px = dxp/distP, pz = dzp/distP;
       vx = -px - pz*mv.strafeDir*0.4;          // s'eloigne du joueur (+ un peu de zigzag)
       vz = -pz + px*mv.strafeDir*0.4;
