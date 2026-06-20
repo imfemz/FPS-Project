@@ -808,6 +808,7 @@ const CONFIG = {
   HIPFIRE_BACK: 0.06,         // R-69 AU JUGÉ (hipfire) : recul arrière (axe z, m) ajouté ∝ recul. S'annule en ADS. 0 = off.
   WINGMAN_ADS_TURN_ROLL: 9,   // Wingman en ADS : roll (lean) de l'arme ∝ vitesse de rotation gauche/droite → sway visible. Le point rouge reste centré (compensé par le fire-roll). 0 = off.
   SLIDE_CAM_ROLL: 0.05,
+  STRAFE_CAM_ROLL: 0.035,        // penchement (roll) cam en strafe G/D ∝ vitesse latérale. 0 = off ; signe = sens du lean.
   MAX_BULLET_HOLES: 80, BULLET_HOLE_LIFE: 15,  // les impacts disparaissent (fondu sur les 3 dernières s)
   INTERP_DELAY: 110,            // marge d'interpolation (horloge serveur + extrapolation 120 ms)
 };
@@ -1469,6 +1470,7 @@ function mountStructureModels(){
           wrap.add(inst);
           wrap.scale.set(b.w/(size.x||1), b.h/(size.y||1), b.d/(size.z||1));
           wrap.position.set(b.x, (b.y0||0) + b.h/2, b.z);
+          if(b.rot != null) wrap.rotation.y = -b.rot;   // bloc oriente : tourne le modele aussi
           wrap.traverse(o=>{ if(o.isMesh){ o.castShadow = o.receiveShadow = true; if(o.material && o.material.isMeshStandardMaterial) o.material.envMapIntensity = ge; } });
           scene.add(wrap);
           if(SM.hideBox !== false && b._boxMesh) b._boxMesh.visible = false;
@@ -1492,14 +1494,17 @@ function buildMap(){
     const boxMat = mapMaterial(b);
     if(BAO.enabled !== false){ applyVertexAO(boxGeo, b.h, BAO.face_darken ?? 0.34); boxMat.vertexColors = true; }
     const m = new THREE.Mesh(boxGeo, boxMat);
-    m.position.set(b.x, y0 + b.h/2, b.z); m.castShadow = m.receiveShadow = true; scene.add(m);
+    const _yaw = (b.rot != null) ? -b.rot : 0;   // yaw jeu = -rotZ Blender (x=BlenderX, z=BlenderY)
+    m.position.set(b.x, y0 + b.h/2, b.z); if(_yaw) m.rotation.y = _yaw; m.castShadow = m.receiveShadow = true; scene.add(m);
     mapMeshes.push(m);
     b._boxMesh = m;
     const isWall = (b.h >= 5);
     (isWall ? wallMeshes : crateMeshes).push(m);
     m.userData.surface = isWall ? 'wall' : 'crate';
-    // collider AABB : h = SOMMET du volume (y0+h), y0 = base (0 = ancré au sol, >0 = flottant → on passe dessous)
-    colliders.push({minx:b.x-b.w/2, maxx:b.x+b.w/2, minz:b.z-b.d/2, maxz:b.z+b.d/2, h:y0+b.h, y0:y0});
+    // collider : OBB (oriente) si rot, sinon AABB. h = SOMMET (y0+h), y0 = base.
+    if(b.rot != null){ const _c=Math.cos(_yaw), _s=Math.sin(_yaw);
+      colliders.push({cx:b.x, cz:b.z, hw:b.w/2, hd:b.d/2, c:_c, s:_s, h:y0+b.h, y0:y0}); }
+    else colliders.push({minx:b.x-b.w/2, maxx:b.x+b.w/2, minz:b.z-b.d/2, maxz:b.z+b.d/2, h:y0+b.h, y0:y0});
     if(y0 < 0.05) addContactShadow(b.x, b.z, b.w, b.d);   // pas d'ombre au sol pour les volumes flottants
     if(b.rail) addRailings(b);
     if(b.glow==='top' || b.glow==='edge'){
@@ -1586,6 +1591,27 @@ function buildMap(){
 }
 // Re-applique les textures de la map a la volee (apres edition de GAMECFG.TEXTURES en console).
 window.applyMapTextures = function(){ try{ applyCustomTextures(); console.log('[map] textures re-appliquees'); }catch(e){ console.warn(e); } };
+// ===== Collision : point le plus proche d'un collider (AABB classique OU boite ORIENTEE/OBB) =====
+// OBB : {cx,cz,hw,hd,c,s,h,y0} (c=cos yaw, s=sin yaw, convention Three rotation.y). AABB : {minx,maxx,minz,maxz,h,y0}.
+function _colClosest(b, px, pz){
+  if(b.c !== undefined){
+    const dx = px-b.cx, dz = pz-b.cz;
+    const lx = b.c*dx - b.s*dz, lz = b.s*dx + b.c*dz;          // monde -> local (R^T)
+    const clx = Math.max(-b.hw, Math.min(lx, b.hw)), clz = Math.max(-b.hd, Math.min(lz, b.hd));
+    const ex = lx-clx, ez = lz-clz;
+    return { ddx: b.c*ex + b.s*ez, ddz: -b.s*ex + b.c*ez, d2: ex*ex + ez*ez };   // local -> monde (R)
+  }
+  const qx = Math.max(b.minx, Math.min(px, b.maxx)), qz = Math.max(b.minz, Math.min(pz, b.maxz));
+  const ddx = px-qx, ddz = pz-qz;
+  return { ddx, ddz, d2: ddx*ddx + ddz*ddz };
+}
+function _colContainsXZ(b, x, z, pad){
+  if(b.c !== undefined){
+    const dx = x-b.cx, dz = z-b.cz, lx = b.c*dx - b.s*dz, lz = b.s*dx + b.c*dz;
+    return Math.abs(lx) <= b.hw+pad && Math.abs(lz) <= b.hd+pad;
+  }
+  return x >= b.minx-pad && x <= b.maxx+pad && z >= b.minz-pad && z <= b.maxz+pad;
+}
 function collide(pos, radius, feetY){
   pos.x = Math.max(-MAP.HALF+0.6, Math.min(MAP.HALF-0.6, pos.x));
   pos.z = Math.max(-MAP.HALF+0.6, Math.min(MAP.HALF-0.6, pos.z));
@@ -1599,12 +1625,10 @@ function collide(pos, radius, feetY){
     // muret de rampe : ne bloque QUE si on est nettement plus bas que la pente ici
     // (donc on arrive par le côté) — sinon on laisse monter/descendre librement
     if(b.rampWall && feetY > groundHere - 0.2) continue;
-    const cx = Math.max(b.minx, Math.min(pos.x, b.maxx));
-    const cz = Math.max(b.minz, Math.min(pos.z, b.maxz));
-    const ddx = pos.x-cx, ddz = pos.z-cz, d2 = ddx*ddx+ddz*ddz;
-    if(d2 < radius*radius){
-      const d = Math.sqrt(d2)||0.001;
-      pos.x += ddx/d*(radius-d); pos.z += ddz/d*(radius-d);
+    const _r = _colClosest(b, pos.x, pos.z);
+    if(_r.d2 < radius*radius){
+      const d = Math.sqrt(_r.d2)||0.001;
+      pos.x += _r.ddx/d*(radius-d); pos.z += _r.ddz/d*(radius-d);
     }
   }
 }
@@ -1612,9 +1636,7 @@ function collide(pos, radius, feetY){
 function localGroundAt(x, z, feetY){
   let gnd = MAP.groundHeightAt(x, z);
   for(const b of colliders){
-    if(b.h <= feetY + 0.31 &&
-       x >= b.minx-0.15 && x <= b.maxx+0.15 &&
-       z >= b.minz-0.15 && z <= b.maxz+0.15)
+    if(b.h <= feetY + 0.31 && _colContainsXZ(b, x, z, 0.15))
       gnd = Math.max(gnd, b.h);
   }
   return gnd;
@@ -1627,10 +1649,9 @@ function findWallNormal(pos, feetY){
   for(const b of test){
     if(b.h < feetY + 1.2) continue;
     if((b.y0||0) > feetY + 1.5) continue;   // passerelle au-dessus → ce n'est pas un mur ici
-    const cx = Math.max(b.minx, Math.min(pos.x, b.maxx));
-    const cz = Math.max(b.minz, Math.min(pos.z, b.maxz));
-    const ddx = pos.x-cx, ddz = pos.z-cz, d = Math.hypot(ddx,ddz);
-    if(d > 0.001 && d < bd){ bd = d; best = new THREE.Vector3(ddx/d, 0, ddz/d); }
+    const _r = _colClosest(b, pos.x, pos.z);
+    const d = Math.sqrt(_r.d2);
+    if(d > 0.001 && d < bd){ bd = d; best = new THREE.Vector3(_r.ddx/d, 0, _r.ddz/d); }
   }
   const m = MAP.HALF - 0.6;
   if(m - pos.x < bd){ bd = m - pos.x; best = new THREE.Vector3(-1,0,0); }
@@ -2150,9 +2171,7 @@ function ragdollGroundY(x, z, feetY){
   let g = MAP.groundHeightAt(x, z);
   for(const b of colliders){
     if(b.rampWall) continue;
-    if(b.h <= feetY + 0.1 &&
-       x >= b.minx-0.1 && x <= b.maxx+0.1 &&
-       z >= b.minz-0.1 && z <= b.maxz+0.1)
+    if(b.h <= feetY + 0.1 && _colContainsXZ(b, x, z, 0.1))
       g = Math.max(g, b.h);
   }
   return g + .42;
@@ -3552,7 +3571,7 @@ let runArms;
 let recoil = 0, swayX = 0, swayY = 0, adsAmount = 0, sprintPose = 0, reloadAnimT = -1;
 let reloadUWWeight = 0; // poids de fondu (blend_in/out) de la pose de reload procédurale, appliquée dans updateWeaponAnimation
 let lastMyAnim = {}; // dernier état d'anim local (pour la capture killcam 60Hz)
-let crouchTilt = 0, slideRoll = 0, mantlePose = 0; // lissages (v3)
+let crouchTilt = 0, slideRoll = 0, mantlePose = 0, strafeRoll = 0; // lissages (v3)
 let swayPhase = 0, swayW = 0;                       // sway caméra "vivant" (course) : phase + poids lissé
 let crouchPoseW = 0; // poids lissé 0→1 de la pose crouch renforcée (pitch+roll+pos)
 let gunCam = null, gunScene = null; // caméra + scène dédiées au viewmodel (FOV d'arme séparé)
@@ -6605,6 +6624,7 @@ function insaneDeath(){
 function insaneEndScore(){
   if(INSANE.ended) return;
   INSANE.ended = true; INSANE.running = false;
+  if(typeof playSfx==='function') playSfx('run_end');   // jingle de fin du run 2 min (timer écoulé)
   document.exitPointerLock && document.exitPointerLock();
   { const hud = document.getElementById('hud'); if(hud) hud.style.opacity = '0'; }
   const el = document.getElementById('insanedeath');
@@ -8719,10 +8739,15 @@ function applyCamera(dt){
   // v3 : roll de slide lissé (entrée rapide, sortie douce)
   const rollTarget = me.slide.active ? CONFIG.SLIDE_CAM_ROLL : 0;
   slideRoll += (rollTarget - slideRoll)*Math.min(1, dt*(me.slide.active?12:6.5));
+  // PENCHEMENT en strafe : roll ∝ vitesse latérale (repère vue), coupé pendant le slide (déjà incliné)
+  const _lat = me.vel.x*Math.cos(me.yaw) - me.vel.z*Math.sin(me.yaw);
+  const _latN = Math.max(-1, Math.min(1, _lat / (CONFIG.WALK_SPEED || 7)));
+  const strafeTarget = me.slide.active ? 0 : (-_latN * (CONFIG.STRAFE_CAM_ROLL || 0));
+  strafeRoll += (strafeTarget - strafeRoll)*Math.min(1, dt*8);
   camera.position.set(me.pos.x, me.pos.y + me.eye, me.pos.z);
   camera.rotation.set(0,0,0);
   camera.rotateY(me.yaw); camera.rotateX(me.pitch + vkickCam);
-  camera.rotateZ(slideRoll);
+  camera.rotateZ(slideRoll + strafeRoll);
   // ===== SWAY "VIVANT" : balancement DIAGONAL gauche↔droite en course =====
   // Couche de base permanente (par-dessus l'orientation, sous les shakes d'événements).
   // Rotationnel : yaw + pitch + roll EN PHASE → la vue balaie une diagonale. Fréquence et

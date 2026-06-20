@@ -681,6 +681,7 @@
       sentinel: '/audio/sentinel.mp3',              // un Sentinel vient de reperer le joueur
       buff_activate: '/audio/buff_activate.mp3',    // deblocage du buff (arme violette)
       insane_dead: '/audio/insane_dead.mp3',        // mort du joueur en mode Insane
+      run_end: '/audio/run_end.mp4',                // fin du run 2 min (timer écoulé) — fichier present = .mp4
       r69_buff: '/audio/r69_buff.mp3', wingman_buff: '/audio/wingman_buff.mp3',   // tir des armes en BUFF
       wingman_shot: '/audio/wingman_shot.mp3', wingman_reload: '/audio/wingman_reload.mp3',
       // ===== UI / menu =====
@@ -858,7 +859,7 @@
       enabled: true,
       hideBox: true,        // cache la boite d'origine (la collision reste active)
       byType: {
-        container: '/models/crate.glb',
+        container: '/models/container.glb',
         metal:     '/models/cube.glb',
         wall:      '/models/concrete_wall.glb',
         crate:     '/models/crate.glb',
