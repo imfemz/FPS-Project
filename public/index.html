@@ -1892,9 +1892,118 @@ function startRagdoll(sol, atPos, hitDir){
 function killRagdollFor(sol){
   for(let i=ragdolls.length-1; i>=0; i--) if(ragdolls[i].sol === sol) ragdolls.splice(i,1);
 }
+/* ============================================================================
+   RAGDOLL ARTICULÉ (Rapier physics) — fail-safe : repli sur le topple si KO.
+   ========================================================================== */
+let RAPIER = null, _rapierReady = false, _physWorld = null;
+const _RD_GRAV = 20;
+import('https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/+esm')
+  .then(m => { RAPIER = m.default || m; return RAPIER.init(); })
+  .then(() => {
+    _physWorld = new RAPIER.World({ x:0, y:-_RD_GRAV, z:0 });
+    // colliders MAP : sol + blocs (les corps tombent dessus, contre les murs/caisses)
+    _physWorld.createCollider(RAPIER.ColliderDesc.cuboid(120, 0.5, 120).setTranslation(0, -0.5, 0));
+    try{ for(const bl of (MAP.blocks||[])){ const y0 = bl.y0||0; _physWorld.createCollider(RAPIER.ColliderDesc.cuboid((bl.w||1)/2, (bl.h||1)/2, (bl.d||1)/2).setTranslation(bl.x, y0+(bl.h||1)/2, bl.z)); } }catch(e){}
+    try{ const p = MAP.platform; if(p) _physWorld.createCollider(RAPIER.ColliderDesc.cuboid(p.w/2, p.h/2, p.d/2).setTranslation(p.x, p.h/2, p.z)); }catch(e){}
+    _rapierReady = true; console.log('[ragdoll] Rapier prêt');
+  })
+  .catch(e => { console.warn('[ragdoll] Rapier indisponible -> fallback topple', e); });
+
+// Chaîne d'os simulés : [os, parent, os-de-queue (pour dimensionner la capsule)]. Ordre = hiérarchie.
+const RD_CHAIN = [
+  ['DEF-hips',        null,             'DEF-spine.001'],
+  ['DEF-spine.001',   'DEF-hips',       'DEF-spine.003'],
+  ['DEF-spine.003',   'DEF-spine.001',  'DEF-head'],
+  ['DEF-head',        'DEF-spine.003',  null],
+  ['DEF-upper_arm.L', 'DEF-spine.003',  'DEF-forearm.L'],
+  ['DEF-forearm.L',   'DEF-upper_arm.L','DEF-hand.L'],
+  ['DEF-upper_arm.R', 'DEF-spine.003',  'DEF-forearm.R'],
+  ['DEF-forearm.R',   'DEF-upper_arm.R','DEF-hand.R'],
+  ['DEF-thigh.L',     'DEF-hips',       'DEF-shin.L'],
+  ['DEF-shin.L',      'DEF-thigh.L',    'DEF-foot.L'],
+  ['DEF-thigh.R',     'DEF-hips',       'DEF-shin.R'],
+  ['DEF-shin.R',      'DEF-thigh.R',    'DEF-foot.R'],
+];
+const rapierRagdolls = [];
+const _rdV = new THREE.Vector3(), _rdQ = new THREE.Quaternion(), _rdS = new THREE.Vector3(), _rdMW = new THREE.Matrix4(), _rdMpi = new THREE.Matrix4(), _rdID = new THREE.Matrix4();
+function _rdBone(s, name){
+  if(!s._rdBoneCache){ s._rdBoneCache = {}; s.inst.traverse(o=>{ if(o && o.name) s._rdBoneCache[o.name] = o; }); }
+  return s._rdBoneCache[name] || null;
+}
+function startRapierRagdoll(s, hitDir){
+  if(!_rapierReady || !_physWorld || !s || !s.inst) return false;
+  if(s.rapierRagdoll) return true;
+  s.inst.updateWorldMatrix(true, true);
+  const parts = {};
+  const _wp = (b)=> b.getWorldPosition(new THREE.Vector3());
+  for(const [name, parent, tail] of RD_CHAIN){
+    const bone = _rdBone(s, name); if(!bone) continue;
+    const wp = _wp(bone), wq = bone.getWorldQuaternion(new THREE.Quaternion()), ws = bone.getWorldScale(new THREE.Vector3());
+    const tb = tail ? _rdBone(s, tail) : null;
+    let len = tb ? wp.distanceTo(_wp(tb)) : 0.22; len = Math.max(0.08, len);
+    const rad = Math.max(0.045, Math.min(0.12, len*0.26));
+    const bd = _physWorld.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(wp.x, wp.y, wp.z).setRotation({x:wq.x,y:wq.y,z:wq.z,w:wq.w})
+      .setLinearDamping(0.15).setAngularDamping(0.5));
+    const cd = RAPIER.ColliderDesc.capsule(Math.max(0.02, len/2 - rad), rad).setDensity(1.0).setFriction(0.9).setRestitution(0.02);
+    if(tb){ const dirL = _wp(tb).sub(wp).normalize().applyQuaternion(wq.clone().invert());
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), dirL);
+      cd.setRotation({x:q.x,y:q.y,z:q.z,w:q.w}).setTranslation(dirL.x*len/2, dirL.y*len/2, dirL.z*len/2); }
+    _physWorld.createCollider(cd, bd);
+    bone.matrixAutoUpdate = false;
+    parts[name] = { bone, body: bd, parent, scale: ws.x, mw: new THREE.Matrix4() };
+  }
+  if(!Object.keys(parts).length) return false;
+  for(const [name, parent] of RD_CHAIN){
+    if(!parent || !parts[name] || !parts[parent]) continue;
+    const ch = parts[name], pa = parts[parent];
+    const cw = ch.bone.getWorldPosition(new THREE.Vector3());
+    const pq = pa.bone.getWorldQuaternion(new THREE.Quaternion());
+    const a1 = cw.clone().sub(pa.bone.getWorldPosition(new THREE.Vector3())).applyQuaternion(pq.clone().invert());
+    _physWorld.createImpulseJoint(RAPIER.JointData.spherical({x:a1.x,y:a1.y,z:a1.z}, {x:0,y:0,z:0}), pa.body, ch.body, true);
+  }
+  const dl = Math.hypot(hitDir?hitDir.x:0, hitDir?hitDir.z:0) || 1;
+  const ix = hitDir ? hitDir.x/dl : 0, iz = hitDir ? hitDir.z/dl : 0;
+  for(const k in parts){ parts[k].body.setLinvel({x:ix*(2+Math.random()*1.5), y:1.2+Math.random()*1.2, z:iz*(2+Math.random()*1.5)}, true);
+    parts[k].body.setAngvel({x:(Math.random()*2-1)*2.5, y:(Math.random()*2-1)*2.5, z:(Math.random()*2-1)*2.5}, true); }
+  if(parts['DEF-spine.003']) parts['DEF-spine.003'].body.setLinvel({x:ix*4.5, y:2.6, z:iz*4.5}, true);
+  s.rapierRagdoll = true;
+  rapierRagdolls.push({ s, parts, born: performance.now() });
+  while(rapierRagdolls.length > 4){ const old = rapierRagdolls.shift(); disposeRapierRagdoll(old); if(old.s && typeof fadeOutSoldier==='function') fadeOutSoldier(old.s); }
+  return true;
+}
+function disposeRapierRagdoll(e){
+  if(!e || e._disposed) return; e._disposed = true;
+  for(const k in e.parts){ try{ _physWorld.removeRigidBody(e.parts[k].body); }catch(err){} const bn = e.parts[k].bone; if(bn) bn.matrixAutoUpdate = true; }
+  if(e.s) e.s.rapierRagdoll = false;
+}
+function disposeRagdollFor(s){ for(let i=rapierRagdolls.length-1;i>=0;i--){ if(rapierRagdolls[i].s === s){ disposeRapierRagdoll(rapierRagdolls[i]); rapierRagdolls.splice(i,1); } } }
+function updateRapierRagdolls(dt){
+  if(!_rapierReady || !_physWorld || !rapierRagdolls.length) return;
+  _physWorld.timestep = Math.min(1/30, Math.max(1/120, dt));
+  _physWorld.step();
+  const now = performance.now();
+  for(let i=rapierRagdolls.length-1;i>=0;i--){
+    const e = rapierRagdolls[i];
+    for(const [name, parent] of RD_CHAIN){
+      const p = e.parts[name]; if(!p) continue;
+      const t = p.body.translation(), r = p.body.rotation();
+      _rdV.set(t.x,t.y,t.z); _rdQ.set(r.x,r.y,r.z,r.w); _rdS.setScalar(p.scale);
+      p.mw.compose(_rdV, _rdQ, _rdS);
+      const parMW = (parent && e.parts[parent]) ? e.parts[parent].mw : (p.bone.parent ? p.bone.parent.matrixWorld : _rdID);
+      _rdMpi.copy(parMW).invert();
+      p.bone.matrix.multiplyMatrices(_rdMpi, p.mw);
+    }
+    if(now - e.born > 6500){ disposeRapierRagdoll(e); rapierRagdolls.splice(i,1); if(e.s && typeof fadeOutSoldier==='function') fadeOutSoldier(e.s); }
+  }
+}
+// Test console : ragdoll le 1er bot vivant. Tape rdTest() dans la console du navigateur.
+window.rdTest = function(){ for(const [id,b] of botMgr){ if(b && !b.dead && b.soldier && b.type!=='drone'){ b.dead = true; try{ killHealthBar('bot'+id); }catch(e){} if(!startRapierRagdoll(b.soldier,{x:0,z:1})){ startRagdoll(b.soldier, b.pos.clone(), {x:0,z:1}); } return 'ragdoll bot '+id+' | rapierReady='+_rapierReady; } } return 'aucun bot vivant'; };
+
 function resetSoldierPose(sol){
   resetSoldierOpacity(sol);
   killRagdollFor(sol);
+  if(typeof disposeRagdollFor==='function') disposeRagdollFor(sol);
   sol.ragdolling = false;
   sol.root.rotation.set(0,0,0);
   // Perso riggé : on sort de l'anim de mort et on repart en idle
@@ -6162,10 +6271,9 @@ function onBotKill(m){
   }
   if(b && b.soldier){
     b.dead = true;
-    // RAGDOLL : fige le squelette sur la frame 1 de l'anim de mort, puis projette le corps au sol (comme un cadavre).
-    poseDeathFrame1(b.soldier);
-    const _hd = { x: (b.pos.x - me.pos.x), z: (b.pos.z - me.pos.z) };   // projeté dans la direction du tir (loin du joueur)
-    startRagdoll(b.soldier, b.pos.clone(), _hd);
+    // RAGDOLL : articulé (Rapier) si dispo, sinon topple corps-entier (frame 1 + projection).
+    const _hd = { x: (b.pos.x - me.pos.x), z: (b.pos.z - me.pos.z) };   // direction du tir (loin du joueur)
+    if(!startRapierRagdoll(b.soldier, _hd)){ poseDeathFrame1(b.soldier); startRagdoll(b.soldier, b.pos.clone(), _hd); }
     playSfxAt(b.type === 'sentinel' ? 'bot2_death' : 'death', b.pos, 1);   // Sentinel = son dedie
     fadeOutSoldier(b.soldier);
     killHealthBar('bot'+m.id);
@@ -9589,7 +9697,7 @@ function animate(){
           playFootstepAt(b.pos, 0.42, 0.95, { remote:true, bot:true });
           b.stepT = 0.48;
         }
-      } else if(b.dead && b.soldier.rigged && b.soldier.mixer && !b.soldier.ragdolling){
+      } else if(b.dead && b.soldier.rigged && b.soldier.mixer && !b.soldier.ragdolling && !b.soldier.rapierRagdoll){
         b.soldier.mixer.update(dt); // animation de mort
       }
     }
@@ -9637,6 +9745,7 @@ function animate(){
   updateRedBuffUI(); // BONUS ROUGE flingue actif → carte arme glow rouge (chaque frame)
   refreshOverbannerKey();  // popup attaque speciale : touche affichee en live (clavier/manette)
   updateRagdolls(dt);
+  updateRapierRagdolls(dt);
   updateCrosshair(dt);
   updateDamageDirection();
   updateMomentumHUD();
