@@ -3399,8 +3399,11 @@ function animateSoldierRigged(s, anim, dt, t){
     //   (le haut tourne d'abord, les jambes suivent après). Tout le lissage/delay est dans applyBodyAim.
     {
       const _aw = (typeof anim.aimYaw === 'number') ? anim.aimYaw : s.root.rotation.y;
-      // NB: si en strafe les jambes pointent du MAUVAIS côté, inverser le signe de moveAng ci-dessous.
-      anim._legFace = (sp > TR_WALK) ? (_aw + moveAng) : _aw;   // JAMBES toujours vers le DEPLACEMENT (input directionnel, pas de glissade) ; le HAUT du corps twiste vers la visee. Idle -> jambes vers la visee (turn-in-place).
+      // BASE du bas du corps = facing du MOUVEMENT (legBaseYaw du driver), PAS la visée : le HAUT peut
+      // viser le joueur (engagé) pendant que le BAS suit l'input ; hors combat tout s'aligne sur le
+      // mouvement (demi-tour propre). Fallback sur la visée (joueur local / remote où base==visée).
+      const _legBase = (typeof anim.legBaseYaw === 'number') ? anim.legBaseYaw : _aw;
+      anim._legFace = (sp > TR_WALK) ? (_legBase + moveAng) : _aw;   // jambes vers le DEPLACEMENT ; idle -> vers la visée (turn-in-place)
     }
 
     // BAS DU CORPS : priorite air > crouch > locomotion. VRAIS clips en boucle (plus de pose figee).
@@ -4711,8 +4714,9 @@ function ensureBot(id, accent){
     if(localBotMode){ wi = (Math.random()*3)|0; accent = BOT_WEAPON_COLOR[wi]; }   // arme aléatoire (R69/Wingman/Sabre) + couleur par arme
     b = { soldier: null, buf: [], pos: new THREE.Vector3(), yaw: 0,
           anim: {m:0,c:0,a:0,r:0,sl:0,h:0,cl:0,f:0,ad:0}, dead: false, stepT: 0, accent,
-          weaponIdx: wi, rush: (wi === 2), alertTime: (wi === 2 ? 0.8 : undefined) };   // sabre -> charge rapide (rush, télégraphe court), frappe au contact
-    if(RIG_READY && RIG_TEMPLATE){ b.soldier = createSoldierRigged(accent); scene.add(b.soldier.root); }
+          weaponIdx: wi };   // sabre : PAS de rush/sentinelle (reserve Insane) -> il fonce via l'aggro (3s) et frappe au contact
+    if(RIG_READY && RIG_TEMPLATE){ b.soldier = createSoldierRigged(accent); scene.add(b.soldier.root);
+      if(localBotMode && typeof tintSoldier==='function') tintSoldier(b.soldier, accent); }   // COULEUR du bot = teinte texture selon l'arme (R69 gris / Wingman rouge / Saber bleu)
     botMgr.set(id, b);
   }
   return b;
@@ -6969,7 +6973,8 @@ function updateLocalBots(dt){
     const canFire = inFire && !feared && b.weaponIdx !== 2;   // bot apeuré ne tire pas ; sabre (idx 2) ne tire jamais (il charge)
     // AGRESSIVITE : vu sans etre touche pendant aggro_time -> rush + tir continu (Sentinel : charge differee)
     if(see){ ai.noHitSeenT = (ai.noHitSeenT||0) + dt; } else { ai.noHitSeenT = 0; }
-    const aggro = b.rush ? charging : (knows && ((ai.noHitSeenT||0) >= (A.aggro_time ?? 2)));
+    const _aggroT = (b.weaponIdx === 2) ? 3 : (A.aggro_time ?? 2);   // SABRE : fonce apres 3s vu SANS degats subis
+    const aggro = b.rush ? charging : (knows && ((ai.noHitSeenT||0) >= _aggroT));
 
     // Tir + accuracy
     ai.fireT -= dt; ai.reloadT -= dt; ai.fireFlash = Math.max(0, ai.fireFlash - dt);
@@ -6999,6 +7004,7 @@ function updateLocalBots(dt){
       if(see && distP <= (LBOT.saber_range ?? 2.8) && ai.meleeT <= 0){
         ai.meleeT = (LBOT.saber_cd ?? 0.95);
         b.saberSwingUntil = performance.now() + 360;          // déclenche l'anim Sword_Attack (3e pers)
+        if(typeof playSfxAt==='function') playSfxAt(['saber1','saber2','saber3'][(Math.random()*3)|0], b.pos, 0.85, { refDistance: 8, maxDistance: 60, rolloff: 0.8 });   // SON du sabre
         if(!(LBOT.ai && LBOT.ai.damage_player === false)) damagePlayerLocal((LBOT.saber_dmg ?? 40), b.pos);
       }
     }
@@ -7030,7 +7036,8 @@ function updateLocalBots(dt){
       const px = dxp/distP, pz = dzp/distP, sx = -pz, sz = px;
       vx = sx*mv.strafeDir; vz = sz*mv.strafeDir;          // strafe gauche/droite
       if(aggro){
-        vx += px*1.0; vz += pz*1.0;                        // RUSH : fonce sur le joueur (zigzag)
+        if(b.weaponIdx === 2){ vx = px; vz = pz; }          // SABRE : sprint DIRECT sur le joueur (ligne droite)
+        else { vx += px*1.0; vz += pz*1.0; }                // armes a feu : fonce sur le joueur (zigzag)
         run = true;
       } else {
         const pref = A.preferred_dist ?? 4;
@@ -7135,20 +7142,9 @@ function updateLocalBots(dt){
     b.anim.a = ai.air ? 1 : 0; b.anim.sl = 0; b.anim.c = 0;
     b.anim.f = (canFire && ai.reactT <= 0) ? 1 : 0;
     b.anim.bot = 1; b.anim.aiming = knows ? 1 : 0;   // bot : marche formelle (<=4) + pose de visee tant qu'il est CONSCIENT du joueur (tient l'arme levee entre 2 tirs)
-    b.anim.engaged = see ? 1 : 0;   // LOS RÉELLE sur le joueur (m'engage) : pas de demi-tour, pas d'anim hit
+    if(see) ai.seeFaceT = 0.4; else ai.seeFaceT = Math.max(0, (ai.seeFaceT||0) - dt);   // LOS lissee (anti-flicker 0.4s)
+    b.anim.engaged = (ai.seeFaceT > 0) ? 1 : 0;   // "m'engage" : verrou visee joueur (pas de demi-tour) + pas de flinch (#13)
     // --- Anim en couches : vitesse LOCALE (repere du corps), grounded, arme, visee ---
-    // #12 DEMI-TOUR hors combat : si le bot RECULE franchement ET ne me voit pas (pas d'engagement),
-    // tout le corps pivote vers la direction du mouvement -> il court en avant (pas de moonwalk).
-    // S'il m'engage (LOS), on NE tourne PAS : il garde la face joueur (recul/strafe en visant). Latéral intact.
-    let _turnYaw = null;
-    { const _wvx0 = (nx - _oldx) / Math.max(1e-4, dt), _wvz0 = (nz - _oldz) / Math.max(1e-4, dt);
-      if(Math.hypot(_wvx0, _wvz0) > 0.8 && !see && !feared){
-        const _byr = b.yaw + Math.PI, _s0 = Math.sin(_byr), _c0 = Math.cos(_byr);
-        const _fwd0 = _wvx0*_s0 + _wvz0*_c0, _rgt0 = _wvx0*_c0 - _wvz0*_s0;   // mvt dans le repère du facing courant
-        if(Math.abs(Math.atan2(_rgt0, _fwd0)) > 2.2){          // recule franchement (>~126°)
-          b.yaw = Math.atan2(-_wvx0, -_wvz0);                  // jambes+corps : demi-tour vers le mouvement
-          _turnYaw = Math.atan2(_wvx0, _wvz0);                 // visée = direction du mouvement (twist 0)
-        } } }
     const _bodyYaw = b.yaw + Math.PI;                 // meme facing que le rendu (root.rotation.y)
     const _sB = Math.sin(_bodyYaw), _cB = Math.cos(_bodyYaw);
     const _wvx = (nx - _oldx) / Math.max(1e-4, dt), _wvz = (nz - _oldz) / Math.max(1e-4, dt); // vitesse monde (m/s)
@@ -7159,10 +7155,15 @@ function updateLocalBots(dt){
     b.anim.vz = (b.anim.vz != null ? b.anim.vz : _vzL) + (_vzL - (b.anim.vz != null ? b.anim.vz : _vzL)) * Math.min(1, dt*14);
     b.anim.grounded = !ai.air;
     b.anim.wi = (b.weaponIdx != null ? b.weaponIdx : 0);   // bots: pas de champ arme -> defaut R69 (0)
+    b.anim.legBaseYaw = _bodyYaw;   // BASE du bas du corps = facing reel du mouvement (decouple de la visee -> demi-tour propre)
     b.anim.saber_attack = !!(b.saberSwingUntil && performance.now() < b.saberSwingUntil);   // swing sabre -> Sword_Attack
     // visee = direction bot -> joueur, PRE-LISSEE (chemin court) pour eviter les sauts du twist
     // du torse a chaque tick d'IA — harmonise avec le lissage vx/vz (dt*14) et bodyYaw (dt*12).
-    const _aimT = feared ? Math.atan2(-dxp, -dzp) : (_turnYaw != null ? _turnYaw : Math.atan2(dxp, dzp));   // peur: dos joueur ; demi-tour: vers le mouvement ; sinon: visée joueur
+    const _spAim = Math.hypot(_wvx, _wvz);
+    const _aimT = feared ? Math.atan2(-dxp, -dzp)
+                : (ai.seeFaceT > 0) ? Math.atan2(dxp, dzp)                       // ENGAGÉ : HAUT du corps verrouillé sur le joueur
+                : (_spAim > 0.6 ? Math.atan2(_wvx, _wvz)                         // hors combat + en mouvement : le HAUT suit le mouvement (demi-tour)
+                   : (b.anim.aimYaw != null ? b.anim.aimYaw : Math.atan2(dxp, dzp)));   // hors combat + immobile : garde l'orientation (pas de snap)
     const _aimS = (GAMECFG.MODELS.body_aim && GAMECFG.MODELS.body_aim.aim_smooth) || 11;
     b.anim.aimYaw = (b.anim.aimYaw != null) ? lerpAngle(b.anim.aimYaw, _aimT, Math.min(1, dt*_aimS)) : _aimT;
   }
