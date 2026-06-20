@@ -1379,7 +1379,36 @@ const MAP_MAT = {
   container:{ color: 0x8a5a48, roughness: 0.60, metalness: 0.18 },
   grate:    { color: 0x3a3e45, roughness: 0.50, metalness: 0.55 },
 };
+// ===== Textures PBR partagees (Concrete_Wall_016) : basecolor / normal / roughness / AO =====
+const _mapTexLoader = new THREE.TextureLoader();
+let _mapTexSet = null;
+function getMapTextures(){
+  if(_mapTexSet) return _mapTexSet;
+  const base = '/textures/Concrete_Wall_016_SD/Concrete_Wall_016_';
+  const L = (f, srgb)=>{ const t = _mapTexLoader.load(base + f); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; if(srgb && ('colorSpace' in t)) t.colorSpace = THREE.SRGBColorSpace; return t; };
+  _mapTexSet = { map: L('basecolor.png', true), normalMap: L('normal.png', false), roughnessMap: L('roughness.png', false), aoMap: L('ambientOcclusion.png', false) };
+  return _mapTexSet;
+}
+let _concreteMat = null;
+function concreteMaterial(){
+  if(_concreteMat) return _concreteMat;
+  const T = getMapTextures();
+  _concreteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1.0, metalness: 0.06,
+    map: T.map, normalMap: T.normalMap, roughnessMap: T.roughnessMap, aoMap: T.aoMap, vertexColors: true });
+  _concreteMat.envMapIntensity = (GAMECFG.GRAPHICS||{}).env_intensity ?? 1;
+  return _concreteMat;
+}
+// UV en espace MONDE pour une BoxGeometry : chaque face tuile tous les `tile` metres (densite constante).
+function boxUVWorld(geo, w, h, d, tile){
+  const uv = geo.attributes.uv; if(!uv) return;
+  const S = [[d,h],[d,h],[w,d],[w,d],[w,h],[w,h]];   // px,nx,py,ny,pz,nz : (dim u, dim v)
+  for(let f=0; f<6; f++){ const su = S[f][0]/tile, sv = S[f][1]/tile;
+    for(let k=0;k<4;k++){ const i = f*4+k; uv.setXY(i, uv.getX(i)*su, uv.getY(i)*sv); } }
+  uv.needsUpdate = true;
+  geo.setAttribute('uv2', new THREE.Float32BufferAttribute(uv.array.slice(), 2));   // pour l'aoMap
+}
 function mapMaterial(b){
+  if((!b.type || b.type === 'concrete') && b.c == null) return concreteMaterial();   // MUR beton : texture PBR partagee
   const d = MAP_MAT[b.type] || MAP_MAT.concrete;
   return new THREE.MeshStandardMaterial({ color:(b.c != null ? b.c : d.color), roughness:d.roughness, metalness:d.metalness });
 }
@@ -1460,9 +1489,13 @@ function mountStructureModels(){
 }
 function buildMap(){
   const G = GAMECFG.GRAPHICS || {};
-  const floorMat = new THREE.MeshStandardMaterial({color:0x5c6068, roughness: G.floor_roughness ?? .95, metalness: G.floor_metalness ?? 0});
+  const _T = getMapTextures();
+  const floorMat = new THREE.MeshStandardMaterial({color:0xffffff, roughness: 1.0, metalness: G.floor_metalness ?? 0,
+    map:_T.map, normalMap:_T.normalMap, roughnessMap:_T.roughnessMap, aoMap:_T.aoMap});
   floorMat.envMapIntensity = G.floor_env ?? 1;
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(MAP.HALF*2+2, MAP.HALF*2+2), floorMat);
+  const _fgeo = new THREE.PlaneGeometry(MAP.HALF*2+2, MAP.HALF*2+2);
+  { const _ft = (MAP.HALF*2+2)/2.5, _u = _fgeo.attributes.uv; for(let i=0;i<_u.count;i++) _u.setXY(i, _u.getX(i)*_ft, _u.getY(i)*_ft); _u.needsUpdate = true; _fgeo.setAttribute('uv2', new THREE.Float32BufferAttribute(_u.array.slice(),2)); }
+  const floor = new THREE.Mesh(_fgeo, floorMat);
   floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor); mapMeshes.push(floor); floorMesh = floor;
   floor.userData.surface = 'floor';
 
@@ -1471,6 +1504,7 @@ function buildMap(){
     const y0 = b.y0 || 0;
     const boxGeo = new THREE.BoxGeometry(b.w,b.h,b.d);
     const boxMat = mapMaterial(b);
+    if((!b.type || b.type === 'concrete') && b.c == null) boxUVWorld(boxGeo, b.w, b.h, b.d, 2.5);   // tuile beton en espace monde
     if(BAO.enabled !== false){ applyVertexAO(boxGeo, b.h, BAO.face_darken ?? 0.34); boxMat.vertexColors = true; }
     const m = new THREE.Mesh(boxGeo, boxMat);
     m.position.set(b.x, y0 + b.h/2, b.z); m.castShadow = m.receiveShadow = true; scene.add(m);
