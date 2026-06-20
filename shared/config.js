@@ -667,6 +667,8 @@
       orb_pickup: '/audio/orb_pickup.mp3', crouch: '/audio/crouch.mp3',
       drone_explode: '/audio/drone_explode.mp3',   // explosion du drone sonde (mort)
       drone_sound: '/audio/drone_sound.mp3',        // bourdonnement du drone (boucle spatiale)
+      countdown: '/audio/countdown.mp3',            // decompte 5s (intro Kill contre la montre)
+      landing: '/audio/landing.mp3',                // atterrissage apres la chute de 30m
       sentinel: '/audio/sentinel.mp3',              // un Sentinel vient de reperer le joueur
       buff_activate: '/audio/buff_activate.mp3',    // deblocage du buff (arme violette)
       insane_dead: '/audio/insane_dead.mp3',        // mort du joueur en mode Insane
@@ -707,7 +709,7 @@
       slide: 1.0, slide_jump: 1.0, wallbounce: 1.0, mantle: 1.0, superglide: 1.0,
       holster: 1.0, equip: 1.0, crouch: 1.0,
       death: 1.0, orb_pickup: 1.0, drone_explode: 1.0, sentinel: 1.0, buff_activate: 1.0,
-      insane_dead: 1.0, r69_buff: 1.0, wingman_buff: 1.0, drone_sound: 1.0,
+      insane_dead: 1.0, r69_buff: 1.0, wingman_buff: 1.0, drone_sound: 1.0, countdown: 1.0, landing: 1.0,
       button1: 1.0, button2: 1.0, spawn: 1.0,
     },
     // ===== Sons d'impact de balle PAR SURFACE =====

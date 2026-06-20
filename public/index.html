@@ -364,8 +364,9 @@
   #insanetimer{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:none;z-index:8;font-family:var(--mono);font-size:34px;font-weight:800;letter-spacing:3px;color:var(--txt);text-shadow:0 2px 16px rgba(0,0,0,.7);padding:4px 18px}
   #insanetimer.low{color:#ff5066;animation:itpulse .6s infinite}
   @keyframes itpulse{0%,100%{opacity:1}50%{opacity:.4}}
-  #insaneintro{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;z-index:60;pointer-events:none;text-align:center;background:radial-gradient(ellipse at center,rgba(6,7,10,.55),rgba(6,7,10,.85))}
-  #insaneintro.show{display:flex;animation:iifade .35s ease}
+  #insaneintro{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:60;pointer-events:none;text-align:center;background:#000;opacity:0;visibility:hidden;transition:opacity .55s ease,visibility .55s ease}
+  #insaneintro.show{opacity:1;visibility:visible;transition:opacity .12s ease}
+  #insaneintro .ii-count{font-family:var(--mono);font-size:120px;font-weight:800;color:#fff;margin-top:14px;text-shadow:0 0 34px rgba(255,60,80,.55)}
   @keyframes iifade{from{opacity:0;transform:scale(1.06)}to{opacity:1;transform:scale(1)}}
   #insaneintro .ii-big{font-family:var(--mono);font-size:52px;font-weight:800;letter-spacing:5px;color:#fff;text-shadow:0 4px 26px rgba(255,40,60,.55)}
   #insaneintro .ii-sub{font-family:var(--mono);font-size:22px;letter-spacing:8px;color:#ff4060;margin-top:16px}
@@ -677,7 +678,7 @@
 </div>
 
 <!-- INSANE : intro chrono + ecran d'esprit (mort / temps ecoule) -->
-<div id="insaneintro"><div class="ii-big">VOUS AVEZ 2 MINUTES</div><div class="ii-sub">TUEZ-LES TOUS</div></div>
+<div id="insaneintro"><div class="ii-big">TUEZ-LES TOUS</div><div class="ii-count" id="iiCount">5</div></div>
 <div id="insanedeath">
   <div class="id-title">VOTRE ESPRIT A QUITTÉ VOTRE AVATAR</div>
   <div class="id-score"></div>
@@ -5628,7 +5629,8 @@ function startReload(){
   if(RA && RA.phases) for(const p of RA.phases){ p._kicked = false; p._shook = false; }
   document.getElementById('reloadmsg').style.display='block';
   stopReloadSfx();                                        // coupe un éventuel son de reload encore en cours
-  reloadSfxSource = playSfx(W.sfx_reload || 'reload', 1); // son PROPRE à l'arme, pitch 1.0 (synchro anim)
+  const _fastR = (typeof redActive==='function' && redActive(me.weaponIdx) && W.red) ? 2 : 1;   // BUFF : recharge 2x (son + anim)
+  reloadSfxSource = playSfx(W.sfx_reload || 'reload', _fastR); // son PROPRE à l'arme (x2 en buff)
 }
 // Point "canon" 3e pers d'un soldat = monde du socket d'arme (Index1.R) avance vers la cible.
 const _solMuzV = new THREE.Vector3();
@@ -6059,14 +6061,17 @@ function onBotStart(m){
   { const _ins = (typeof INSANE!=='undefined' && INSANE.on);
     const cp = document.getElementById('compass'); if(cp) cp.style.display = _ins ? 'none' : '';
     const tm = document.getElementById('insanetimer'); if(tm) tm.style.display = _ins ? 'block' : 'none'; }
-  let n = Math.max(1, m.countdown||1); cd.style.display='flex'; cd.textContent = n;
-  const iv = setInterval(()=>{
-    n--;
-    if(n<=0){ clearInterval(iv); cd.style.display='none'; playing = true;
-      document.getElementById('hud').style.display='block';
-      if(typeof INSANE!=='undefined' && INSANE.on) insaneIntro(); else lock(); }
-    else cd.textContent = n;
-  }, 1000);
+  if(typeof INSANE!=='undefined' && INSANE.on){
+    cd.style.display='none'; playing = true; document.getElementById('hud').style.display='block'; insaneIntro();   // Kill contre la montre : intro 5s (pas de 3-2-1)
+  } else {
+    let n = Math.max(1, m.countdown||1); cd.style.display='flex'; cd.textContent = n;
+    const iv = setInterval(()=>{
+      n--;
+      if(n<=0){ clearInterval(iv); cd.style.display='none'; playing = true;
+        document.getElementById('hud').style.display='block'; lock(); }
+      else cd.textContent = n;
+    }, 1000);
+  }
 }
 function onBotHit(m){
   if(m.melee){ meleeShake = Math.min(2.2, meleeShake + 0.35); melee.flare = 1; } // coup de sabre confirmé
@@ -6206,12 +6211,28 @@ function startInsaneRun(){
 // Apres le decompte 3-2-1 : freeze + message "2 minutes", puis le timer demarre.
 function insaneIntro(){
   INSANE.introFreeze = true; INSANE.running = false;
-  const el = document.getElementById('insaneintro'); if(el) el.classList.add('show');
-  setTimeout(()=>{
-    if(el) el.classList.remove('show');
-    INSANE.introFreeze = false; INSANE.running = true; INSANE.timeLeft = INSANE.total;
-    if(localBotMode && !INSANE.ended && !(typeof aMenuIsOpen==='function' && aMenuIsOpen())) lock();
-  }, 2600);
+  const el = document.getElementById('insaneintro'), cEl = document.getElementById('iiCount');
+  if(el) el.classList.add('show');
+  try{ if(typeof playSfx==='function') playSfx('countdown'); }catch(e){}   // jingle de decompte (5s)
+  let n = 5; if(cEl) cEl.textContent = n;
+  const iv = setInterval(()=>{
+    n--;
+    if(n > 0){ if(cEl) cEl.textContent = n; }
+    else { clearInterval(iv); insaneIntroGo(el); }
+  }, 1000);
+}
+function insaneIntroGo(el){
+  if(el) el.classList.remove('show');                 // fade out de l'ecran noir (transition CSS)
+  insaneSpawnFall();                                   // place le joueur a 30 m, face au centre -> il tombe
+  INSANE.introFreeze = false; INSANE.running = true; INSANE.timeLeft = INSANE.total;
+  if(localBotMode && !INSANE.ended && !(typeof aMenuIsOpen==='function' && aMenuIsOpen())) lock();
+}
+// Spawn "chute" : 30 m au-dessus du spawn, face au centre ; l'atterrissage declenche shake + landing.mp3.
+function insaneSpawnFall(){
+  me.pos.y = 30;
+  me.yaw = Math.atan2(-me.pos.x, -me.pos.z);          // face au centre (0,0)
+  me.pitch = -0.12;
+  me.vel.set(0,0,0); me.onGround = false; me._taFalling = true;
 }
 // Tick du chrono (appele dans animate). Decremente quand la partie tourne.
 function insaneTick(dt){
@@ -7102,13 +7123,13 @@ let gpCurX = innerWidth/2, gpCurY = innerHeight/2, _gpMenuPrev = [], _gpHover = 
 // sont des états transitoires gérés par le respawn ; les inclure bloquerait le hide+lock du respawn).
 function aMenuIsOpen(){
   if(document.pointerLockElement) return false;
-  return ['menu','options','lobby','pause'].some(id=>{ const e = document.getElementById(id); return e && e.classList.contains('show'); });
+  return ['menu','options','lobby','pause','insanedeath'].some(id=>{ const e = document.getElementById(id); return e && e.classList.contains('show'); });
 }
 function gpButtonAt(x, y){
   // Hit-test DIRECT par rectangles (insensible aux overlays qui intercepteraient elementFromPoint)
-  const sel = '.btn,.bindbtn,.diffbtn,.seg-btn,.fr-btn,.fr-launch,input,select';
+  const sel = '.btn,.bindbtn,.diffbtn,.seg-btn,.fr-btn,.fr-launch,.id-restart,.id-link,input,select';
   let found = null;
-  document.querySelectorAll('.screen.show').forEach(scr=>{
+  document.querySelectorAll('.screen.show, #insanedeath.show').forEach(scr=>{
     scr.querySelectorAll(sel).forEach(el=>{
       if(found || el.disabled) return;
       const cs = getComputedStyle(el);
@@ -8821,6 +8842,7 @@ function playerUpdate(dt, g){
       landBounceAmp = Math.min(1, Math.abs(me.vel.y)/14);
       landShake = Math.min(1, Math.abs(me.vel.y)/13);   // shake caméra à l'atterrissage, proportionnel à la chute
       landShakeT = 0; landShakePhase = 0;
+      if(me._taFalling){ me._taFalling = false; landShake = 1.7; landBounceAmp = Math.min(1.4, landBounceAmp*1.5); if(typeof playSfx==='function') playSfx('landing'); }   // chute Kill contre la montre : gros shake + son
       // Slide bufferisé : courir → sauter → s'accroupir en l'air → slide à l'atterrissage,
       // en conservant TOUTE la vitesse horizontale (enchaîne avec les slide jumps)
       const hSpd = Math.hypot(me.vel.x, me.vel.z);
@@ -8900,7 +8922,7 @@ function playerUpdate(dt, g){
   if(reload && !prevReload) startReload();
   prevReload = reload;
   if(me.reloading){
-    me.reloadT += dt; reloadAnimT = me.reloadT;
+    me.reloadT += dt * ((typeof redActive==='function' && redActive(me.weaponIdx) && curWeapon().red) ? 2 : 1); reloadAnimT = me.reloadT;   // BUFF : recharge 2x
     if(me.reloadT >= (curWeapon().reload_t ?? CONFIG.RELOAD_T)){
       me.reloading = false;
       // on NE coupe PAS reloadAnimT ici : on le laisse sur la dernière phase (pose neutre)
