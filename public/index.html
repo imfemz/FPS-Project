@@ -6483,7 +6483,10 @@ function onBotRespawn(m){
    ========================================================================== */
 let localBotMode = false, localBotKills = 0;
 const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist: 12,
-  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4, spawn_sep: 15, spawn_sep_by_diff: { easy: 20, medium: 15, hard: 10 }, MAX_BOTS: 8, waveMode: false, wave: 1,
+  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4, spawn_sep: 15, spawn_sep_by_diff: { easy: 20, medium: 15, hard: 10 }, MAX_BOTS: 12, waveMode: false, wave: 1,
+  count_by_diff: { easy: 4, medium: 6, hard: 9 },        // ENTRAÎNEMENT : bots VIVANTS visés (densité de rencontre)
+  group_size_by_diff: { easy: 2, medium: 3, hard: 4 },   // taille d'une VAGUE / groupe d'apparition
+  group_radius: 9, group_min_dist: 24, spawn_max_dist: 55,   // dispersion d'un groupe ; anneau d'apparition autour du joueur (m) -> on les croise vite, hors-vue
   fear: { radius: 3, time: 5, speed: 5 },   // bot voisin (<radius m) d'un bot tue -> panique : fuit le joueur (time s, velocite speed)
   knock_dist: 3, knock_decay: 6,   // knockback au coup de sabre : ~knock_dist mètres ; knock_decay = vitesse de retombée du recul
   saber_dmg: 40, saber_range: 2.8, saber_cd: 0.95,   // bot SABRE : dégâts / portée / cadence de l'attaque au contact (il ne tire pas, il charge)
@@ -6775,6 +6778,35 @@ function playerCanSee(x, z){
   if(mapRay.intersectObjects(mapMeshes, false).length !== 0) return false;   // mur entre nous -> pas vu
   return true;                                               // dans le champ + dégagé -> VU
 }
+// ENTRAÎNEMENT : cible de bots vivants + taille de groupe selon la difficulté.
+function localActiveTarget(){ return (LBOT.count_by_diff && LBOT.count_by_diff[LBOT.ai && LBOT.ai.difficulty]) || LBOT.count || 5; }
+function localGroupSize(){ return (LBOT.group_size_by_diff && LBOT.group_size_by_diff[LBOT.ai && LBOT.ai.difficulty]) || 3; }
+// n points GROUPÉS autour d'une ancre (hors-vue), bornés à la map.
+function lbotClusterAround(anchor, n){
+  const lim = (MAP.HALF || 30) - 4, R = LBOT.group_radius ?? 9, out = [];
+  for(let k=0;k<n;k++){ const x = anchor[0] + (Math.random()*2-1)*R, z = anchor[2] + (Math.random()*2-1)*R;
+    out.push([ Math.max(-lim, Math.min(lim, x)), 0, Math.max(-lim, Math.min(lim, z)) ]); }
+  return out;
+}
+// Re-vague GROUPÉE : on accumule les morts pendant LBOT.respawn, puis ils réapparaissent ENSEMBLE
+// (groupe serré) à un endroit HORS DE MA VUE -> on recroise des escouades fraîches.
+function queueLocalGroupRespawn(id){
+  LBOT._rq = LBOT._rq || [];
+  if(id != null && LBOT._rq.indexOf(id) < 0) LBOT._rq.push(id);
+  if(LBOT._rqT) return;
+  LBOT._rqT = setTimeout(()=>{
+    LBOT._rqT = null;
+    if(!localBotMode || LBOT.waveMode){ LBOT._rq.length = 0; return; }
+    const ids = LBOT._rq.splice(0, Math.min(LBOT._rq.length, Math.max(1, localGroupSize())));
+    if(!ids.length) return;
+    const anchor = lbotSpawnPoint(null, null, null, LBOT.group_min_dist ?? 24);   // 1 ancre hors-vue
+    const pts = lbotClusterAround(anchor, ids.length);
+    for(let k=0;k<ids.length;k++){ const bb = botMgr.get(ids[k]); if(!bb) continue;
+      bb.hp = maxHp; bb.sh = maxShield; bb._shPrev = maxShield; initLocalBotAI(bb);
+      onBotRespawn({ id: ids[k], p: pts[k], yaw: Math.random()*Math.PI*2 }); }
+    if(LBOT._rq.length) queueLocalGroupRespawn();   // morts restants -> prochaine vague
+  }, LBOT.respawn);
+}
 function lbotSpawnPoint(i, n, extra, minDist){ // >= MIN du joueur ET >= spawn_sep des autres bots
   const lim = (MAP.HALF || 30) - 4;
   const MIN = minDist || Math.min(((typeof localBotMode!=='undefined' && localBotMode) ? 22 : 10), ((MAP.HALF||30)-4)*0.5);   // solo : spawn plus loin de moi
@@ -6785,20 +6817,22 @@ function lbotSpawnPoint(i, n, extra, minDist){ // >= MIN du joueur ET >= spawn_s
     if(typeof botMgr !== 'undefined' && botMgr) for(const ob of botMgr.values()){ if(!ob||ob.dead||!ob.pos) continue; if(Math.hypot(ob.pos.x-x, ob.pos.z-z) < SEP) return false; }
     return true;
   }
-  let best = [lim, 0, 0], bestScore = -1;
-  for(let k=0; k<40; k++){
-    const a = (k === 0 && i != null && n) ? (i / n) * Math.PI*2 + (Math.random()-0.5)*0.4 : Math.random()*Math.PI*2;
-    const r = Math.max(MIN, Math.min(lim, MIN + Math.random()*(lim - MIN)));   // réparti sur TOUTE l'arène
-    const x = Math.cos(a)*r, z = Math.sin(a)*r;
-    const dPlayer = Math.hypot(x - px, z - pz);
+  const MAX = Math.max(MIN + 6, Math.min(lim, LBOT.spawn_max_dist ?? 55));   // ANNEAU autour du joueur (pas toute l'arène) -> on les croise
+  let best = null, bestScore = -1;
+  for(let k=0; k<48; k++){
+    const a = (k === 0 && i != null && n) ? (i / n) * Math.PI*2 + (Math.random()-0.5)*0.6 : Math.random()*Math.PI*2;
+    const r = MIN + Math.random()*(MAX - MIN);                                 // distance DEPUIS LE JOUEUR
+    const x = px + Math.cos(a)*r, z = pz + Math.sin(a)*r;                      // autour du joueur
+    if(Math.abs(x) > lim || Math.abs(z) > lim) continue;                       // hors map
     const clear = botClear(x, z);
-    const unseen = !playerCanSee(x, z);                                        // #16 : hors de ma ligne de vue
-    if(dPlayer >= MIN && clear && unseen) return [x, 0, z];                     // idéal : loin + dégagé + hors-vue
-    const score = Math.min(dPlayer, MIN*2) + (clear ? 100 : 0) + (unseen ? 300 : 0);   // priorise fortement le hors-vue
+    const unseen = !playerCanSee(x, z);                                        // hors de ma ligne de vue
+    if(clear && unseen) return [x, 0, z];                                      // dégagé + hors-vue (déjà dans la bonne bande)
+    const score = (clear ? 100 : 0) + (unseen ? 300 : 0);
     if(score > bestScore){ bestScore = score; best = [x, 0, z]; }
   }
-  let dx = best[0]-px, dz = best[2]-pz, d = Math.hypot(dx,dz) || 1;
-  return [ Math.max(-lim, Math.min(lim, px + dx/d*MIN)), 0, Math.max(-lim, Math.min(lim, pz + dz/d*MIN)) ];
+  if(best) return [ Math.max(-lim, Math.min(lim, best[0])), 0, Math.max(-lim, Math.min(lim, best[2])) ];
+  const af = Math.random()*Math.PI*2;   // secours : un point à MIN du joueur, borné map
+  return [ Math.max(-lim, Math.min(lim, px + Math.cos(af)*MIN)), 0, Math.max(-lim, Math.min(lim, pz + Math.sin(af)*MIN)) ];
 }
 function startLocalBotMode(){
   // Mode solo : on coupe le réseau proprement (pas de message "connexion perdue")
@@ -6807,9 +6841,21 @@ function startLocalBotMode(){
   INSANE.on = false; INSANE.ended = false;
   LBOT.waveMode = (LBOT.ai.difficulty === 'insane'); LBOT.wave = 1;   // INSANE = survie par vagues
   if(LBOT.waveMode){ applyInsaneWave(1); startInsaneRun(); }
-  const _startCount = LBOT.waveMode ? botsForWave(1) : LBOT.count;
-  const bots = []; const _placed = [];
-  for(let i=0;i<_startCount;i++){ const _p = lbotSpawnPoint(i, _startCount, _placed); _placed.push([_p[0], _p[2]]); bots.push({ id: i+1, p: _p, yaw: Math.random()*Math.PI*2 }); }
+  const bots = []; const _placed = []; let _bid = 1;
+  if(LBOT.waveMode){
+    const _startCount = botsForWave(1);
+    for(let i=0;i<_startCount;i++){ const _p = lbotSpawnPoint(i, _startCount, _placed); _placed.push([_p[0], _p[2]]); bots.push({ id: _bid++, p: _p, yaw: Math.random()*Math.PI*2 }); }
+  } else {
+    // ENTRAÎNEMENT : cible selon difficulté, spawn en GROUPES serrés (hors-vue) -> on croise des escouades
+    const target = localActiveTarget(), gsize = localGroupSize();
+    LBOT._rq = []; if(LBOT._rqT){ clearTimeout(LBOT._rqT); LBOT._rqT = null; }
+    let _guard = 0;
+    while(bots.length < target && _guard++ < 40){
+      const anchor = lbotSpawnPoint(bots.length, target, _placed, LBOT.group_min_dist ?? 24);
+      const gn = Math.min(gsize, target - bots.length);
+      for(const pt of lbotClusterAround(anchor, gn)){ _placed.push([pt[0], pt[2]]); bots.push({ id: _bid++, p: pt, yaw: Math.random()*Math.PI*2 }); }
+    }
+  }
   onBotStart({ humanSeat: 0, spawns: MAP.spawns, bots, countdown: 3 });   // crée le décor + le décompte
   onEnterGameAudio();   // son de spawn + coupe la musique de menu (mode bots)
   for(const bb of bots){ const b = botMgr.get(bb.id); if(b){ b.hp = maxHp; b.sh = maxShield; b._shPrev = maxShield;
@@ -7223,12 +7269,7 @@ function applyLocalBotDamage(id, b, dmg, head, melee){
     if(typeof INSANE!=='undefined' && INSANE.on) killPop(); else showKillBanner('un bot', !!head);   // chrono : +1 KILL anime
     checkOverchargeUnlock();   // 3 kills d'affilée → Overcharge dispo
     if(LBOT.waveMode){ checkWaveClear(); }
-    else setTimeout(()=>{
-      if(!localBotMode) return; const bb = botMgr.get(id); if(!bb) return;
-      bb.hp = maxHp; bb.sh = maxShield; bb._shPrev = maxShield;
-      initLocalBotAI(bb);
-      onBotRespawn({ id, p: lbotSpawnPoint(), yaw: Math.random()*Math.PI*2 });
-    }, LBOT.respawn);
+    else queueLocalGroupRespawn(id);   // re-vague groupée hors-vue (densité)
   }
 }
 function localBotShoot(o, dir, end){

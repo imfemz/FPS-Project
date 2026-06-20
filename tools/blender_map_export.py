@@ -4,7 +4,7 @@
 # CONVENTIONS
 #  - 1 unité Blender = 1 mètre. X = est/ouest, Y = nord/sud, Z = hauteur (Z-up). -> moteur : x=BlenderX, z=BlenderY, hauteur=BlenderZ.
 #  - Boîtes tournées en Z SEULEMENT -> exportées ORIENTÉES (rot = yaw, w/d = dimensions locales). Rotation X/Y -> approx par AABB.
-#  - TYPE : nom du MATÉRIAU (concrete/metal/container/grate) sinon nom de l'objet (Crate*->container, Wall*->concrete, Floor*->metal).
+#  - TYPE : nom du MATÉRIAU (concrete/metal/container/crate/grate) sinon nom de l'objet (Container*->container, Crate*->crate, Wall*->concrete, Floor*->metal).
 #  - RAMPES : objets "Ramp*" -> rampes marchables. SPAWNS : Empties contenant "spawn".
 #  - "Cylinder*" ignoré (gabarit de référence, pas un élément de map).
 #
@@ -13,7 +13,7 @@ from mathutils import Vector
 
 OUT_PATH = "/Users/femz/Game Dev/FemzFPS /prototype-web/fps-r184/shared/map_custom.js"
 MAP_COLLECTION = None
-KNOWN_TYPES = ("concrete", "metal", "container", "grate")
+KNOWN_TYPES = ("concrete", "metal", "container", "crate", "grate")
 
 def obj_type(o):
     if o.active_material and o.active_material.name:
@@ -21,7 +21,8 @@ def obj_type(o):
         for t in KNOWN_TYPES:
             if t in n: return t
     n = o.name.lower()
-    if "crate" in n: return "container"
+    if "container" in n: return "container"   # conteneur -> container.glb
+    if "crate" in n:     return "crate"       # caisse -> crate.glb
     if "wall" in n:  return "concrete"
     if "floor" in n: return "metal"
     return "concrete"
