@@ -1561,26 +1561,29 @@ function buildMap(){
   for(const r of MAP.ramps){
     // Rampe reconstruite : chaque face a ses propres sommets (normales nettes,
     // plus de face sombre qui dépasse) et des UV en mètres (1 motif / 2.4 m)
-    const hw=r.w/2, hd=r.d/2, h=r.h;
+    const ascX = r.asc[0] !== 0;
+    const wid = ascX ? r.d : r.w, run = ascX ? r.w : r.d;   // run = longueur de pente selon l'axe de montée
+    const hw=wid/2, hd=run/2, h=r.h;
     const sgn = r.asc[1];
-    const slope = Math.hypot(r.d, h), U = 2.4;
+    const slope = Math.hypot(run, h), U = 2.4;
     const P = [], UV = [];
     function tri(a,b,cc, ua,ub,uc){ P.push(...a,...b,...cc); UV.push(...ua,...ub,...uc); }
     // repère local : la pente monte toujours vers -z, on tourne le mesh si besoin
     const A=[-hw,0, hd], B=[hw,0, hd], C=[hw,h,-hd], D=[-hw,h,-hd], E=[-hw,0,-hd], F=[hw,0,-hd];
-    tri(A,B,C, [0,0],[r.w/U,0],[r.w/U,slope/U]);  // dessus (pente)
-    tri(A,C,D, [0,0],[r.w/U,slope/U],[0,slope/U]);
-    tri(D,C,F, [0,h/U],[r.w/U,h/U],[r.w/U,0]);    // face arrière verticale
-    tri(D,F,E, [0,h/U],[r.w/U,0],[0,0]);
-    tri(A,D,E, [0,0],[r.d/U,h/U],[r.d/U,0]);      // flanc gauche (triangle)
-    tri(B,F,C, [0,0],[r.d/U,0],[r.d/U,h/U]);      // flanc droit (triangle)
+    tri(A,B,C, [0,0],[wid/U,0],[wid/U,slope/U]);  // dessus (pente)
+    tri(A,C,D, [0,0],[wid/U,slope/U],[0,slope/U]);
+    tri(D,C,F, [0,h/U],[wid/U,h/U],[wid/U,0]);    // face arrière verticale
+    tri(D,F,E, [0,h/U],[wid/U,0],[0,0]);
+    tri(A,D,E, [0,0],[run/U,h/U],[run/U,0]);      // flanc gauche (triangle)
+    tri(B,F,C, [0,0],[run/U,0],[run/U,h/U]);      // flanc droit (triangle)
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(P,3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(UV,2));
     geo.computeVertexNormals();
     const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({color:0x666b72, roughness:.55, metalness:.4}));
     m.position.set(r.x, 0, r.z);
-    if(sgn === 1) m.rotation.y = Math.PI; // rampe qui monte vers +z
+    if(ascX) m.rotation.y = (r.asc[0] === 1) ? -Math.PI/2 : Math.PI/2;   // montée en X
+    else if(sgn === 1) m.rotation.y = Math.PI; // montée vers +z (sinon défaut = vers -z)
     m.castShadow = m.receiveShadow = true; scene.add(m);
     mapMeshes.push(m); rampMeshes.push(m);
     m.userData.surface = 'ramp';

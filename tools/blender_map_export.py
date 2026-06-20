@@ -50,10 +50,28 @@ def main():
         gmn[0] = min(gmn[0], mn.x); gmn[1] = min(gmn[1], mn.y)
         gmx[0] = max(gmx[0], mx.x); gmx[1] = max(gmx[1], mx.y)
         if o.name.lower().startswith("ramp"):
-            lo = min(cs, key=lambda c: c.z); hi = max(cs, key=lambda c: c.z)
-            rx, ry = (hi.x - lo.x), (hi.y - lo.y)
-            asc = [1 if rx > 0 else -1, 0] if abs(rx) >= abs(ry) else [0, 1 if ry > 0 else -1]
-            ramps.append({"x": r(cx), "z": r(cz), "w": r(w), "d": r(d), "h": r(max(1.0, mx.z)), "asc": asc}); continue
+            # Surface MARCHABLE = face du dessus du board (z local max), en MONDE, puis CLIPPÉE au sol (z=0)
+            # -> longueur VISIBLE réelle (le board peut plonger sous le sol => sinon rampe trop longue).
+            topz = max(c[2] for c in o.bound_box)
+            topw = [o.matrix_world @ Vector(c) for c in o.bound_box if abs(c[2] - topz) < 1e-4]
+            Hh = max(c.z for c in topw)
+            hiC = [c for c in topw if c.z > Hh - 0.05]
+            loC = [c for c in topw if c.z <= Hh - 0.05]
+            if loC and (Hh - (sum(c.z for c in loC)/len(loC))) > 1e-3:
+                Lt = sum(c.z for c in loC)/len(loC)
+                t = max(0.0, (0.0 - Lt) / (Hh - Lt))   # fraction bas->haut où z=0
+                hcx = sum(c.x for c in hiC)/len(hiC); hcy = sum(c.y for c in hiC)/len(hiC)
+                lcx = sum(c.x for c in loC)/len(loC); lcy = sum(c.y for c in loC)/len(loC)
+                ox = (hcx - lcx) * t; oy = (hcy - lcy) * t
+                pts = [(c.x, c.y) for c in hiC] + [(c.x + ox, c.y + oy) for c in loC]
+                dirx, diry = (hcx - lcx), (hcy - lcy)
+            else:
+                pts = [(c.x, c.y) for c in topw]; dirx = diry = 0.0
+            xs = [q[0] for q in pts]; ys = [q[1] for q in pts]
+            rw = max(xs) - min(xs); rd = max(ys) - min(ys)
+            rcx, rcz = (min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0
+            asc = [1 if dirx > 0 else -1, 0] if abs(dirx) >= abs(diry) else [0, 1 if diry > 0 else -1]
+            ramps.append({"x": r(rcx), "z": r(rcz), "w": r(max(1.0, rw)), "d": r(max(1.0, rd)), "h": r(max(1.0, Hh)), "asc": asc}); continue
         y0 = max(0.0, mn.z)
         if mx.z - y0 < 1e-2: continue
         rz = o.rotation_euler.z
