@@ -4635,9 +4635,9 @@ function updateDrone(b, dt){
   if(!b.droneSnd) startDroneSound(b); else { const _p = b.droneSnd.pan; if(_p.positionX){ _p.positionX.value=b.pos.x; _p.positionY.value=b.pos.y; _p.positionZ.value=b.pos.z; } else _p.setPosition(b.pos.x,b.pos.y,b.pos.z); }
   b.yaw = Math.atan2(-(me.pos.x - b.pos.x), -(me.pos.z - b.pos.z));
   const distP = Math.hypot(me.pos.x - b.pos.x, me.pos.z - b.pos.z);
-  const see = alive && playing && (botSeesPlayer(b) || distP < (b.sense || 5));
+  const los = botSeesPlayer(b);                       // ligne de vue REELLE (raycast contre la map)
   ai.fireT = (ai.fireT || 0) - dt;
-  if(see && distP < (b.fireRange || 22) && ai.fireT <= 0){
+  if(los && alive && playing && distP < (b.fireRange || 22) && ai.fireT <= 0){   // TIR : seulement avec LOS -> ne passe plus a travers les murs
     const W = (GAMECFG.WEAPONS && GAMECFG.WEAPONS[b.weaponIdx || 0]) || {};
     ai.fireT = (W.fire_rate || 0.12); droneShoot(b);
   }
@@ -6057,7 +6057,8 @@ function onBotStart(m){
   document.getElementById('spechelp').style.display = 'none';
   const s = m.spawns[myId];
   me.pos.set(s[0], 0, s[2]); me.yaw = s[3]; me.pitch = 0;
-  me.hp = maxHp; me.sh = maxShield; me.mag = CONFIG.MAG_SIZE;
+  me.hp = maxHp; me.sh = maxShield;
+  me.mags = (GAMECFG.WEAPONS||[]).map(w=>w.mag||30); me.mag = me.mags[me.weaponIdx];   // reset TOUS les chargeurs (sinon une arme garde le compte d'avant)
   me.reloading = false; reloadAnimT = -1; me.vel.set(0,0,0);
   me.slide.active = false; me.crouchToggleState = false;
   me.mantle.active = false; me.wallBounced = false;
