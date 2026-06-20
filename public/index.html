@@ -5470,9 +5470,7 @@ function loadAudioBuffer(url, onOk){
     .then(ab=>ensureAudioCtx().decodeAudioData(ab))
     .then(buf=>onOk && onOk(buf))
     .catch(()=>{ onFail && onFail(); });
-  const m4a = url.endsWith('.mp3') ? url.slice(0,-4) + '.m4a' : url;
-  if(m4a !== url) tryLoad(m4a, ()=>tryLoad(url));
-  else tryLoad(url);
+  tryLoad(url);   // charge directement .mp3/.mp4 (plus de sonde .m4a -> fini les 404 dans la console)
 }
 function initAudio(){
   ensureAudioCtx();
@@ -5696,6 +5694,7 @@ function spawnTracerFromMuzzle(end, dir0, color){
 // Reconstruit la courbe (Bezier quadratique start->control->end) avec le canon LIVE comme depart.
 function updateAttachedTracer(t){
   const start = muzzleWorldPoint();
+  if(!(isFinite(start.x)&&isFinite(start.y)&&isFinite(start.z))) return;   // jamais de NaN dans la géométrie (sinon computeBoundingSphere = NaN)
   const arr = t.line.geometry.attributes.position.array;
   const N = TRACER_SEGS, c = t.control, e = t.end;
   for(let i=0;i<N;i++){
@@ -9961,6 +9960,10 @@ function animate(){
   // Quand on navigue dans un MENU à la manette (pause/options en jeu), on COUPE l'input manette du
   // jeu (sinon le stick déplace le joueur et A = tir pendant qu'on clique). g=null = comme sans manette.
   if(playing && alive && !botFrozen) playerUpdate(dt, aMenuIsOpen() ? null : g);
+  // FILET ANTI-NaN GLOBAL : neutralise tout NaN de mécanique (slide/wall-bounce) AVANT caméra/FX/tracers
+  // -> caméra jamais NaN (plus d'écran gris) et géométries jamais NaN.
+  if(!(isFinite(me.vel.x)&&isFinite(me.vel.y)&&isFinite(me.vel.z))) me.vel.set(0,0,0);
+  if(!(isFinite(me.pos.x)&&isFinite(me.pos.y)&&isFinite(me.pos.z))){ const _s=(typeof MAP!=='undefined'&&MAP&&MAP.spawns&&MAP.spawns[0])||[0,0,0,0]; me.pos.set(_s[0]||0, 2, _s[2]||0); me.vel.set(0,0,0); if(me.slide) me.slide.active=false; }
   if(playing && alive && !botFrozen) applySaberMagnet(dt);   // aimant de visée quand le sabre est sorti près d'un ennemi
   // mes propres pas, réactifs à la vitesse (cadence + volume + pitch)
   if(playing && alive && me.onGround && !me.slide.active && !me.mantle.active){
