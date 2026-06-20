@@ -4646,6 +4646,8 @@ function createDroneMesh(color){
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX_FLASH, color: col, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, opacity:0.45 }));
   halo.scale.set(1.7,1.7,1); g.add(halo);
   const light = new THREE.PointLight(col, 2.0, 6); g.add(light);
+  const fov = new THREE.Mesh(new THREE.CircleGeometry(3.5, 40), new THREE.MeshBasicMaterial({ color: col, transparent:true, opacity:0.16, side:THREE.DoubleSide, depthWrite:false }));
+  fov.material.toneMapped = false; fov.rotation.x = -Math.PI/2; g.add(fov); g.userData.fov = fov;   // cercle uni au sol = champ de vue
   g.userData.core = core; g.userData.rings = rings;
   return g;
 }
@@ -4697,6 +4699,18 @@ function spawnBlood(point, dir){
     const v = (dir ? dir.clone() : new THREE.Vector3(0,0,1)).multiplyScalar(1.4 + Math.random()*2.2);
     v.x += (Math.random()-.5)*3.0; v.y += 1.0 + Math.random()*2.2; v.z += (Math.random()-.5)*3.0;
     impactParticles.push({ mesh:m, vel:v, life:0.55 + Math.random()*0.3, fade:0.55 });   // gravite dans updateImpactEffects
+    scene.add(m);
+  }
+}
+// Gros jet de SANG a la mort d'un bot (1 & 2) : burst radial + gravite.
+function spawnDeathBlood(point){
+  for(let i=0;i<30;i++){
+    const sz = 0.03 + Math.random()*0.055;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sz,sz,sz), new THREE.MeshBasicMaterial({ color: (Math.random()<0.5?0x8a0d0d:0x6e0a0a), transparent:true }));
+    m.position.copy(point);
+    const v = new THREE.Vector3(Math.random()*2-1, Math.random()*2-1, Math.random()*2-1).normalize().multiplyScalar(2.5 + Math.random()*4.5);
+    v.y += 1.8;
+    impactParticles.push({ mesh:m, vel:v, life:0.6 + Math.random()*0.45, fade:0.6 });
     scene.add(m);
   }
 }
@@ -6277,6 +6291,7 @@ function onBotKill(m){
   }
   if(b && b.soldier){
     b.dead = true;
+    spawnDeathBlood(new THREE.Vector3(b.pos.x, (b.pos.y||0) + 1.3*(b.sizeMul||1), b.pos.z));   // gros jet de sang
     // RAGDOLL : articulé (Rapier) si dispo, sinon topple corps-entier (frame 1 + projection).
     const _hd = { x: (b.pos.x - me.pos.x), z: (b.pos.z - me.pos.z) };   // direction du tir (loin du joueur)
     if(!startRapierRagdoll(b.soldier, _hd)){ poseDeathFrame1(b.soldier); startRagdoll(b.soldier, b.pos.clone(), _hd); }
@@ -6636,7 +6651,9 @@ function spawnBotWave(n){
   const w = LBOT.wave || 1, ST = (LBOT.types && LBOT.types.sentinel) || {}, DT = (LBOT.types && LBOT.types.drone) || {};
   let nSent  = (w >= (ST.from_wave || 99)) ? Math.min(ST.max || 0, 1 + Math.floor((w - (ST.from_wave || 0)) / (ST.per || 2))) : 0;
   let nDrone = (w >= (DT.from_wave || 99)) ? Math.min(DT.max || 0, 1 + Math.floor((w - (DT.from_wave || 0)) / (DT.per || 3))) : 0;
-  nSent = Math.min(nSent, n); nDrone = Math.min(nDrone, Math.max(0, n - nSent));   // melange : drones + sentinels + normaux
+  // Drones et Sentinels ne coexistent JAMAIS dans une vague : on alterne (impair = Sentinels, pair = Drones)
+  if(nSent > 0 && nDrone > 0){ if(w % 2 === 0) nSent = 0; else nDrone = 0; }
+  nSent = Math.min(nSent, n); nDrone = Math.min(nDrone, Math.max(0, n - nSent));
   const _placed = [];
   for(let i=0;i<n;i++){
     const id = i+1;
@@ -6693,6 +6710,7 @@ function botSeesPlayer(b){
 function localPlayerDeath(){
   if(!alive) return;
   if(LBOT.waveMode && INSANE.on){ insaneDeath(); return; }
+  spawnSoulOrbs(new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z));   // particules bleues a la frame de mort
   alive = false; playSfx('death');
   const _inMenu = (typeof aMenuIsOpen === 'function' && aMenuIsOpen()); // mort en plein menu → on y reste
   if(!_inMenu) show('deathscreen');
@@ -9170,6 +9188,7 @@ function startDeathCam(killerSeat, head){
   alive = false;
   document.exitPointerLock && document.exitPointerLock();
   playSfx('death');
+  spawnSoulOrbs(new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z));   // particules bleues a la frame de mort
   deathCam.active = true;
   deathCam.phase = 'tp';
   deathCam.t = 0;
@@ -9687,6 +9706,7 @@ function animate(){
           if(!b.dead){ b.drone.visible = true; b.drone.position.set(b.pos.x, b.pos.y, b.pos.z);
             b.drone.rotation.y += dt*1.4;
             for(const r of (b.drone.userData.rings||[])) r.rotation.z += dt*(r.userData.spin||1);
+            { const _fv = b.drone.userData.fov; if(_fv){ const _gy = (MAP.groundHeightAt?MAP.groundHeightAt(b.pos.x,b.pos.z):0); _fv.position.y = _gy - b.pos.y + 0.05; } }
           } else b.drone.visible = false;
         }
         continue;
