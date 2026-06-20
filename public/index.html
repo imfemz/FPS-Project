@@ -7085,20 +7085,24 @@ function updateLocalBots(dt){
 
     // Horizontale + collision
     let spd;
+    const _sab = (b.weaponIdx === 2);                       // sabre : plus rapide (doit foncer au contact)
     if(b.type === 'sentinel'){
-      { const _sab = (b.weaponIdx === 2);
-        spd = Math.min((run ? (_sab ? 6 : (LBOT.run_speed ?? 4.6)) : LBOT.speed) * (b.speedMul || 1), _sab ? 6 : 4); }   // vitesse max 4 (6 au sabre)
+      spd = (run ? (LBOT.run_speed ?? 4.6) : LBOT.speed) * (b.speedMul || 1);
     } else {
-      // Bots normaux : base 4, monte vers ~5.7 (aleatoire, lisse) quand ils engagent le joueur.
+      // Bots normaux : vitesse lissee. Sabre -> fonce (vers 6) ; autres -> base 4 (cap dur ci-dessous).
       if(b._spd == null) b._spd = 4;
       b._spdRoll = (b._spdRoll || 0) - dt;
-      if(b._spdRoll <= 0){ b._spdRoll = 2 + Math.random()*2; b._spdEng = 4.7 + Math.random()*1.0; }   // cible d'engagement ~4.7-5.7
-      const _tgt = knows ? (b._spdEng || 5.2) : 4;                                                     // engage -> ~5.7 ; sinon base 4
-      b._spd += (_tgt - b._spd) * Math.min(1, dt*3);                                                   // transition fluide
+      if(b._spdRoll <= 0){ b._spdRoll = 2 + Math.random()*2; b._spdEng = 4.7 + Math.random()*1.0; }
+      const _tgt = _sab ? (knows ? 6 : 5) : (knows ? (b._spdEng || 5.2) : 4);                          // sabre charge a 6 ; autres comme avant
+      b._spd += (_tgt - b._spd) * Math.min(1, dt*3);
       spd = b._spd;
     }
-    if(feared) spd = (LBOT.fear && LBOT.fear.speed) || 5;   // PEUR : velocite de fuite fixe
-    _botTmp.set(b.pos.x + (vx*spd + (b.knockX||0))*dt, 0, b.pos.z + (vz*spd + (b.knockZ||0))*dt); // + recul sabre (knockback)
+    if(feared) spd = (LBOT.fear && LBOT.fear.speed) || 5;   // PEUR : velocite de fuite
+    // #15 CAP DUR sur la vitesse REELLE de locomotion (apres strafe/rush/evade qui allongent le vecteur) :
+    // 4 par defaut, 6 au sabre. Le knockback (recul d'un coup de sabre) s'ajoute PAR-DESSUS, non plafonne.
+    { let _lvx = vx*spd, _lvz = vz*spd; const _lm = Math.hypot(_lvx, _lvz), _cap = _sab ? 6 : 4;
+      if(_lm > _cap){ const _k = _cap/_lm; _lvx *= _k; _lvz *= _k; }
+      _botTmp.set(b.pos.x + (_lvx + (b.knockX||0))*dt, 0, b.pos.z + (_lvz + (b.knockZ||0))*dt); }   // + recul sabre (knockback)
     collide(_botTmp, LBOT.radius ?? 0.5, b.pos.y||0);
     const brad = LBOT.radius ?? 0.5;
     for(const r of (MAP.ramps || [])){
