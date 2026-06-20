@@ -1,4 +1,4 @@
-/* map_custom.js — généré depuis Blender. HALF=119, 59 blocs, 2 rampes. */
+/* map_custom.js — généré depuis Blender (HALF=119, 59 blocs, 2 rampes, 4 spawns). */
 (function (root){
   const DATA = {
     HALF: 119,
@@ -67,7 +67,7 @@
       { x:-70.11, z:-56.6, w:20.0, d:24.9, h:9.81, asc:[0,1] },
       { x:26.58, z:52.59, w:25.45, d:20.68, h:9.81, asc:[1,0] }
     ],
-    SPAWNS: []
+    SPAWNS: [[81.56, 0, -86.71, -0.755], [-79.39, 0, -86.71, 0.741], [-79.39, 0, 86.18, 2.397], [83.91, 0, 86.18, -2.37]]
   };
   if (typeof module!=='undefined' && module.exports) module.exports = DATA;
   else root.__CUSTOM_MAP = DATA;

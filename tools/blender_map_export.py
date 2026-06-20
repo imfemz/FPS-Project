@@ -7,7 +7,7 @@
 #  - TYPE du bloc : depuis le nom du MATÉRIAU (concrete/metal/container/grate) SINON déduit du NOM de l'objet
 #    (Crate*->container, Wall*->concrete, Floor*->metal, défaut concrete).
 #  - RAMPES : objets nommés "Ramp*" -> converties en rampes MARCHABLES du jeu (pente auto depuis l'inclinaison).
-#  - SPAWNS : Empties nommés "spawn*" -> points d'apparition (orientés vers le centre).
+#  - SPAWNS : Empties dont le nom CONTIENT "spawn" -> points d'apparition (orientés vers le centre).
 #  - HALF (taille de l'arène) : calculé automatiquement depuis l'étendue de la map.
 #  - Couleur custom : propriété perso "c" (entier) sur l'objet.
 #
@@ -71,7 +71,7 @@ def main():
 
     spawns = []
     for o in bpy.context.scene.objects:
-        if o.type == 'EMPTY' and o.name.lower().startswith("spawn"):
+        if o.type == 'EMPTY' and "spawn" in o.name.lower():
             x, y, z = o.matrix_world.translation
             spawns.append([r(x), 0, r(y), round(math.atan2(-x, -y), 3)])
 
