@@ -49,6 +49,22 @@ const CONFIG = {
 /* ---------- Serveur HTTP statique ---------- */
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.ico': 'image/x-icon', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.webp': 'image/webp', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.obj': 'text/plain' };
 const DEV = !process.env.RENDER;            // dev local (pas sur Render) -> auto-reload + pas de cache
+
+/* ---------- Scoreboard "Kill contre la montre" (classement persistant, fichier JSON) ---------- */
+const LB_FILE = path.join(__dirname, 'leaderboard.json');
+let leaderboard = [];
+try { leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8')) || []; } catch (e) { leaderboard = []; }
+function lbTop(n) { return leaderboard.slice().sort((a, b) => b.kills - a.kills).slice(0, n || 20); }
+function lbSave() { try { fs.writeFile(LB_FILE, JSON.stringify(leaderboard), () => {}); } catch (e) {} }
+function lbSubmit(name, kills) {
+  name = String(name || 'Joueur').slice(0, 16).trim() || 'Joueur';
+  kills = Math.max(0, Math.min(9999, kills | 0));
+  const ex = leaderboard.find(e => e.name === name);
+  if (ex) { if (kills > ex.kills) { ex.kills = kills; ex.ts = Date.now(); } }
+  else leaderboard.push({ name, kills, ts: Date.now() });
+  leaderboard = lbTop(200);   // garde le top 200 (ne grossit pas a l'infini)
+  lbSave();
+}
 const devClients = new Set();                // connexions SSE pour le live-reload
 const server = http.createServer((req, res) => {
   let url = req.url.split('?')[0];
@@ -62,6 +78,20 @@ const server = http.createServer((req, res) => {
   if (url === '/status') {                       // compteur live pour le menu (joueurs en partie)
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
     return res.end(JSON.stringify({ seated: playerCount(), max: N, phase }));
+  }
+  if (url === '/leaderboard') {                  // classement Kill contre la montre
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify({ top: lbTop(20) }));
+  }
+  if (url === '/score' && req.method === 'POST') {   // soumission d'un score de run
+    let body = '';
+    req.on('data', d => { body += d; if (body.length > 10000) req.destroy(); });
+    req.on('end', () => {
+      try { const m = JSON.parse(body || '{}'); lbSubmit(m.name, m.kills); } catch (e) {}
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ top: lbTop(20) }));
+    });
+    return;
   }
   if (url === '/') url = '/index.html';
   const base = url.startsWith('/shared/') ? __dirname : path.join(__dirname, 'public');

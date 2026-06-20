@@ -379,6 +379,17 @@
   #insanedeath .id-row{margin-top:24px;display:flex;gap:26px}
   #insanedeath .id-link{font-family:var(--mono);font-size:13px;letter-spacing:2px;color:var(--txt-dim);cursor:pointer;pointer-events:auto;padding:8px 16px;border:1px solid var(--brd);border-radius:8px}
   #insanedeath .id-link:hover{color:#fff;border-color:rgba(255,255,255,.4)}
+  /* ===== Scoreboard Kill contre la montre ===== */
+  .lb-title{font-family:var(--mono);font-size:11px;letter-spacing:3px;color:var(--txt-faint);margin-bottom:8px;text-align:center}
+  .lb-row{display:flex;align-items:center;gap:10px;padding:4px 8px;border-radius:6px;font-family:var(--mono);font-size:13px}
+  .lb-row.me{background:rgba(150,60,255,.18);border:1px solid rgba(160,90,255,.45)}
+  .lb-rank{width:22px;color:var(--txt-faint);text-align:right}
+  .lb-name{flex:1;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+  .lb-k{color:var(--accent);font-weight:700}
+  .lb-empty{font-family:var(--mono);font-size:12px;color:var(--txt-faint);text-align:center}
+  #insanedeath #idLb{margin-top:22px;min-width:300px;max-width:360px;max-height:210px;overflow-y:auto;padding:10px 14px;background:rgba(10,12,18,.5);border:1px solid var(--brd);border-radius:10px}
+  #frLb{display:none;margin-top:12px;width:100%;max-width:340px;max-height:220px;overflow-y:auto;padding:12px 14px;background:rgba(10,12,18,.55);border:1px solid var(--brd);border-radius:10px}
+  #frLb.show{display:block;animation:frHintIn .42s cubic-bezier(.2,.8,.2,1) both}
   /* ===== Mini-map / radar (haut gauche) : ennemis rouges clignotants + orbes, rayon 10 m ===== */
   /* mini-map CARRÉE (coins chanfreinés), même DA que les cartes : bordure fine bleue + relief */
   #minimap{position:absolute;top:18px;left:18px;width:280px;height:280px;border-radius:0;opacity:.85;
@@ -547,6 +558,7 @@
         <p class="fr-rules" id="frRules"></p>
         <button class="fr-launch" id="menuLaunch">Lancer</button>
         <div class="fr-meleeinfo" id="frMeleeInfo">Mêlée en ligne · jusqu'à <b>6 joueurs</b> · premier à <b>10 éliminations</b><span class="fr-melee-live" id="frMeleeLive"></span></div>
+        <div id="frLb"></div>
       </section>
 
       <nav class="fr-nav">
@@ -669,6 +681,7 @@
 <div id="insanedeath">
   <div class="id-title">VOTRE ESPRIT A QUITTÉ VOTRE AVATAR</div>
   <div class="id-score"></div>
+  <div id="idLb"></div>
   <div class="id-restart" id="id-restart">SE REBRANCHER À LA MATRICE</div>
   <div class="id-row"><div class="id-link" id="id-salon">REVENIR AU SALON</div><div class="id-link" id="id-options">OPTIONS</div></div>
 </div>
@@ -6211,6 +6224,7 @@ function insaneDeath(){
     const t = el.querySelector('.id-title'); if(t) t.textContent = 'VOTRE ESPRIT A QUITTÉ VOTRE AVATAR';
     const sc = el.querySelector('.id-score'); if(sc) sc.textContent = localBotKills + (localBotKills>1?' ÉLIMINATIONS':' ÉLIMINATION');
   }
+  insaneFinishBoard();
   setTimeout(()=>{ if(INSANE.ended) show('insanedeath'); }, 650);
 }
 // Fin du chrono (2 min) : score final + freeze (le joueur reste en vie, fige sur place).
@@ -6225,6 +6239,7 @@ function insaneEndScore(){
     const sc = el.querySelector('.id-score'); if(sc) sc.textContent = localBotKills + (localBotKills>1?' ÉLIMINATIONS':' ÉLIMINATION');
     show('insanedeath');
   }
+  insaneFinishBoard();
 }
 // Relance une partie Insane propre (kills 0, timer 2:00, vague 1).
 function insaneRestart(){
@@ -6303,6 +6318,23 @@ function updateBuffItem(dt){
     if(dx*dx + dy*dy + dz*dz < 2.0*2.0){ activateItemBuff(); clearBuffItem(); }
   }
 }
+
+/* ============ Scoreboard "Kill contre la montre" (client) ============ */
+function _lbEsc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function renderLeaderboard(el, data, hiName){
+  if(!el) return;
+  const top = (data && data.top) || [];
+  if(!top.length){ el.innerHTML = '<div class="lb-empty">Aucun score — inscris le premier record.</div>'; return; }
+  let html = '<div class="lb-title">CLASSEMENT · KILLS / 2 MIN</div>';
+  for(let i=0;i<top.length;i++){ const e = top[i], mine = (hiName && e.name===hiName) ? ' me' : '';
+    html += '<div class="lb-row'+mine+'"><span class="lb-rank">'+(i+1)+'</span><span class="lb-name">'+_lbEsc(e.name)+'</span><span class="lb-k">'+(e.kills|0)+'</span></div>'; }
+  el.innerHTML = html;
+}
+function timeSubmitScore(kills){
+  return fetch('/score', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: myName||'Joueur', kills: kills|0 }) }).then(r=>r.json()).catch(()=>null);
+}
+function timeFetchLeaderboard(){ return fetch('/leaderboard', { cache:'no-store' }).then(r=>r.json()).catch(()=>null); }
+function insaneFinishBoard(){ timeSubmitScore(localBotKills).then(d=>renderLeaderboard(document.getElementById('idLb'), d, myName)); }
 // ===== INSANE : courbe de difficulte EXPONENTIELLE par vague (baseline V1 douce -> plafond) =====
 // stat(v) = base + (cap - base) * (1 - r^(v-1)) ; r = vitesse de montee (plus petit = monte plus vite).
 LBOT.ai.insaneCurve = {
@@ -7021,6 +7053,7 @@ document.getElementById('botbtnmenu').onclick = ()=>{
     $('mode-bots').classList.toggle('sel',m==='bots');
     $('frRules').innerHTML=RULES[m]||'';
     var TH=$('frTimeHint'); if(TH){ if(m==='time'){ TH.classList.remove('show'); void TH.offsetWidth; TH.classList.add('show'); try{ if(typeof playSfx==='function') playSfx('button1'); }catch(e){} } else TH.classList.remove('show'); }
+    var LB=$('frLb'); if(LB){ if(m==='time'){ LB.classList.add('show'); if(typeof timeFetchLeaderboard==='function') timeFetchLeaderboard().then(function(d){ renderLeaderboard(LB, d, myName); }); } else LB.classList.remove('show'); }
     var DF=$('frDiff'); if(m==='bots'){ if(LBOT.ai.difficulty==='insane'){ LBOT.ai.difficulty='medium'; document.querySelectorAll('.diffbtn').forEach(function(b){ b.classList.toggle('sel', b.dataset.diff===LBOT.ai.difficulty); }); } DF.classList.remove('show'); void DF.offsetWidth; DF.classList.add('show'); } else DF.classList.remove('show');
     var MI=$('frMeleeInfo'); if(m==='melee'){ MI.classList.remove('show'); void MI.offsetWidth; MI.classList.add('show'); refreshMeleeCount(); startMeleePoll(); } else { MI.classList.remove('show'); stopMeleePoll(); }
     var P=$('frPreview'); P.classList.add('show'); P.classList.remove('anim'); void P.offsetWidth; P.classList.add('anim');
