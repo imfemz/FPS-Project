@@ -1737,8 +1737,8 @@ function updateImpactEffects(dt){
 const mapRay = new THREE.Raycaster();
 // Intersection analytique rayon→capsule, alignée sur la hitbox du serveur (shared/config.js MODELS.hitbox).
 // Renvoie la distance t (dir supposé normalisé) ou Infinity si le rayon manque la capsule.
-function rayCapsuleT(o, d, tpos, lowered, radMul){
-  const M = GAMECFG.MODELS || {}, HB = M.hitbox || {}, sc = M.character_scale || 1;
+function rayCapsuleT(o, d, tpos, lowered, radMul, sizeMul){
+  const M = GAMECFG.MODELS || {}, HB = M.hitbox || {}, sc = (M.character_scale || 1) * (sizeMul || 1);
   const R = (HB.radius != null ? HB.radius : 0.32) * sc * (radMul || 1);
   const bottom = (HB.bottom != null ? HB.bottom : 0.10) * sc;
   const topStand = (HB.top != null ? HB.top : 1.80) * sc;
@@ -1767,8 +1767,10 @@ function nearestEnemyCapsuleT(o, d){
     if(t < best) best = t;
   }
   for(const b of botMgr.values()){
-    if(b.dead || !b.soldier) continue;
-    const t = rayCapsuleT(o, d, b.pos, !!(b.anim && (b.anim.c || b.anim.sl)), LBOT.hit_pad ?? 1.4);
+    if(b.dead) continue;
+    let t;
+    if(b.type === 'drone'){ if(!b.drone || !b.drone.visible) continue; t = raySphereT(o, d, b.pos, 0.55); }
+    else { if(!b.soldier) continue; t = rayCapsuleT(o, d, b.pos, !!(b.anim && (b.anim.c || b.anim.sl)), LBOT.hit_pad ?? 1.4, b.sizeMul || 1); }
     if(t < best) best = t;
   }
   return best;
@@ -4384,8 +4386,160 @@ function ensureBot(id, accent){
 function removeEntity(id){
   const b = botMgr.get(id);
   if(b && b.soldier && b.soldier.root) scene.remove(b.soldier.root);
+  if(b && b.drone) scene.remove(b.drone);
   botMgr.delete(id);
   try{ killHealthBar('bot'+id); }catch(e){}
+}
+
+/* ============================================================================
+   TYPES D'ENNEMIS — Sentinel (BOT 2) + Drone sonde (BOT 3)
+   ========================================================================== */
+// Intersection rayon -> sphere (pour toucher le drone volant). t>0 ou Infinity.
+function raySphereT(o, d, c, r){
+  const ox=o.x-c.x, oy=o.y-c.y, oz=o.z-c.z;
+  const b = ox*d.x + oy*d.y + oz*d.z;
+  const cc = ox*ox + oy*oy + oz*oz - r*r;
+  const disc = b*b - cc; if(disc < 0) return Infinity;
+  const t = -b - Math.sqrt(disc); return t > 0 ? t : Infinity;
+}
+// Teinte tout le mesh d'un soldat (hex) ou RESTAURE la couleur d'origine (hex=null).
+function tintSoldier(s, hex){
+  if(!s || !s.inst) return;
+  s.inst.traverse(o=>{
+    if(!o.isMesh || !o.material) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for(const m of mats){
+      if(!m || !m.color) continue;
+      if(!m.userData) m.userData = {};
+      if(m.userData._base === undefined) m.userData._base = m.color.getHex();
+      if(hex == null){ m.color.setHex(m.userData._base); }
+      else { m.color.setHex(hex); if(m.emissive) m.emissive.setHex(0x000000); }
+    }
+  });
+}
+// Orbe cybernetique rouge volant (BOT 3) : noyau emissif + oeil + 2 anneaux + halo. Pas de rig.
+function createDroneMesh(color){
+  const g = new THREE.Group();
+  const col = new THREE.Color(color || 0xff2a2a);
+  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 1),
+    new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 1.3, metalness:0.6, roughness:0.35 }));
+  core.castShadow = true; g.add(core);
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 12), new THREE.MeshBasicMaterial({ color: 0x140202 }));
+  eye.position.z = 0.27; g.add(eye);
+  const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.065, 12, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff6644, toneMapped:false })); pupil.position.z = 0.35; g.add(pupil);
+  const rings = [];
+  for(let i=0;i<2;i++){
+    const r = new THREE.Mesh(new THREE.TorusGeometry(0.48 + i*0.12, 0.024, 8, 40),
+      new THREE.MeshBasicMaterial({ color: col, transparent:true, opacity:0.75, blending:THREE.AdditiveBlending, depthWrite:false }));
+    r.material.toneMapped = false;
+    r.rotation.x = Math.PI/2 + i*0.5; r.rotation.y = i*0.7; r.userData.spin = (i?-1:1)*(1.6+i*0.8);
+    rings.push(r); g.add(r);
+  }
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX_FLASH, color: col, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, opacity:0.45 }));
+  halo.scale.set(1.7,1.7,1); g.add(halo);
+  const light = new THREE.PointLight(col, 2.0, 6); g.add(light);
+  g.userData.core = core; g.userData.rings = rings;
+  return g;
+}
+// Definit le TYPE d'un bot + applique visuel/stats. 'normal' | 'sentinel' | 'drone'.
+function setBotType(b, type){
+  if(!b) return; type = type || 'normal';
+  const T = (LBOT.types && LBOT.types[type]) || {};
+  b.type = type;
+  if(type === 'drone'){
+    if(b.soldier && b.soldier.root && b.soldier.root.parent) scene.remove(b.soldier.root);
+    if(!b.drone){ b.drone = createDroneMesh(T.color); scene.add(b.drone); }
+    b.drone.visible = true;
+    b.isDrone = true; b.sizeMul = 1; b.weaponIdx = T.weapon || 0;
+    b.maxHpType = T.hp || 60; b.hp = b.maxHpType; b.sh = 0;
+    b.view_range = 60; b.wallhack = false; b.fireRange = T.fire_range || 22;
+    b.nonstopFire = true; b.noFlee = true; b.rush = false; b.speedMul = 1; b.dodgeJumpBelow = 0;
+    b.fov_deg = T.view_fov_deg || 40; b.sense = T.sense_radius || 5;
+    b.hover = T.hover || 4; b.followR = T.follow_radius || 6; b.droneSpeed = T.speed || 7;
+  } else {
+    if(b.drone) b.drone.visible = false;
+    b.isDrone = false;
+    if(!b.soldier && RIG_READY && RIG_TEMPLATE){ b.soldier = createSoldierRigged(b.accent||0xff7755); scene.add(b.soldier.root); }
+    if(b.soldier && b.soldier.root){ if(!b.soldier.root.parent) scene.add(b.soldier.root); b.soldier.root.visible = true; }
+    if(type === 'sentinel'){
+      if(b.soldier && b.soldier.root) b.soldier.root.scale.setScalar(T.scale || 1.5);
+      tintSoldier(b.soldier, T.color != null ? T.color : 0x080808);
+      b.weaponIdx = (T.weapon != null ? T.weapon : 1); setSoldierWeapon(b.soldier, b.weaponIdx);
+      b.sizeMul = T.scale || 1.5; b.maxHpType = Math.round(maxHp * (T.hp_mult || 1.8));
+      b.view_range = T.view_range || 45; b.wallhack = !!T.wallhack; b.fireRange = T.fire_range || 30;
+      b.rush = !!T.rush; b.nonstopFire = !!T.nonstop_fire; b.noFlee = !!T.no_flee;
+      b.dodgeJumpBelow = T.dodge_jump_below || 0; b.speedMul = T.speed_mult || 2;
+      b.fov_deg = 0; b.sense = 0;
+    } else {
+      if(b.soldier && b.soldier.root) b.soldier.root.scale.setScalar(1);
+      tintSoldier(b.soldier, null);
+      b.weaponIdx = 0; setSoldierWeapon(b.soldier, 0);
+      b.sizeMul = 1; b.maxHpType = maxHp;
+      b.view_range = 0; b.wallhack = false; b.fireRange = 0; b.rush = false;
+      b.nonstopFire = false; b.noFlee = false; b.dodgeJumpBelow = 0; b.speedMul = 1; b.fov_deg = 0; b.sense = 0;
+    }
+  }
+}
+// Gerbe de SANG quand on touche un ennemi (bot 1 & 2). Soumis a la gravite (updateImpactEffects).
+function spawnBlood(point, dir){
+  for(let i=0;i<12;i++){
+    const sz = 0.02 + Math.random()*0.03;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sz,sz,sz), new THREE.MeshBasicMaterial({ color: 0x8a0d0d, transparent:true }));
+    m.position.copy(point);
+    const v = (dir ? dir.clone() : new THREE.Vector3(0,0,1)).multiplyScalar(1.4 + Math.random()*2.2);
+    v.x += (Math.random()-.5)*3.0; v.y += 1.0 + Math.random()*2.2; v.z += (Math.random()-.5)*3.0;
+    impactParticles.push({ mesh:m, vel:v, life:0.55 + Math.random()*0.3, fade:0.55 });   // gravite dans updateImpactEffects
+    scene.add(m);
+  }
+}
+// Explosion du drone a la mort : burst additif orange/rouge + flash.
+function spawnDroneExplosion(point){
+  const cols = [0xff3a1a, 0xff7a2a, 0xffd24a];
+  for(let i=0;i<34;i++){
+    const sz = 0.03 + Math.random()*0.05;
+    const mat = new THREE.MeshBasicMaterial({ color: cols[(Math.random()*cols.length)|0], transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }); mat.toneMapped=false;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sz,sz,sz), mat); m.position.copy(point);
+    const v = new THREE.Vector3(Math.random()*2-1, Math.random()*2-1, Math.random()*2-1).normalize().multiplyScalar(4 + Math.random()*7);
+    v.y += 1.2;
+    impactParticles.push({ mesh:m, vel:v, life:0.4 + Math.random()*0.35, fade:0.6 });
+    scene.add(m);
+  }
+  const light = new THREE.PointLight(0xff5a2a, 12, 9); light.position.copy(point); scene.add(light);
+  impactParticles.push({ light, life:0.25 });
+}
+// Tir du drone : tracer rouge depuis l'orbe + degats R69.
+function droneShoot(b){
+  const A = LBOT.ai || {};
+  const _eye = new THREE.Vector3(me.pos.x, me.pos.y + (me.eye || 1.62), me.pos.z);
+  const _bp = new THREE.Vector3(b.pos.x, b.pos.y, b.pos.z);
+  spawnTracer(_bp, _eye, 0xff4a2a);
+  const tier = (A.tiers && (A.tiers[A.difficulty] || A.tiers.medium)) || {};
+  const playerSpeed = Math.hypot(me.vel.x, me.vel.z);
+  const moveF = 1 - Math.min(1, playerSpeed / (A.move_full_speed ?? 9)) * (tier.move_pen ?? 0.4);
+  if(Math.random() < (tier.hit_chance ?? 0.7) * moveF * 0.9){
+    const W = (GAMECFG.WEAPONS && GAMECFG.WEAPONS[b.weaponIdx || 0]) || {};
+    if((A.damage_player) !== false) damagePlayerLocal((W.damage_body ?? 13) * (tier.dmg_mult ?? 1), b.pos);
+  }
+  playSfxAt('shot', b.pos, 0.55, { refDistance: 8, maxDistance: 60, rolloff: 0.8 });
+}
+// IA du drone : flotte 'hover' au-dessus du joueur, orbite douce dans follow_radius, tir continu.
+function updateDrone(b, dt){
+  b.ai = b.ai || {}; const ai = b.ai;
+  ai.orbit = (ai.orbit || Math.random()*6.28) + dt*0.8;
+  const fr = b.followR || 6, hov = b.hover || 4, sp = b.droneSpeed || 7;
+  const ox = me.pos.x + Math.cos(ai.orbit)*fr*0.6, oz = me.pos.z + Math.sin(ai.orbit)*fr*0.6, oy = (me.pos.y||0) + hov;
+  const dx = ox - b.pos.x, dy = oy - b.pos.y, dz = oz - b.pos.z, d = Math.hypot(dx,dy,dz) || 1e-4;
+  const step = Math.min(d, sp*dt);
+  b.pos.x += dx/d*step; b.pos.y += dy/d*step; b.pos.z += dz/d*step; b.buf.length = 0;
+  b.yaw = Math.atan2(-(me.pos.x - b.pos.x), -(me.pos.z - b.pos.z));
+  const distP = Math.hypot(me.pos.x - b.pos.x, me.pos.z - b.pos.z);
+  const see = alive && playing && (botSeesPlayer(b) || distP < (b.sense || 5));
+  ai.fireT = (ai.fireT || 0) - dt;
+  if(see && distP < (b.fireRange || 22) && ai.fireT <= 0){
+    const W = (GAMECFG.WEAPONS && GAMECFG.WEAPONS[b.weaponIdx || 0]) || {};
+    ai.fireT = (W.fire_rate || 0.12); droneShoot(b);
+  }
 }
 
 /* ---------- Réseau ---------- */
@@ -5838,9 +5992,9 @@ function onBotHit(m){
     else playSfx(m.sh > 0 ? 'hit_shield' : 'hit_flesh');
     if(m.head) playSfx('hit_head');
     b._shPrev = m.sh;
-    if(b.soldier){
-      if(b.soldier.rigged && m.hp > 0) playHitAnim(b.soldier, m.head);
-      const np = b.pos.clone(); np.y += 2.0;
+    if(b.soldier && b.soldier.rigged && m.hp > 0) playHitAnim(b.soldier, m.head);
+    if(b.pos){
+      const np = b.pos.clone(); np.y += (b.type === 'drone' ? 0.5 : 2.0);
       addDamage('bot'+m.id, m.dmg||0, !!m.head, np, m.sh>0);
       showHealthBar('bot'+m.id, m.hp, m.sh, !!(b.anim && b.anim.c));
     }
@@ -5852,6 +6006,14 @@ function onBotHit(m){
 }
 function onBotKill(m){
   const b = botMgr.get(m.id);
+  if(b && b.type === 'drone'){
+    b.dead = true;
+    if(b.drone){ spawnDroneExplosion(b.drone.position.clone()); b.drone.visible = false; }
+    const _T = (LBOT.types && LBOT.types.drone) || {};
+    playSfxAt(_T.explode_sfx || 'drone_explode', b.pos, 1.0);
+    killHealthBar('bot'+m.id); killFeed('VOUS ☠ DRONE');
+    return;
+  }
   if(b && b.soldier){
     b.dead = true;
     if(b.soldier.rigged && playDeathAnim(b.soldier)){
@@ -5873,9 +6035,11 @@ function onBotKill(m){
 function onBotRespawn(m){
   const b = botMgr.get(m.id);
   if(b){
-    b.dead = false; b.buf.length = 0; b._shPrev = maxShield;
+    b.dead = false; b.buf.length = 0; b._shPrev = (b.sh != null ? b.sh : maxShield);
     b.pos.set(m.p[0], m.p[1], m.p[2]); b.yaw = m.yaw;
-    if(b.soldier){ resetSoldierPose(b.soldier); b.soldier.root.visible = true;
+    if(b.type === 'drone'){
+      if(b.drone){ b.drone.visible = true; b.drone.position.set(m.p[0], m.p[1], m.p[2]); }
+    } else if(b.soldier){ resetSoldierPose(b.soldier); b.soldier.root.visible = true;
       b.soldier.root.position.set(m.p[0], m.p[1], m.p[2]); }
   }
 }
@@ -5912,6 +6076,26 @@ const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist:
       insane: { react: 0.10, hit_chance: 0.99, move_pen: 0.45, burst:[5,18], gap:[0.15,0.35], reload: 1.0, evade: 0.85, dmg_mult: 1.3 }
     }
   } };  // séparation = distance mini entre bots ; radius = collision joueur ; hit_pad = hitbox bien généreuse pour bien toucher
+// ===== TYPES D'ENNEMIS (apparaissent par PALIERS en mode INSANE) =====
+LBOT.types = {
+  sentinel: {                          // BOT 2 — gros soldat noir, traqueur implacable
+    from_wave: 3, max: 3, per: 2,      // des la vague 3 ; jusqu'a 3 ; +1 toutes les 2 vagues
+    color: 0x080808, scale: 1.5, hp_mult: 1.8,   // mesh noir, taille/hitbox x1.5, plus resistant
+    weapon: 1,                         // WINGMAN (memes degats que le wingman : 70 corps)
+    speed_mult: 2.0,                   // vitesse de course x2
+    view_range: 45, wallhack: true,    // detecte/poursuit le joueur a travers les murs (40m+)
+    fire_range: 30, rush: true, nonstop_fire: true,   // fonce des qu'il connait + tir continu (sur LOS reel)
+    no_flee: true, dodge_jump_below: 0.2              // ne fuit jamais ; < 20% PV -> sauts G/D
+  },
+  drone: {                             // BOT 3 — sonde cybernetique rouge volante
+    from_wave: 5, max: 2, per: 3,
+    color: 0xff2a2a, hp: 60,
+    hover: 4.0, follow_radius: 6.0, speed: 7,   // flotte 4m au-dessus, suit dans 6m, velocite 7
+    view_fov_deg: 40, sense_radius: 5,          // FOV 40deg ; detecte a travers mur si < 5m
+    weapon: 0, fire_range: 22, nonstop_fire: true,   // degats R69, tir continu
+    explode_sfx: 'drone_explode'
+  }
+};
 // ===== INSANE : courbe de difficulte EXPONENTIELLE par vague (baseline V1 douce -> plafond) =====
 // stat(v) = base + (cap - base) * (1 - r^(v-1)) ; r = vitesse de montee (plus petit = monte plus vite).
 LBOT.ai.insaneCurve = {
@@ -5993,12 +6177,18 @@ function startLocalBotMode(){
 function botsForWave(w){ return Math.min(LBOT.MAX_BOTS ?? 8, Math.max(1, Math.round(3 * Math.pow(1.25, (w||1) - 1)))); }
 function spawnBotWave(n){
   for(const _id of Array.from(botMgr.keys())){ if(_id > n) removeEntity(_id); }  // anti sur-spawn : jamais plus que l'effectif de la vague
+  const w = LBOT.wave || 1, ST = (LBOT.types && LBOT.types.sentinel) || {}, DT = (LBOT.types && LBOT.types.drone) || {};
+  let nSent  = (w >= (ST.from_wave || 99)) ? Math.min(ST.max || 0, 1 + Math.floor((w - (ST.from_wave || 0)) / (ST.per || 2))) : 0;
+  let nDrone = (w >= (DT.from_wave || 99)) ? Math.min(DT.max || 0, 1 + Math.floor((w - (DT.from_wave || 0)) / (DT.per || 3))) : 0;
+  nSent = Math.min(nSent, n); nDrone = Math.min(nDrone, Math.max(0, n - nSent));   // melange : drones + sentinels + normaux
   const _placed = [];
   for(let i=0;i<n;i++){
     const id = i+1;
     let b = botMgr.get(id); if(!b) b = ensureBot(id, 0xff7755);
+    const type = (i < nDrone) ? 'drone' : (i < nDrone + nSent) ? 'sentinel' : 'normal';
+    setBotType(b, type);
     const p = lbotSpawnPoint(i, n, _placed); _placed.push([p[0], p[2]]);
-    b.hp = maxHp; b.sh = maxShield; b._shPrev = maxShield;
+    b.hp = b.maxHpType || maxHp; b.sh = (type === 'drone') ? 0 : maxShield; b._shPrev = b.sh;
     onBotRespawn({ id, p:[p[0], p[1]||0, p[2]], yaw: Math.random()*Math.PI*2 });
     initLocalBotAI(b);
   }
@@ -6039,8 +6229,8 @@ function botSeesPlayer(b){
   // CHAMP DE VISION : cone frontal (view_fov_deg), sauf a courte distance (sense_radius = 360deg).
   const _A = LBOT.ai || {};
   const _dx = me.pos.x - b.pos.x, _dz = me.pos.z - b.pos.z, _dd = Math.hypot(_dx, _dz);
-  if(_dd < (_A.sense_radius ?? 3)) return true;                                // < sense_radius : 360 deg
-  const _halfCos = Math.cos(((_A.view_fov_deg ?? 120) * Math.PI / 180) / 2);   // demi-angle du cone
+  if(_dd < (b.sense || _A.sense_radius || 3)) return true;                      // < sense_radius : 360 deg
+  const _halfCos = Math.cos(((b.fov_deg || _A.view_fov_deg || 120) * Math.PI / 180) / 2);   // demi-angle du cone
   const _cosAng = (-Math.sin(b.yaw) * _dx - Math.cos(b.yaw) * _dz) / (_dd || 1); // cos(angle facing<->joueur)
   return _cosAng >= _halfCos;
 }
@@ -6107,6 +6297,7 @@ function updateLocalBots(dt){
   const playerSpeed = Math.hypot(me.vel.x, me.vel.z);
   for(const [id,b] of botMgr){
     if(b.dead || !b.pos) continue;
+    if(b.type === 'drone'){ updateDrone(b, dt); continue; }
     if(!b.mv || !b.ai) initLocalBotAI(b);
     const mv = b.mv, ai = b.ai;
     const dxp = me.pos.x - b.pos.x, dzp = me.pos.z - b.pos.z;
@@ -6114,15 +6305,18 @@ function updateLocalBots(dt){
     mv.retarget -= dt; mv.strafeT -= dt;
     if(mv.strafeT <= 0){ mv.strafeDir *= -1; mv.strafeT = 1.0 + Math.random()*1.4; }
 
-    // Perception
-    const see = (distP < (A.view_range ?? 24)) && alive && botSeesPlayer(b);
-    ai.seenT = see ? (A.forget_time ?? 3) : Math.max(0, ai.seenT - dt);
-    if(see){ ai.lastX = me.pos.x; ai.lastZ = me.pos.z; }
-    const knows = see || ai.seenT > 0;
-    const inFire = see && alive && distP <= (A.fire_range ?? 15);
-    // AGRESSIVITE : voit le joueur sans etre touche pendant aggro_time -> rush + tir continu
+    // Perception (Sentinel : wallhack = detecte/poursuit a travers les murs)
+    const _vr = (b.view_range || A.view_range || 24);
+    const fireRange = (b.fireRange || A.fire_range || 15);
+    const see = (distP < _vr) && alive && botSeesPlayer(b);            // LOS reel (pour le TIR)
+    const wallKnow = !!b.wallhack && (distP < _vr) && alive;           // detection a travers mur (poursuite)
+    ai.seenT = (see || wallKnow) ? (A.forget_time ?? 3) : Math.max(0, ai.seenT - dt);
+    if(see || wallKnow){ ai.lastX = me.pos.x; ai.lastZ = me.pos.z; }
+    const knows = see || wallKnow || ai.seenT > 0;
+    const inFire = see && alive && distP <= fireRange;
+    // AGRESSIVITE : vu sans etre touche pendant aggro_time -> rush + tir continu (Sentinel : rush direct)
     if(see){ ai.noHitSeenT = (ai.noHitSeenT||0) + dt; } else { ai.noHitSeenT = 0; }
-    const aggro = knows && ((ai.noHitSeenT||0) >= (A.aggro_time ?? 2));
+    const aggro = b.rush ? knows : (knows && ((ai.noHitSeenT||0) >= (A.aggro_time ?? 2)));
 
     // Tir + accuracy
     ai.fireT -= dt; ai.reloadT -= dt; ai.fireFlash = Math.max(0, ai.fireFlash - dt);
@@ -6133,7 +6327,7 @@ function updateLocalBots(dt){
         const magSize = _W.mag || 30, reloadT = _W.reload_t || tier.reload || 1.6, fireRate = _W.fire_rate || 0.11;
         if(ai.mag == null) ai.mag = magSize;
         if(ai.shotsLeft <= 0){                      // nouvelle rafale : plus LONGUE quand le bot est PROCHE
-          const fr = A.fire_range ?? 15;
+          const fr = fireRange;
           const prox = Math.max(0, Math.min(1, (fr - distP) / Math.max(1, fr - 2.5)));
           const bl = tier.burst || [2,6];
           ai.shotsLeft = Math.max(1, Math.round(bl[0] + (bl[1]-bl[0])*prox));
@@ -6141,21 +6335,21 @@ function updateLocalBots(dt){
         botShoot(b, tier, playerSpeed, distP);
         ai.shotsLeft--; ai.mag--;
         if(ai.mag <= 0){ ai.mag = magSize; ai.reloadT = reloadT; ai.shotsLeft = 0; }   // chargeur vide -> reload (temps de l'arme)
-        else if(ai.shotsLeft <= 0){ ai.fireT = aggro ? fireRate : _rR(tier.gap || [0.4,0.8]); }   // fin rafale -> pause (aucune en aggro = tir continu)
+        else if(ai.shotsLeft <= 0){ ai.fireT = (aggro || b.nonstopFire) ? fireRate : _rR(tier.gap || [0.4,0.8]); }   // fin rafale -> pause (aucune en aggro/nonstop)
         else { ai.fireT = fireRate; }                                                   // cadence intra-rafale
       }
     } else { ai.reactT = tier.react ?? 0.3; ai.shotsLeft = 0; }
 
     // Decision de deplacement
     let vx=0, vz=0, run=false;
-    const _flee = knows && (b.hp < maxHp * (A.flee_below ?? 0.5));   // PV bas -> fuite
+    const _flee = !b.noFlee && knows && (b.hp < maxHp * (A.flee_below ?? 0.5));   // PV bas -> fuite (sauf Sentinel)
     if(_flee){
       const px = dxp/distP, pz = dzp/distP;
       vx = -px - pz*mv.strafeDir*0.4;          // s'eloigne du joueur (+ un peu de zigzag)
       vz = -pz + px*mv.strafeDir*0.4;
       b.yaw = Math.atan2(-vx, -vz);            // face la direction de fuite
       run = true;
-    } else if(see && distP <= (A.fire_range ?? 15)){
+    } else if(see && distP <= fireRange){
       const px = dxp/distP, pz = dzp/distP, sx = -pz, sz = px;
       vx = sx*mv.strafeDir; vz = sz*mv.strafeDir;          // strafe gauche/droite
       if(aggro){
@@ -6193,6 +6387,12 @@ function updateLocalBots(dt){
     if(ai.evadeT > 0){ ai.evadeT -= dt;
       const px = dxp/distP, pz = dzp/distP;
       vx += (-pz)*mv.strafeDir*1.4; vz += (px)*mv.strafeDir*1.4; run = true; }
+    // SENTINEL bas PV : sauts gauche-droite (esquive agressive) au lieu de fuir
+    if(b.dodgeJumpBelow && b.hp < maxHp * b.dodgeJumpBelow && knows){
+      const px = dxp/distP, pz = dzp/distP;
+      vx += (-pz)*mv.strafeDir*1.8; vz += (px)*mv.strafeDir*1.8; run = true;
+      if(!ai.air && ai.jumpCD <= 0){ ai.vy = A.jump_vel ?? 6.6; ai.air = true; ai.jumpCD = 0.45 + Math.random()*0.35; }
+    }
 
     // Saut (esquive / franchissement)
     ai.jumpCD -= dt;
@@ -6209,7 +6409,7 @@ function updateLocalBots(dt){
     const vlen = Math.hypot(vx,vz) || 1; vx/=vlen; vz/=vlen;
 
     // Horizontale + collision
-    const spd = run ? (LBOT.run_speed ?? 4.6) : LBOT.speed;
+    const spd = (run ? (LBOT.run_speed ?? 4.6) : LBOT.speed) * (b.speedMul || 1);
     _botTmp.set(b.pos.x + (vx*spd + (b.knockX||0))*dt, 0, b.pos.z + (vz*spd + (b.knockZ||0))*dt); // + recul sabre (knockback)
     collide(_botTmp, LBOT.radius ?? 0.5, b.pos.y||0);
     const brad = LBOT.radius ?? 0.5;
@@ -6259,6 +6459,11 @@ function applyLocalBotDamage(id, b, dmg, head, melee){
   if(!b || b.dead) return;
   b.playerHit = true;   // le joueur a touche ce bot -> fin du bonus 'premier coup'
   if(b.ai) b.ai.noHitSeenT = 0;   // touche -> reset le timer d'agressivite
+  if(b.type !== 'drone' && b.pos){   // gerbe de SANG (bot 1 & 2 ; pas le drone)
+    const _bp = new THREE.Vector3(b.pos.x, (b.pos.y||0) + 1.3*(b.sizeMul||1), b.pos.z);
+    const _bd = new THREE.Vector3(me.pos.x - b.pos.x, 0.3, me.pos.z - b.pos.z); if(_bd.lengthSq()>1e-6) _bd.normalize();
+    spawnBlood(_bp, _bd);
+  }
   let rest = dmg;
   if(b.sh > 0){ const a = Math.min(b.sh, rest); b.sh -= a; rest -= a; }
   if(rest > 0) b.hp -= rest;
@@ -6301,14 +6506,16 @@ function localBotShoot(o, dir, end){
   let best = null, bestT = Infinity;
   for(const [id,b] of botMgr){
     if(b.dead || !b.pos) continue;
-    const t = rayCapsuleT(o, dir, b.pos, !!(b.anim && b.anim.c), LBOT.hit_pad ?? 1.4); // hitbox plus généreuse sur les bots
+    let t;
+    if(b.type === 'drone'){ if(!b.drone || !b.drone.visible) continue; t = raySphereT(o, dir, b.pos, 0.55); }
+    else t = rayCapsuleT(o, dir, b.pos, !!(b.anim && b.anim.c), LBOT.hit_pad ?? 1.4, b.sizeMul || 1); // hitbox x sizeMul
     if(t < bestT && t < wallDist){ bestT = t; best = { id, b }; }
   }
   if(!best) return;
-  const M = GAMECFG.MODELS||{}, HB = M.hitbox||{}, sc = M.character_scale||1;
+  const M = GAMECFG.MODELS||{}, HB = M.hitbox||{}, sc = (M.character_scale||1) * (best.b.sizeMul||1);
   const lowered = !!(best.b.anim && best.b.anim.c);
   const top = (best.b.pos.y||0) + ((lowered ? (HB.top_crouch??1.15) : (HB.top??1.80)) * sc);
-  const head = (o.y + dir.y*bestT) > (top - (HB.head??0.30)*sc);
+  const head = (best.b.type!=='drone') && (o.y + dir.y*bestT) > (top - (HB.head??0.30)*sc);
   // BONUS ROUGE : si l'arme en main est "rouge", on applique les dégâts boostés.
   const _r = (W.red && redActive(me.weaponIdx)) ? W.red : null;
   const dHead = _r ? (_r.damage_head ?? W.damage_head ?? 25) : (W.damage_head ?? 25);
@@ -8957,6 +9164,15 @@ function animate(){
   if(botActive && botMgr.size){
     const tmp = { pos: new THREE.Vector3(), yaw: 0, pitch: 0, anim: {} };
     for(const [seat, b] of botMgr){
+      if(b.type === 'drone'){
+        if(b.drone){
+          if(!b.dead){ b.drone.visible = true; b.drone.position.set(b.pos.x, b.pos.y, b.pos.z);
+            b.drone.rotation.y += dt*1.4;
+            for(const r of (b.drone.userData.rings||[])) r.rotation.z += dt*(r.userData.spin||1);
+          } else b.drone.visible = false;
+        }
+        continue;
+      }
       if(!b.soldier){ // le rig n'était pas prêt à la création → on réessaie
         if(RIG_READY && RIG_TEMPLATE){ b.soldier = createSoldierRigged(b.accent||0xff7755); scene.add(b.soldier.root); }
         else continue;

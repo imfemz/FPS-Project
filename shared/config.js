@@ -665,6 +665,7 @@
       holster: '/audio/holster.mp3', equip: '/audio/equip.mp3',
       footstep: '/audio/footstep.mp3', death: '/audio/death.mp3',
       orb_pickup: '/audio/orb_pickup.mp3', crouch: '/audio/crouch.mp3',
+      drone_explode: '/audio/drone_explode.mp3',   // explosion du drone sonde (mort)
       wingman_shot: '/audio/wingman_shot.mp3', wingman_reload: '/audio/wingman_reload.mp3',
       // ===== UI / menu =====
       menu_audio: '/audio/menu_audio.mp3',   // musique d'accueil (boucle)
@@ -700,7 +701,7 @@
       footstep: 1.0,
       slide: 1.0, slide_jump: 1.0, wallbounce: 1.0, mantle: 1.0, superglide: 1.0,
       holster: 1.0, equip: 1.0, crouch: 1.0,
-      death: 1.0, orb_pickup: 1.0,
+      death: 1.0, orb_pickup: 1.0, drone_explode: 1.0,
       button1: 1.0, button2: 1.0, spawn: 1.0,
     },
     // ===== Sons d'impact de balle PAR SURFACE =====
