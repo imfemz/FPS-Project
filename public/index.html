@@ -1555,14 +1555,16 @@ function buildMap(){
     m.castShadow = m.receiveShadow = true; scene.add(m);
     mapMeshes.push(m); rampMeshes.push(m);
     m.userData.surface = 'ramp';
-    const strip = new THREE.Mesh(new THREE.BoxGeometry(r.w*0.95,.06,.18),
-      new THREE.MeshStandardMaterial({color:0xffb000, emissive:0xffb000, emissiveIntensity:0.8}));
-    strip.position.set(r.x, r.h+.04, r.z + (sgn===-1?-hd:hd)*0.92); scene.add(strip);
+    if(MAP.platform && MAP.platform.w > 0){   // bandeau neon : DECOR de la map par defaut seulement (absent des maps Blender custom)
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(r.w*0.95,.06,.18),
+        new THREE.MeshStandardMaterial({color:0xffb000, emissive:0xffb000, emissiveIntensity:0.8}));
+      strip.position.set(r.x, r.h+.04, r.z + (sgn===-1?-hd:hd)*0.92); scene.add(strip);
+    }
   }
-  const signs = [
+  const signs = (MAP.platform && MAP.platform.w > 0) ? [   // panneaux emissifs : map par defaut seulement
     {x:-26, y:4.2, z:-MAP.HALF+0.7, c:0x59d8ff}, {x:26, y:4.2, z:-MAP.HALF+0.7, c:0xffb000},
     {x:-26, y:4.2, z:MAP.HALF-0.7, c:0xffb000}, {x:26, y:4.2, z:MAP.HALF-0.7, c:0x59d8ff},
-  ];
+  ] : [];
   for(const s of signs){
     const pan = new THREE.Mesh(new THREE.PlaneGeometry(3.2,1.3),
       new THREE.MeshStandardMaterial({color:s.c, emissive:s.c, emissiveIntensity:0.6, side:THREE.DoubleSide}));
