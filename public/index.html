@@ -1471,7 +1471,14 @@ function mountStructureModels(){
           wrap.scale.set(b.w/(size.x||1), b.h/(size.y||1), b.d/(size.z||1));
           wrap.position.set(b.x, (b.y0||0) + b.h/2, b.z);
           if(b.rot != null) wrap.rotation.y = -b.rot;   // bloc oriente : tourne le modele aussi
-          wrap.traverse(o=>{ if(o.isMesh){ o.castShadow = o.receiveShadow = true; if(o.material && o.material.isMeshStandardMaterial) o.material.envMapIntensity = ge; } });
+          wrap.traverse(o=>{ if(o.isMesh){ o.castShadow = o.receiveShadow = true;
+            const mm = o.material;
+            if(mm && mm.isMeshStandardMaterial){
+              mm.metalness = Math.min(mm.metalness != null ? mm.metalness : 1, 0.12);   // evite le blowout metallique (env lunaire -> crate tout blanc)
+              mm.envMapIntensity = (GAMECFG.GRAPHICS||{}).struct_env != null ? (GAMECFG.GRAPHICS).struct_env : 0.45;
+              if(mm.map && 'colorSpace' in mm.map) mm.map.colorSpace = THREE.SRGBColorSpace;
+              mm.needsUpdate = true;
+            } } });
           scene.add(wrap);
           if(SM.hideBox !== false && b._boxMesh) b._boxMesh.visible = false;
         }

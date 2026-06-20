@@ -13,3 +13,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
+      # Persistance du classement en ligne (Upstash Redis REST, offre gratuite). A renseigner dans le dashboard Render.
+      - key: KV_REST_API_URL
+        sync: false
+      - key: KV_REST_API_TOKEN
+        sync: false

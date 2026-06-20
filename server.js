@@ -52,10 +52,26 @@ const DEV = !process.env.RENDER;            // dev local (pas sur Render) -> aut
 
 /* ---------- Scoreboard "Kill contre la montre" (classement persistant, fichier JSON) ---------- */
 const LB_FILE = path.join(__dirname, 'leaderboard.json');
+// Persistance EN LIGNE : si un KV REST (Upstash / Vercel KV) est configure (env), on l'utilise -> survit aux redeploiements Render.
+// Sinon fichier local (OK en dev ; ephemere sur Render). Variables : KV_REST_API_URL + KV_REST_API_TOKEN.
+const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '';
+const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
+const KV_ON = !!(KV_URL && KV_TOKEN), KV_KEY = 'fracture_leaderboard';
 let leaderboard = [];
-try { leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8')) || []; } catch (e) { leaderboard = []; }
+async function kvLoad() {
+  try {
+    const r = await fetch(KV_URL + '/get/' + KV_KEY, { headers: { Authorization: 'Bearer ' + KV_TOKEN } });
+    const j = await r.json();
+    if (j && j.result) { leaderboard = JSON.parse(j.result) || []; console.log('[LB] charge depuis KV :', leaderboard.length, 'entrees'); }
+  } catch (e) { console.warn('[LB] KV load echec :', e.message); }
+}
+if (KV_ON) { console.log('[LB] persistance KV en ligne ACTIVE'); kvLoad(); }
+else { try { leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8')) || []; } catch (e) { leaderboard = []; } }
 function lbTop(n) { return leaderboard.slice().sort((a, b) => b.kills - a.kills).slice(0, n || 20); }
-function lbSave() { try { fs.writeFile(LB_FILE, JSON.stringify(leaderboard), () => {}); } catch (e) {} }
+function lbSave() {
+  if (KV_ON) { fetch(KV_URL + '/set/' + KV_KEY, { method: 'POST', headers: { Authorization: 'Bearer ' + KV_TOKEN }, body: JSON.stringify(leaderboard) }).catch(() => {}); return; }
+  try { fs.writeFile(LB_FILE, JSON.stringify(leaderboard), () => {}); } catch (e) {}
+}
 function lbSubmit(name, kills) {
   name = String(name || 'Joueur').slice(0, 16).trim() || 'Joueur';
   kills = Math.max(0, Math.min(9999, kills | 0));
