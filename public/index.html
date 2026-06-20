@@ -4850,7 +4850,7 @@ function setBotType(b, type){
       tintSoldier(b.soldier, null);
       b.weaponIdx = 0; setSoldierWeapon(b.soldier, 0);
       b.sizeMul = 1; b.maxHpType = maxHp;
-      b.view_range = 0; b.wallhack = false; b.fireRange = 0; b.rush = false;
+      b.view_range = 90; b.wallhack = true; b.fireRange = 0; b.rush = false;   // INSANE : traque le joueur de loin/à travers les murs (vient à toi -> plus de chasse au dernier planqué) ; ne TIRE qu'avec vraie LOS
       b.nonstopFire = false; b.noFlee = false; b.dodgeJumpBelow = 0; b.speedMul = 1; b.fov_deg = 0; b.sense = 0;
     }
   }
@@ -6496,7 +6496,7 @@ function onBotRespawn(m){
    ========================================================================== */
 let localBotMode = false, localBotKills = 0;
 const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist: 12,
-  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4, spawn_sep: 15, spawn_sep_by_diff: { easy: 20, medium: 15, hard: 10 }, MAX_BOTS: 12, waveMode: false, wave: 1,
+  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4, spawn_sep: 15, spawn_sep_by_diff: { easy: 20, medium: 15, hard: 10 }, MAX_BOTS: 14, waveMode: false, wave: 1,
   count_by_diff: { easy: 4, medium: 6, hard: 9 },        // ENTRAÎNEMENT : bots VIVANTS visés (densité de rencontre)
   group_size_by_diff: { easy: 2, medium: 3, hard: 4 },   // taille d'une VAGUE / groupe d'apparition
   group_radius: 9, group_min_dist: 24, spawn_max_dist: 55,   // dispersion d'un groupe ; anneau d'apparition autour du joueur (m) -> on les croise vite, hors-vue
@@ -6887,7 +6887,7 @@ function startLocalBotMode(){
   }
 }
 // ===== Mode INSANE : survie par VAGUES (3 bots au depart, +1/vague, plafonne a MAX_BOTS) =====
-function botsForWave(w){ return Math.min(LBOT.MAX_BOTS ?? 8, Math.max(1, Math.round(3 * Math.pow(1.25, (w||1) - 1)))); }
+function botsForWave(w){ return Math.min(LBOT.MAX_BOTS ?? 14, Math.max(4, Math.round(4 * Math.pow(1.3, (w||1) - 1)))); }   // INSANE plus dense : v1=4, v2=5, v3=7, v4=9, v5=11, v6+=14
 function spawnBotWave(n){
   for(const _id of Array.from(botMgr.keys())){ if(_id > n) removeEntity(_id); }  // anti sur-spawn : jamais plus que l'effectif de la vague
   const w = LBOT.wave || 1, ST = (LBOT.types && LBOT.types.sentinel) || {}, DT = (LBOT.types && LBOT.types.drone) || {};
@@ -6911,9 +6911,9 @@ function spawnBotWave(n){
 let _wavePending = false;
 function checkWaveClear(){
   if(!LBOT.waveMode || !localBotMode || _wavePending) return;
-  let anyAlive = false;
-  for(const b of botMgr.values()){ if(b && !b.dead){ anyAlive = true; break; } }
-  if(anyAlive) return;
+  let _alive = 0;
+  for(const b of botMgr.values()){ if(b && !b.dead) _alive++; }
+  if(_alive > 1) return;   // avance dès qu'il reste <=1 bot (les vagues se chevauchent -> plus dense, plus de chasse au dernier)
   _wavePending = true;
   setTimeout(()=>{ _wavePending = false;
     if(!localBotMode || !LBOT.waveMode) return;
