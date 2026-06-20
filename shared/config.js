@@ -859,11 +859,11 @@
       },
     },
     TEXTURES: {
-      sky: '/textures/moon_sky.jpg', floor: '/textures/Asphalt_001_COLOR.png',
-      wall: '/textures/Asphalt_001_COLOR.png', crate: '/textures/crate.jpg',
+      sky: '/textures/moon_sky.jpg', floor: '/textures/Concrete_Wall_016_SD/Concrete_Wall_016_basecolor.png',
+      wall: '/textures/Concrete_Wall_016_SD/Concrete_Wall_016_basecolor.png', crate: '/textures/crate.jpg',
       platform: '/textures/platform.jpg', ramp: '/textures/ramp.jpg',
     },
-    TEXTURE_REPEAT: { floor: 1, wall: 3, crate: 1, platform: 2, ramp: 2 },
+    TEXTURE_REPEAT: { floor: 20, wall: 3, crate: 1, platform: 2, ramp: 2 },
     HUD: {
       images: [
         { file: '/textures/hud/game-logo.png', anchor: 'top-right', x: 18, y: 18, w: 280, opacity: 0.55 }, // logo top-droite, meme taille que la mini-map (280)
