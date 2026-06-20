@@ -6303,12 +6303,21 @@ function onBotKill(m){
   if(localBotMode && b){
     spawnOrb('lb'+(nextLocalOrbId++), [b.pos.x, (b.pos.y||0)+1.1, b.pos.z]);
   }
+  // PEUR DE GROUPE : tout bot voisin (<radius m) du bot tue panique et fuit le joueur
+  if(localBotMode && b && b.pos){
+    const _F = LBOT.fear || {}, _R = _F.radius ?? 3, _T = _F.time ?? 5;
+    for(const [oid, ob] of botMgr){
+      if(oid === m.id || !ob || ob.dead || !ob.pos || ob.type === 'drone') continue;
+      const _dx = ob.pos.x - b.pos.x, _dz = ob.pos.z - b.pos.z;
+      if(_dx*_dx + _dz*_dz <= _R*_R) ob.fearT = Math.max(ob.fearT || 0, _T);
+    }
+  }
   if(!(typeof INSANE!=='undefined' && INSANE.on)) killFeed('VOUS ☠ BOT' + (m.head ? ' (tête)' : ''));
 }
 function onBotRespawn(m){
   const b = botMgr.get(m.id);
   if(b){
-    b.dead = false; b.buf.length = 0; b._shPrev = (b.sh != null ? b.sh : maxShield);
+    b.dead = false; b.buf.length = 0; b._shPrev = (b.sh != null ? b.sh : maxShield); b.fearT = 0;
     b.pos.set(m.p[0], m.p[1], m.p[2]); b.yaw = m.yaw;
     if(b.type === 'drone'){
       if(b.drone){ b.drone.visible = true; b.drone.position.set(m.p[0], m.p[1], m.p[2]); }
@@ -6324,6 +6333,7 @@ function onBotRespawn(m){
 let localBotMode = false, localBotKills = 0;
 const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist: 12,
   separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4, spawn_sep: 15, spawn_sep_by_diff: { easy: 20, medium: 15, hard: 10 }, MAX_BOTS: 8, waveMode: false, wave: 1,
+  fear: { radius: 3, time: 5, speed: 5 },   // bot voisin (<radius m) d'un bot tue -> panique : fuit le joueur (time s, velocite speed)
   knock_dist: 3, knock_decay: 6,   // knockback au coup de sabre : ~knock_dist mètres ; knock_decay = vitesse de retombée du recul
   ai: {
     difficulty: 'medium',     // 'easy' | 'medium' | 'hard'
@@ -6782,6 +6792,8 @@ function updateLocalBots(dt){
     if(b.type === 'drone'){ updateDrone(b, dt); continue; }
     if(!b.mv || !b.ai) initLocalBotAI(b);
     const mv = b.mv, ai = b.ai;
+    if(b.fearT > 0){ b.fearT -= dt; if(b.fearT < 0) b.fearT = 0; }
+    const feared = b.fearT > 0;
     const dxp = me.pos.x - b.pos.x, dzp = me.pos.z - b.pos.z;
     const distP = Math.hypot(dxp, dzp) || 0.0001;
     mv.retarget -= dt; mv.strafeT -= dt;
@@ -6805,13 +6817,14 @@ function updateLocalBots(dt){
     const sentHold = b.rush && ai.spotted && !ai.charged;            // figé (telegraphe) tant qu'il n'a pas (re)vu apres le delai
     const sentWander = b.rush && !ai.spotted;                        // pas encore repere : erre
     const inFire = (b.rush ? (charging && see) : see) && alive && distP <= fireRange;   // sentinel : tire en charge ET avec LOS reelle
+    const canFire = inFire && !feared;   // un bot apeure ne tire pas (il fuit)
     // AGRESSIVITE : vu sans etre touche pendant aggro_time -> rush + tir continu (Sentinel : charge differee)
     if(see){ ai.noHitSeenT = (ai.noHitSeenT||0) + dt; } else { ai.noHitSeenT = 0; }
     const aggro = b.rush ? charging : (knows && ((ai.noHitSeenT||0) >= (A.aggro_time ?? 2)));
 
     // Tir + accuracy
     ai.fireT -= dt; ai.reloadT -= dt; ai.fireFlash = Math.max(0, ai.fireFlash - dt);
-    if(inFire){
+    if(canFire){
       if(ai.reactT > 0){ ai.reactT -= dt; }
       else if(ai.reloadT <= 0 && ai.fireT <= 0){
         const _W = (GAMECFG.WEAPONS && GAMECFG.WEAPONS[b.weaponIdx||0]) || {};
@@ -6834,7 +6847,14 @@ function updateLocalBots(dt){
     // Decision de deplacement
     let vx=0, vz=0, run=false;
     const _flee = !b.noFlee && knows && (b.hp < maxHp * (A.flee_below ?? 0.5));   // PV bas -> fuite (sauf Sentinel)
-    if(sentHold){
+    if(feared){
+      // PEUR : fuit le joueur (leger zigzag), sans tirer ni s'arreter
+      const px = dxp/distP, pz = dzp/distP;
+      vx = -px - pz*mv.strafeDir*0.35;
+      vz = -pz + px*mv.strafeDir*0.35;
+      b.yaw = Math.atan2(-vx, -vz);
+      run = true;
+    } else if(sentHold){
       // SENTINEL : vous a repere -> se fige et vous fixe (alert_time) avant de charger
       vx = 0; vz = 0; run = false; b.yaw = Math.atan2(-dxp, -dzp);
     } else if(sentWander){
@@ -6874,6 +6894,9 @@ function updateLocalBots(dt){
       vx = dxt/dt2; vz = dzt/dt2; if(dt2 < 1.5) mv.retarget = 0;
       b.yaw = Math.atan2(-vx, -vz); run = true;
     }
+
+    // TIR : le bot fait toujours FACE au joueur quand il tire -> le haut du corps pointe vers nous
+    if(canFire){ b.yaw = Math.atan2(-dxp, -dzp); }
 
     // Reaction RETARDEE au hit : apres le delai, declenche l'esquive (+ saut eventuel) -> pas de dodge instantane
     if(ai.hitReactT > 0){ ai.hitReactT -= dt;
@@ -6920,6 +6943,7 @@ function updateLocalBots(dt){
       b._spd += (_tgt - b._spd) * Math.min(1, dt*3);                                                   // transition fluide
       spd = b._spd;
     }
+    if(feared) spd = (LBOT.fear && LBOT.fear.speed) || 5;   // PEUR : velocite de fuite fixe
     _botTmp.set(b.pos.x + (vx*spd + (b.knockX||0))*dt, 0, b.pos.z + (vz*spd + (b.knockZ||0))*dt); // + recul sabre (knockback)
     collide(_botTmp, LBOT.radius ?? 0.5, b.pos.y||0);
     const brad = LBOT.radius ?? 0.5;
@@ -6946,7 +6970,7 @@ function updateLocalBots(dt){
     b.anim = b.anim || {};
     b.anim.m = realMove > 0.002 ? (run ? 0.9 : 0.5) : 0;
     b.anim.a = ai.air ? 1 : 0; b.anim.sl = 0; b.anim.c = 0;
-    b.anim.f = (inFire && ai.reactT <= 0) ? 1 : 0;
+    b.anim.f = (canFire && ai.reactT <= 0) ? 1 : 0;
     // --- Anim en couches : vitesse LOCALE (repere du corps), grounded, arme, visee ---
     const _bodyYaw = b.yaw + Math.PI;                 // meme facing que le rendu (root.rotation.y)
     const _sB = Math.sin(_bodyYaw), _cB = Math.cos(_bodyYaw);
