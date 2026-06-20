@@ -3268,26 +3268,29 @@ function _fikAim(bone, jointW, childW, desiredChildW){
   _FIK.v2.copy(desiredChildW).sub(jointW); if(_FIK.v2.lengthSq()<1e-10) return; _FIK.v2.normalize();
   _FIK.q.setFromUnitVectors(_FIK.v1, _FIK.v2); _fikRotateWorld(bone, _FIK.q);
 }
-function _fikSolveLeg(hip, knee, foot, targetW){   // IK 2 os : place foot sur targetW (genou plie dans le plan courant)
+function _fikSolveLeg(hip, knee, foot, targetW){   // IK 2 os robuste : pole = sens de pliage ACTUEL -> genou ne flippe jamais, identite a plat
   hip.getWorldPosition(_FIK.hipW); knee.getWorldPosition(_FIK.kneeW); foot.getWorldPosition(_FIK.footW);
   const L1=_FIK.hipW.distanceTo(_FIK.kneeW), L2=_FIK.kneeW.distanceTo(_FIK.footW);
   if(L1<1e-5||L2<1e-5) return;
-  _FIK.tgt.copy(targetW).sub(_FIK.hipW); let dist=_FIK.tgt.length();
+  _FIK.D.copy(targetW).sub(_FIK.hipW); let dist=_FIK.D.length();
+  if(dist<1e-6) return;
   dist=Math.max(Math.abs(L1-L2)+0.002, Math.min((L1+L2)*0.998, dist));
-  _FIK.D.copy(_FIK.tgt).normalize();
-  _FIK.v1.copy(_FIK.kneeW).sub(_FIK.hipW); _FIK.v2.copy(_FIK.footW).sub(_FIK.kneeW);
-  _FIK.axis.copy(_FIK.v1).cross(_FIK.v2);
-  if(_FIK.axis.lengthSq()<1e-8){ _FIK.axis.copy(_FIK.D).cross(_FIK.up); if(_FIK.axis.lengthSq()<1e-8) _FIK.axis.set(1,0,0); }
+  _FIK.D.normalize();
+  // pole = composante du genou perpendiculaire a (hip->foot), reorthogonalisee contre D
+  _FIK.axis.copy(_FIK.kneeW).sub(_FIK.hipW);
+  _FIK.v1.copy(_FIK.footW).sub(_FIK.hipW);
+  if(_FIK.v1.lengthSq()>1e-10){ _FIK.v1.normalize(); _FIK.axis.addScaledVector(_FIK.v1, -_FIK.axis.dot(_FIK.v1)); }
+  _FIK.axis.addScaledVector(_FIK.D, -_FIK.axis.dot(_FIK.D));
+  if(_FIK.axis.lengthSq()<1e-9){ _FIK.axis.set(0,1,0).addScaledVector(_FIK.D, -_FIK.D.y); if(_FIK.axis.lengthSq()<1e-9) _FIK.axis.set(1,0,0); }
   _FIK.axis.normalize();
   const cosA=Math.max(-1,Math.min(1,(L1*L1+dist*dist-L2*L2)/(2*L1*dist)));
-  _FIK.q.setFromAxisAngle(_FIK.axis, Math.acos(cosA));
-  _FIK.thighDir.copy(_FIK.D).applyQuaternion(_FIK.q);
-  _FIK.kneeTgt.copy(_FIK.hipW).addScaledVector(_FIK.thighDir, L1);
+  const sinA=Math.sqrt(Math.max(0,1-cosA*cosA));
+  _FIK.kneeTgt.copy(_FIK.hipW).addScaledVector(_FIK.D, L1*cosA).addScaledVector(_FIK.axis, L1*sinA);
+  _FIK.thighDir.copy(_FIK.hipW).addScaledVector(_FIK.D, dist);   // pied cible (clamp d'atteinte)
   _fikAim(hip, _FIK.hipW, _FIK.kneeW, _FIK.kneeTgt);
   hip.updateWorldMatrix(false, true);
   knee.getWorldPosition(_FIK.kneeW2); foot.getWorldPosition(_FIK.footW2);
-  _FIK.tgt.copy(_FIK.hipW).addScaledVector(_FIK.D, dist);
-  _fikAim(knee, _FIK.kneeW2, _FIK.footW2, _FIK.tgt);
+  _fikAim(knee, _FIK.kneeW2, _FIK.footW2, _FIK.thighDir);
   knee.updateWorldMatrix(false, true);
 }
 function _fikRelax(s, dt){
@@ -7086,7 +7089,7 @@ function updateLocalBots(dt){
     b.anim.m = realMove > 0.002 ? (run ? 0.9 : 0.5) : 0;
     b.anim.a = ai.air ? 1 : 0; b.anim.sl = 0; b.anim.c = 0;
     b.anim.f = (canFire && ai.reactT <= 0) ? 1 : 0;
-    b.anim.bot = 1; b.anim.aiming = see ? 1 : 0;   // bot : marche formelle (<=4) + pose de visee quand il voit le joueur
+    b.anim.bot = 1; b.anim.aiming = knows ? 1 : 0;   // bot : marche formelle (<=4) + pose de visee tant qu'il est CONSCIENT du joueur (tient l'arme levee entre 2 tirs)
     // --- Anim en couches : vitesse LOCALE (repere du corps), grounded, arme, visee ---
     const _bodyYaw = b.yaw + Math.PI;                 // meme facing que le rendu (root.rotation.y)
     const _sB = Math.sin(_bodyYaw), _cB = Math.cos(_bodyYaw);
