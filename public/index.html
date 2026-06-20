@@ -1506,7 +1506,7 @@ function buildMap(){
     m.position.set(b.x, y0 + b.h/2, b.z); if(_yaw) m.rotation.y = _yaw; m.castShadow = m.receiveShadow = true; scene.add(m);
     mapMeshes.push(m);
     b._boxMesh = m;
-    const isWall = (b.h >= 5);
+    const isWall = (b.h >= 5) || b.type === 'concrete';   // concrete (même bas) -> texture béton (sinon les blocs courts ressortaient blancs)
     (isWall ? wallMeshes : crateMeshes).push(m);
     m.userData.surface = isWall ? 'wall' : 'crate';
     // collider : OBB (oriente) si rot, sinon AABB. h = SOMMET (y0+h), y0 = base.
