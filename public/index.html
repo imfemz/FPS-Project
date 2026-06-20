@@ -1886,7 +1886,7 @@ function startRagdoll(sol, atPos, hitDir){
     av: { x: (2.6 + Math.random()*2.2) * (Math.random() < .5 ? -1 : 1),
           y: (Math.random()*2 - 1) * 2.0,
           z: (Math.random()*2 - 1) * 1.8 },
-    limbs: [sol.armL, sol.armR, sol.legL, sol.legR].map(L=>({ L, w: 6 + Math.random()*7, x0: L.rotation.x })),
+    limbs: (sol.rigged ? [] : [sol.armL, sol.armR, sol.legL, sol.legR].map(L=>({ L, w: 6 + Math.random()*7, x0: L.rotation.x }))),
   });
 }
 function killRagdollFor(sol){
@@ -2083,7 +2083,7 @@ function spawnOrb(id, p){
     grp.add(sp); parts.push(sp);
   }
   scene.add(grp);
-  orbsFx[id] = { grp, parts, core, halo, light, t: Math.random()*5, baseY: p[1], born: performance.now(), fading:false, fadeT: 0, fadeDur: 0.45 };
+  orbsFx[id] = { grp, parts, core, halo, light, t: Math.random()*5, baseY: p[1], vy: 1.0, grounded: false, born: performance.now(), fading:false, fadeT: 0, fadeDur: 0.45 };
   const _act = Object.keys(orbsFx).filter(k=>!orbsFx[k].fading);
   if(_act.length > 2){ _act.sort((a,b)=>orbsFx[a].born-orbsFx[b].born); for(let i=0;i<_act.length-2;i++){ const _o=orbsFx[_act[i]]; _o.fading=true; _o.fadeT=_o.fadeDur; } }
 }
@@ -2097,7 +2097,13 @@ function updateOrbs(dt){
   for(const id in orbsFx){
     const o = orbsFx[id];
     o.t += dt;
-    o.grp.position.y = o.baseY + Math.sin(o.t*2.4)*.13;
+    if(!o.grounded){                                    // CHUTE avec gravite jusqu'au sol, puis repos + bob
+      o.vy -= 22*dt; o.grp.position.y += o.vy*dt;
+      const gy = (MAP.groundHeightAt ? MAP.groundHeightAt(o.grp.position.x, o.grp.position.z) : 0) + 0.5;
+      if(o.grp.position.y <= gy){ o.grp.position.y = gy; if(Math.abs(o.vy) < 1.3){ o.grounded = true; o.baseY = gy; } else o.vy = -o.vy*0.25; }   // petit rebond a l'impact
+    } else {
+      o.grp.position.y = o.baseY + Math.sin(o.t*2.4)*.13;
+    }
     o.grp.rotation.y += dt*1.4;
     let fadeK = 1;
     if(o.fading){ o.fadeT -= dt; if(o.fadeT <= 0){ removeOrb(id); continue; } fadeK = Math.max(0, o.fadeT / (o.fadeDur || 0.45)); }
@@ -3261,6 +3267,18 @@ function playDeathAnim(s){
   d.reset(); d.setLoop(THREE.LoopOnce, 1); d.clampWhenFinished = true;
   d.enabled = true; d.setEffectiveWeight(1); d.play();
   if(s.current && s.current !== d) s.current.crossFadeTo(d, 0.15, false);
+  s.current = d; s.currentKey = 'death';
+  return true;
+}
+// Fige le squelette sur la FRAME 1 de l'anim de mort (pose figée) -> sert de point de depart au ragdoll.
+function poseDeathFrame1(s){
+  if(!s || !s.actions || !s.actions.death || !s.mixer) return false;
+  if(typeof _stopLayers === 'function') _stopLayers(s);
+  const d = s.actions.death;
+  for(const k in s.actions){ const a = s.actions[k]; if(a !== d) a.stop(); }
+  d.reset(); d.time = 0; d.enabled = true; d.setEffectiveWeight(1); d.play();
+  s.mixer.update(0);          // applique la pose (frame 0)
+  d.paused = true;            // gelée (le ragdoll prend le relais ; mixer non avancé tant que ragdolling)
   s.current = d; s.currentKey = 'death';
   return true;
 }
@@ -6138,17 +6156,16 @@ function onBotKill(m){
     if(b.drone){ spawnDroneExplosion(b.drone.position.clone()); b.drone.visible = false; } stopDroneSound(b);
     const _T = (LBOT.types && LBOT.types.drone) || {};
     playSfxAt(_T.explode_sfx || 'drone_explode', b.pos, 1.0);
+    if(localBotMode){ spawnOrb('lb'+(nextLocalOrbId++), [b.pos.x, b.pos.y, b.pos.z]); }   // drop une orbe qui TOMBE au sol
     killHealthBar('bot'+m.id); if(!(typeof INSANE!=='undefined' && INSANE.on)) killFeed('VOUS ☠ DRONE');
     return;
   }
   if(b && b.soldier){
     b.dead = true;
-    if(b.soldier.rigged && playDeathAnim(b.soldier)){
-      // animation de mort jouée
-    } else {
-      const yr = b.soldier.root.rotation.y;
-      startRagdoll(b.soldier, b.pos.clone(), {x:Math.sin(yr), z:Math.cos(yr)});
-    }
+    // RAGDOLL : fige le squelette sur la frame 1 de l'anim de mort, puis projette le corps au sol (comme un cadavre).
+    poseDeathFrame1(b.soldier);
+    const _hd = { x: (b.pos.x - me.pos.x), z: (b.pos.z - me.pos.z) };   // projeté dans la direction du tir (loin du joueur)
+    startRagdoll(b.soldier, b.pos.clone(), _hd);
     playSfxAt(b.type === 'sentinel' ? 'bot2_death' : 'death', b.pos, 1);   // Sentinel = son dedie
     fadeOutSoldier(b.soldier);
     killHealthBar('bot'+m.id);
@@ -6512,7 +6529,7 @@ function spawnBotWave(n){
     let b = botMgr.get(id); if(!b) b = ensureBot(id, 0xff7755);
     const type = (i < nDrone) ? 'drone' : (i < nDrone + nSent) ? 'sentinel' : 'normal';
     setBotType(b, type);
-    const p = lbotSpawnPoint(i, n, _placed, type==='sentinel' ? 60 : 0); _placed.push([p[0], p[2]]);
+    const p = lbotSpawnPoint(i, n, _placed, type==='sentinel' ? 60 : (type==='drone' ? 25 : 0)); _placed.push([p[0], p[2]]);
     b.hp = b.maxHpType || maxHp; b.sh = (type === 'drone') ? 0 : maxShield; b._shPrev = b.sh;
     onBotRespawn({ id, p:[p[0], p[1]||0, p[2]], yaw: Math.random()*Math.PI*2 });
     initLocalBotAI(b);
