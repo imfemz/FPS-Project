@@ -1005,8 +1005,8 @@ function buildScene(){
   scene = new THREE.Scene();
   const G = GAMECFG.GRAPHICS || {};
   scene.background = new THREE.Color(0x9099a3);
-  scene.fog = new THREE.Fog(new THREE.Color(G.fog_color || 0xcfe2f0), G.fog_near ?? 60, G.fog_far ?? 170);
-  camera = new THREE.PerspectiveCamera(GAMECFG.FOV.VIEW, innerWidth/innerHeight, 0.05, 400);
+  scene.fog = new THREE.Fog(new THREE.Color(G.fog_color || 0xcfe2f0), G.fog_near ?? 60, Math.max(G.fog_far ?? 170, (MAP && MAP.HALF ? MAP.HALF : 45)*2.8));
+  camera = new THREE.PerspectiveCamera(GAMECFG.FOV.VIEW, innerWidth/innerHeight, 0.05, Math.max(400, (MAP && MAP.HALF ? MAP.HALF : 45)*4.5));
   camera.layers.enable(AO_SKIP_LAYER); // la caméra principale rend aussi les overlays (sprites/particules)
   gunCam = new THREE.PerspectiveCamera(GAMECFG.FOV.WEAPON, innerWidth/innerHeight, 0.01, 50);
   renderer = new THREE.WebGLRenderer({antialias:true});
@@ -1145,7 +1145,7 @@ function buildSky(){
   c.fillStyle = g; c.fillRect(0,0,16,256);
   const _skyTex = new THREE.CanvasTexture(cv);
   if((GAMECFG.GRAPHICS||{}).ENABLED !== false) _skyTex.colorSpace = THREE.SRGBColorSpace;
-  skyDome = new THREE.Mesh(new THREE.SphereGeometry(320, 24, 16),
+  skyDome = new THREE.Mesh(new THREE.SphereGeometry(Math.max(320, (MAP && MAP.HALF ? MAP.HALF : 45)*3), 24, 16),
     new THREE.MeshBasicMaterial({map:_skyTex, side:THREE.BackSide, fog:false, depthWrite:false}));
   scene.add(skyDome);
   const sun = new THREE.Sprite(new THREE.SpriteMaterial({map:makeRadialTexture('rgba(228,224,214,0.85)','rgba(228,224,214,0)'), transparent:true, fog:false, depthWrite:false, toneMapped:false}));
@@ -3306,22 +3306,24 @@ function applyFootIK(s, anim, dt){
   const rootGroundY = s.root ? s.root.position.y : 0;
   const lockOn = (C.lock!==false);
   const feet=[['L',lg.ulL,lg.llL,lg.ftL,s.ik.L],['R',lg.ulR,lg.llR,lg.ftR,s.ik.R]];
-  let pelvisCorr=0; const targets=[];
+  const fd=[];
   for(const [side,hip,knee,foot,st] of feet){
     foot.getWorldPosition(_FIK.footW);
-    const animX=_FIK.footW.x, animZ=_FIK.footW.z, animY=_FIK.footW.y;
-    const lift=animY-rootGroundY;
-    let fx=animX, fz=animZ;
+    fd.push({hip,knee,foot,st, x:_FIK.footW.x, z:_FIK.footW.z, y:_FIK.footW.y, lift:_FIK.footW.y-rootGroundY});
+  }
+  let pelvisCorr=0; const targets=[];
+  for(let i=0;i<fd.length;i++){
+    const d=fd[i], o=fd[1-i], st=d.st; let fx=d.x, fz=d.z;
     if(lockOn){
-      const planted = lift < (C.lock_plant_h ?? 0.07), swinging = lift > (C.lock_release_h ?? 0.14);
-      if(!st.lock && planted){ st.lock=true; st.x=animX; st.z=animZ; }
-      else if(st.lock && (swinging || Math.hypot(animX-st.x,animZ-st.z) > (C.lock_max_slide ?? 0.55))){ st.lock=false; }
+      // PLANT relatif : le pied NETTEMENT plus bas que l'autre = appui -> verrouille (sans seuil absolu, robuste a l'echelle)
+      if(!st.lock && d.lift < o.lift - 0.02){ st.lock=true; st.x=d.x; st.z=d.z; }
+      else if(st.lock && (d.lift > o.lift + 0.02 || Math.hypot(d.x-st.x,d.z-st.z) > (C.lock_max_slide ?? 0.55))){ st.lock=false; }
       st.w += ((st.lock?1:0) - st.w) * Math.min(1, dt*(C.lock_smooth ?? 14));
-      fx = animX + (st.x-animX)*st.w; fz = animZ + (st.z-animZ)*st.w;
+      fx = d.x + (st.x-d.x)*st.w; fz = d.z + (st.z-d.z)*st.w;
     } else { st.w=0; }
-    const tY=_fikGround(fx,fz) + lift;
-    targets.push({hip,knee,foot,fx,fz,tY});
-    pelvisCorr = Math.min(pelvisCorr, tY - animY);
+    const tY=_fikGround(fx,fz) + d.lift;
+    targets.push({hip:d.hip,knee:d.knee,foot:d.foot,fx,fz,tY});
+    pelvisCorr = Math.min(pelvisCorr, tY - d.y);
   }
   let pelTgt = Math.max(-(C.pelvis_max ?? 0.45), pelvisCorr * (C.pelvis_factor ?? 0.6));
   s.ik.pelvis += (pelTgt - s.ik.pelvis) * Math.min(1, dt*(C.smooth ?? 12));
@@ -3334,9 +3336,8 @@ function applyFootIK(s, anim, dt){
     if(fr>0){
       _fikGroundNormal(t.fx, t.fz, 0.25, _FIK.nrm);
       if(_FIK.nrm.y < maxc) _FIK.nrm.lerp(_FIK.up, 0.5).normalize();
-      t.foot.getWorldQuaternion(_FIK.pwq);
-      _FIK.v1.set(0,1,0).applyQuaternion(_FIK.pwq).normalize();
-      _FIK.q.setFromUnitVectors(_FIK.v1, _FIK.nrm); _FIK.q.slerp(_FIK.I, 1-fr);
+      // tilt MONDE (up -> normale du sol) : IDENTITE a plat (aucun effet), incline juste le pied sur la pente.
+      _FIK.q.setFromUnitVectors(_FIK.up, _FIK.nrm); _FIK.q.slerp(_FIK.I, 1-fr);
       _fikRotateWorld(t.foot, _FIK.q);
     }
   }

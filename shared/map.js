@@ -20,7 +20,8 @@
   // fournit des blocs, ils REMPLACENT les blocs par defaut ci-dessous (ramps/plateforme/spawns inchanges).
   let CUSTOM = null;
   try { if (typeof module !== 'undefined' && module.exports) CUSTOM = require('./map_custom.js'); } catch (e) {}
-  if (!CUSTOM && root && root.__CUSTOM_BLOCKS) CUSTOM = root.__CUSTOM_BLOCKS;
+  if (!CUSTOM && root) CUSTOM = root.__CUSTOM_MAP || root.__CUSTOM_BLOCKS || null;
+  if (Array.isArray(CUSTOM)) CUSTOM = { BLOCKS: CUSTOM };   // compat ancien format (tableau de blocs)
 
   // Couleurs conteneurs (acier peint) + néons
   const RUST = 0x9e4b39, BLUE = 0x3f6f8e, AMBER = 0x9c7d3a, GREEN = 0x4f7a55;
@@ -86,24 +87,29 @@
   mir({ x: -37, z: 22, w: 2.6, h: 4, d: 9, type: 'container', c: BLUE });
   mir({ x: 37, z: 22, w: 2.6, h: 4, d: 9, type: 'container', c: BLUE });
 
-  // ---------- PLATEFORME CENTRALE (point de contrôle bas, sous la croix de passerelles) ----------
-  const platform = { x: 0, z: 0, w: 12, d: 12, h: 1.6 };
-  // asc = direction de montée (vers le haut de la rampe)
-  const ramps = [
-    // accès à la plateforme centrale
+  // ---------- PLATEFORME + RAMPES + SPAWNS par défaut (map procédurale) ----------
+  const defPlatform = { x: 0, z: 0, w: 12, d: 12, h: 1.6 };
+  const defRamps = [
     { x: 0, z: -9, w: 8, d: 8, h: 1.6, asc: [0, 1] },
     { x: 0, z: 9, w: 8, d: 8, h: 1.6, asc: [0, -1] },
-    // gangways vers les TOITS des bases (h=5)
-    { x: 0, z: 33, w: 6, d: 12, h: 5, asc: [0, 1] },   // base Nord (monte vers z+ = mur de fond)
-    { x: 0, z: -33, w: 6, d: 12, h: 5, asc: [0, -1] }, // base Sud
+    { x: 0, z: 33, w: 6, d: 12, h: 5, asc: [0, 1] },
+    { x: 0, z: -33, w: 6, d: 12, h: 5, asc: [0, -1] },
   ];
-
-  // 6 spawns (2 par base + 2 flancs), chacun orienté vers le centre.
-  const spawns = [
-    [6, 0, 38], [-6, 0, 38],     // base Nord (de part et d'autre du gangway)
-    [6, 0, -38], [-6, 0, -38],   // base Sud
-    [30, 0, 0], [-30, 0, 0],     // flancs Est / Ouest
+  const defSpawns = [
+    [6, 0, 38], [-6, 0, 38], [6, 0, -38], [-6, 0, -38], [30, 0, 0], [-30, 0, 0],
   ].map(([x, y, z]) => [x, y, z, Math.atan2(-x, -z)]);
+
+  // ---------- MAP CUSTOM (Blender) : remplace blocs + rampes + spawns + HALF ----------
+  const hasCustom = !!(CUSTOM && Array.isArray(CUSTOM.BLOCKS) && CUSTOM.BLOCKS.length);
+  const MAP_HALF = (hasCustom && CUSTOM.HALF) ? CUSTOM.HALF : HALF;
+  const finalBlocks = hasCustom ? CUSTOM.BLOCKS : blocks;
+  // pas de plateforme centrale par défaut sur une map custom (le décor vient de Blender)
+  const platform = hasCustom ? { x: 0, z: 0, w: 0, d: 0, h: 0 } : defPlatform;
+  const ramps = (hasCustom && Array.isArray(CUSTOM.RAMPS) && CUSTOM.RAMPS.length) ? CUSTOM.RAMPS : defRamps;
+  let spawns;
+  if (hasCustom && Array.isArray(CUSTOM.SPAWNS) && CUSTOM.SPAWNS.length) spawns = CUSTOM.SPAWNS;
+  else if (hasCustom) { const k = MAP_HALF / 45; spawns = defSpawns.map(s => [s[0]*k, s[1], s[2]*k, s[3]]); } // pas de spawns custom -> on étale à l'échelle
+  else spawns = defSpawns;
 
   function groundHeightAt(px, pz) {
     let g = 0;
@@ -138,8 +144,7 @@
     return walls;
   }
 
-  const finalBlocks = (Array.isArray(CUSTOM) && CUSTOM.length) ? CUSTOM : blocks;
-  const MAP = { HALF, blocks: finalBlocks, platform, ramps, spawns, groundHeightAt, rampSideWalls };
+  const MAP = { HALF: MAP_HALF, blocks: finalBlocks, platform, ramps, spawns, groundHeightAt, rampSideWalls };
   if (typeof module !== 'undefined' && module.exports) module.exports = MAP;
   else root.MAP = MAP;
 })(typeof window !== 'undefined' ? window : globalThis);
