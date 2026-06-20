@@ -769,6 +769,9 @@ const CONFIG = {
   // 1.0 = l'élan repart PILE dans la direction du regard (façon Apex). 0 = ancien rebond miroir
   // sur le mur. Entre les deux = mélange. C'est ça qui fait "je garde ma vélocité où je regarde".
   WALLBOUNCE_REDIRECT: 1.0,
+  // BOOST après wall bounce : vitesse horizontale portée à BOOST_SPEED pendant BOOST_TIME s (direction gardée, au-dessus du plafond normal).
+  WALLBOUNCE_BOOST_SPEED: 11,
+  WALLBOUNCE_BOOST_TIME: 1.5,
   // ===== TAP STRAFE (redirection d'élan en l'air, façon Apex) =====
   TAPSTRAFE_ENABLED: true,
   // Vitesse de redirection en degrés/seconde : à quelle vitesse l'élan tourne vers ton input.
@@ -3395,7 +3398,7 @@ function animateSoldierRigged(s, anim, dt, t){
     {
       const _aw = (typeof anim.aimYaw === 'number') ? anim.aimYaw : s.root.rotation.y;
       // NB: si en strafe les jambes pointent du MAUVAIS côté, inverser le signe de moveAng ci-dessous.
-      anim._legFace = (firing || sp <= TR_WALK) ? _aw : (_aw + moveAng);   // EN TIR : tout le corps fait FACE a la visee (joueur) -> le haut du corps te vise toujours ; sinon jambes vers le deplacement
+      anim._legFace = (sp > TR_WALK) ? (_aw + moveAng) : _aw;   // JAMBES toujours vers le DEPLACEMENT (input directionnel, pas de glissade) ; le HAUT du corps twiste vers la visee. Idle -> jambes vers la visee (turn-in-place).
     }
 
     // BAS DU CORPS : priorite air > crouch > locomotion. VRAIS clips en boucle (plus de pose figee).
@@ -4666,7 +4669,7 @@ const me = {
   slide: { active: false, t: 0, dir: new THREE.Vector3(), speed: 0, cooldown: 0 },
   mantle: { active: false, t: 0, from: new THREE.Vector3(), to: new THREE.Vector3(), sgJump: false, sgCrouch: false },
   climb: { active: false, t: 0, startY: 0, cool: 0, intentT: 0, normal: new THREE.Vector3() },
-  wallBounced: false, lastShotAt: 0,
+  wallBounced: false, wbBoostT: 0, lastShotAt: 0,
 };
 const weapon = { state: 'equipped', t: 0 };
 const switchAnim = { active: false, t: 0, to: 0, swapped: false }; // animation de changement d'arme
@@ -9160,6 +9163,7 @@ function playerUpdate(dt, g){
           me.vel.y = Math.min(CONFIG.WALLBOUNCE_UP_MAX ?? 12,
                               CONFIG.WALLBOUNCE_UP + (CONFIG.WALLBOUNCE_UP_BONUS ?? 4.5) * _upFac);
           me.wallBounced = true;
+          me.wbBoostT = CONFIG.WALLBOUNCE_BOOST_TIME ?? 1.5;   // vitesse portée à BOOST_SPEED pendant ce temps
           wbKickT = 0;                                   // déclenche le "lean gauche" de l'arme
           wbShake = 1; wbShakeT = 0;                     // déclenche le shake caméra (enveloppe attack/decay)
           recoilTarget = Math.max(recoilTarget, 0.5);
@@ -9185,6 +9189,14 @@ function playerUpdate(dt, g){
     const maxGun = GAMECFG.MAX_SPEED_GUN ?? 8;
     const hsp = Math.hypot(me.vel.x, me.vel.z);
     if(hsp > maxGun){ const k = maxGun / hsp; me.vel.x *= k; me.vel.z *= k; }
+  }
+  // WALL BOUNCE BOOST : pendant WALLBOUNCE_BOOST_TIME s après un wall bounce, la vitesse horizontale est
+  // portée à WALLBOUNCE_BOOST_SPEED (direction conservée -> on peut steerer), PAR-DESSUS le plafond normal.
+  if(me.wbBoostT > 0){
+    me.wbBoostT -= dt;
+    const _tgt = CONFIG.WALLBOUNCE_BOOST_SPEED ?? 11;
+    const _hsp = Math.hypot(me.vel.x, me.vel.z);
+    if(_hsp > 0.01){ const _k = _tgt / _hsp; me.vel.x *= _k; me.vel.z *= _k; }
   }
   me.vel.y -= CONFIG.GRAVITY*dt;
   me.pos.x += me.vel.x*dt; me.pos.z += me.vel.z*dt; me.pos.y += me.vel.y*dt;
