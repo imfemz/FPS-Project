@@ -9935,7 +9935,8 @@ function animate(){
         continue;
       }
       if(!b.soldier){ // le rig n'était pas prêt à la création → on réessaie
-        if(RIG_READY && RIG_TEMPLATE){ b.soldier = createSoldierRigged(b.accent||0xff7755); scene.add(b.soldier.root); }
+        if(RIG_READY && RIG_TEMPLATE){ b.soldier = createSoldierRigged(b.accent||0xff7755); scene.add(b.soldier.root);
+          if(localBotMode && typeof tintSoldier==='function') tintSoldier(b.soldier, b.accent); }   // teinte couleur d'arme aussi si création différée
         else continue;
       }
       if(!b.dead && !b.soldier.ragdolling){
