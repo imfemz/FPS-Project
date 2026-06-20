@@ -282,7 +282,11 @@
   .fr-nav-top{display:flex;flex-direction:column;gap:14px}
   #frPseudoWrap{animation:frBtnIn .55s cubic-bezier(.2,.8,.2,1) both;animation-delay:.04s}
   #mode-melee{animation:frBtnIn .55s cubic-bezier(.2,.8,.2,1) both;animation-delay:.11s}
-  #mode-bots{animation:frBtnIn .55s cubic-bezier(.2,.8,.2,1) both;animation-delay:.18s}
+  #mode-time{animation:frBtnIn .55s cubic-bezier(.2,.8,.2,1) both;animation-delay:.145s}
+  #mode-bots{animation:frBtnIn .55s cubic-bezier(.2,.8,.2,1) both;animation-delay:.20s}
+  .fr-timehint{display:none;margin:2px 0 5px;padding:7px 12px;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:3px;color:#ffd24a;background:rgba(255,170,40,.08);border:1px solid rgba(255,180,60,.35);border-radius:8px;text-align:center;text-shadow:0 0 10px rgba(255,190,70,.4)}
+  .fr-timehint.show{display:block;animation:frHintIn .42s cubic-bezier(.2,.8,.2,1) both}
+  @keyframes frHintIn{from{opacity:0;transform:translateY(-7px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
   #optbtn{animation:frBtnIn .55s cubic-bezier(.2,.8,.2,1) both;animation-delay:.25s}
   .fr-diff{display:none;flex-direction:column;gap:10px;background:var(--panel-2);border:1px solid var(--brd-strong);border-radius:13px;padding:13px 16px;box-shadow:var(--shadow)}
   .fr-diff.show{display:flex;animation:frSlideUp .5s cubic-bezier(.2,.85,.2,1) both}
@@ -552,6 +556,8 @@
             <input class="fr-pseudo-input" id="pseudo" maxlength="16" placeholder="Votre pseudo" style="display:none">
           </div>
           <button class="fr-btn fr-mode" id="mode-melee" data-mode="melee">Mêlée Général</button>
+          <button class="fr-btn fr-mode" id="mode-time" data-mode="time">Kill contre la montre</button>
+          <div class="fr-timehint" id="frTimeHint">⏱ BATTEZ LE RECORD</div>
           <button class="fr-btn fr-mode" id="mode-bots" data-mode="bots">Entraînement</button>
           <div class="fr-diff" id="frDiff">
             <span class="fr-diff-lbl">Difficulté bots</span>
@@ -559,7 +565,6 @@
               <button class="diffbtn" data-diff="easy">Easy</button>
               <button class="diffbtn" data-diff="medium">Medium</button>
               <button class="diffbtn" data-diff="hard">Hard</button>
-              <button class="diffbtn" data-diff="insane">Insane</button>
             </div>
           </div>
         </div>
@@ -662,7 +667,7 @@
 <!-- INSANE : intro chrono + ecran d'esprit (mort / temps ecoule) -->
 <div id="insaneintro"><div class="ii-big">VOUS AVEZ 2 MINUTES</div><div class="ii-sub">TUEZ-LES TOUS</div></div>
 <div id="insanedeath">
-  <div class="id-title">VOTRE ESPRIT A QUITTÉ VOTRE CORPS</div>
+  <div class="id-title">VOTRE ESPRIT A QUITTÉ VOTRE AVATAR</div>
   <div class="id-score"></div>
   <div class="id-restart" id="id-restart">SE REBRANCHER À LA MATRICE</div>
   <div class="id-row"><div class="id-link" id="id-salon">REVENIR AU SALON</div><div class="id-link" id="id-options">OPTIONS</div></div>
@@ -4404,7 +4409,7 @@ const remote = {
 let botActive = false;
 const botMgr = new Map();
 function clearBots(){
-  for(const b of botMgr.values()){ if(b.soldier && b.soldier.root) scene.remove(b.soldier.root); }
+  for(const b of botMgr.values()){ if(b.soldier && b.soldier.root) scene.remove(b.soldier.root); if(b.drone) scene.remove(b.drone); }
   botMgr.clear();
   botActive = false;
 }
@@ -4486,7 +4491,7 @@ function setBotType(b, type){
   if(type === 'drone'){
     if(b.soldier && b.soldier.root && b.soldier.root.parent) scene.remove(b.soldier.root);
     if(!b.drone){ b.drone = createDroneMesh(T.color); scene.add(b.drone); }
-    b.drone.visible = true;
+    b.drone.visible = false;   // affiche seulement quand il spawn (onBotRespawn / rendu si !dead)
     b.isDrone = true; b.sizeMul = 1; b.weaponIdx = T.weapon || 0;
     b.maxHpType = T.hp || 60; b.hp = b.maxHpType; b.sh = 0;
     b.view_range = 60; b.wallhack = false; b.fireRange = T.fire_range || 22;
@@ -6203,7 +6208,7 @@ function insaneDeath(){
   startInsaneDeathCam();
   const el = document.getElementById('insanedeath');
   if(el){
-    const t = el.querySelector('.id-title'); if(t) t.textContent = 'VOTRE ESPRIT A QUITTÉ VOTRE CORPS';
+    const t = el.querySelector('.id-title'); if(t) t.textContent = 'VOTRE ESPRIT A QUITTÉ VOTRE AVATAR';
     const sc = el.querySelector('.id-score'); if(sc) sc.textContent = localBotKills + (localBotKills>1?' ÉLIMINATIONS':' ÉLIMINATION');
   }
   setTimeout(()=>{ if(INSANE.ended) show('insanedeath'); }, 650);
@@ -6954,12 +6959,14 @@ document.getElementById('botbtnmenu').onclick = ()=>{
 (function initFractureMenu(){
   var RULES={
     melee:"<b>Mêlée générale</b> jusqu'à <b>6 joueurs</b>. Premier à <b>10 éliminations</b>.<br>Mouvement rapide : slide, slide jump, wall bounce, grimpe, superglide.",
-    bots:"<b>Entraînement</b> hors-ligne contre des bots.<br>Choisis la difficulté (Easy → Insane). Idéal pour t'échauffer et tester le mouvement."
+    time:"<b>Kill contre la montre</b> — <b>2 minutes</b> pour un max d'éliminations.<br>Vagues infernales : Sentinels, Drones, bonus au sol. Mourir = fin du run.",
+    bots:"<b>Entraînement</b> hors-ligne contre des bots.<br>Choisis la difficulté (Easy → Hard). Idéal pour t'échauffer et tester le mouvement."
   };
   var mode=null, $=function(id){return document.getElementById(id);};
   var pv=null;
   var ANGLES={
     melee:{px:36,py:27,pz:42,lx:0,ly:4,lz:0,orbit:0.045,fov:48},
+    time:{px:12,py:9,pz:30,lx:0,ly:3,lz:-4,orbit:0.075,fov:56},
     bots:{px:-7,py:12,pz:33,lx:0,ly:3,lz:-6,orbit:0.06,fov:52}
   };
   function pvInit(){
@@ -7010,19 +7017,22 @@ document.getElementById('botbtnmenu').onclick = ()=>{
   function select(m){
     mode=m;
     $('mode-melee').classList.toggle('sel',m==='melee');
+    $('mode-time').classList.toggle('sel',m==='time');
     $('mode-bots').classList.toggle('sel',m==='bots');
     $('frRules').innerHTML=RULES[m]||'';
-    var DF=$('frDiff'); if(m==='bots'){ DF.classList.remove('show'); void DF.offsetWidth; DF.classList.add('show'); } else DF.classList.remove('show');
+    var TH=$('frTimeHint'); if(TH){ if(m==='time'){ TH.classList.remove('show'); void TH.offsetWidth; TH.classList.add('show'); try{ if(typeof playSfx==='function') playSfx('button1'); }catch(e){} } else TH.classList.remove('show'); }
+    var DF=$('frDiff'); if(m==='bots'){ if(LBOT.ai.difficulty==='insane'){ LBOT.ai.difficulty='medium'; document.querySelectorAll('.diffbtn').forEach(function(b){ b.classList.toggle('sel', b.dataset.diff===LBOT.ai.difficulty); }); } DF.classList.remove('show'); void DF.offsetWidth; DF.classList.add('show'); } else DF.classList.remove('show');
     var MI=$('frMeleeInfo'); if(m==='melee'){ MI.classList.remove('show'); void MI.offsetWidth; MI.classList.add('show'); refreshMeleeCount(); startMeleePoll(); } else { MI.classList.remove('show'); stopMeleePoll(); }
     var P=$('frPreview'); P.classList.add('show'); P.classList.remove('anim'); void P.offsetWidth; P.classList.add('anim');
     if(pv)pv.t=0; pvStart();
   }
-  var mM=$('mode-melee'),mB=$('mode-bots');
+  var mM=$('mode-melee'),mB=$('mode-bots'),mT=$('mode-time');
   if(mM)mM.onclick=function(){select('melee');};
+  if(mT)mT.onclick=function(){select('time');};
   if(mB)mB.onclick=function(){select('bots');};
 
   var L=$('menuLaunch');
-  if(L)L.onclick=function(){ if(!mode)return; pvDispose(); if(mode==='melee'){L.textContent='Connexion…';$('playbtn').click();} else {$('botbtnmenu').click();} };
+  if(L)L.onclick=function(){ if(!mode)return; pvDispose(); if(mode==='melee'){L.textContent='Connexion…';$('playbtn').click();} else { if(mode==='time'){ LBOT.ai.difficulty='insane'; } else if(LBOT.ai.difficulty==='insane'){ LBOT.ai.difficulty='medium'; } $('botbtnmenu').click(); } };
 })();
 // ===== Navigation MANETTE des menus : petit curseur blanc (stick gauche) + bouton OPTIONS = Échap =====
 let gpCurX = innerWidth/2, gpCurY = innerHeight/2, _gpMenuPrev = [], _gpHover = null;
