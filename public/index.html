@@ -1968,13 +1968,15 @@ function startRapierRagdoll(s, hitDir){
     parts[k].body.setAngvel({x:(Math.random()*2-1)*2.5, y:(Math.random()*2-1)*2.5, z:(Math.random()*2-1)*2.5}, true); }
   if(parts['DEF-spine.003']) parts['DEF-spine.003'].body.setLinvel({x:ix*4.5, y:2.6, z:iz*4.5}, true);
   s.rapierRagdoll = true;
-  rapierRagdolls.push({ s, parts, born: performance.now() });
+  const bones = []; s.inst.traverse(o=>{ if(o.isBone){ o.matrixAutoUpdate = false; bones.push(o); } });
+  rapierRagdolls.push({ s, parts, bones, born: performance.now() });
   while(rapierRagdolls.length > 4){ const old = rapierRagdolls.shift(); disposeRapierRagdoll(old); if(old.s && typeof fadeOutSoldier==='function') fadeOutSoldier(old.s); }
   return true;
 }
 function disposeRapierRagdoll(e){
   if(!e || e._disposed) return; e._disposed = true;
-  for(const k in e.parts){ try{ _physWorld.removeRigidBody(e.parts[k].body); }catch(err){} const bn = e.parts[k].bone; if(bn) bn.matrixAutoUpdate = true; }
+  for(const k in e.parts){ try{ _physWorld.removeRigidBody(e.parts[k].body); }catch(err){} }
+  if(e.bones) for(const bn of e.bones) bn.matrixAutoUpdate = true;
   if(e.s) e.s.rapierRagdoll = false;
 }
 function disposeRagdollFor(s){ for(let i=rapierRagdolls.length-1;i>=0;i--){ if(rapierRagdolls[i].s === s){ disposeRapierRagdoll(rapierRagdolls[i]); rapierRagdolls.splice(i,1); } } }
@@ -1985,14 +1987,16 @@ function updateRapierRagdolls(dt){
   const now = performance.now();
   for(let i=rapierRagdolls.length-1;i>=0;i--){
     const e = rapierRagdolls[i];
-    for(const [name, parent] of RD_CHAIN){
-      const p = e.parts[name]; if(!p) continue;
-      const t = p.body.translation(), r = p.body.rotation();
-      _rdV.set(t.x,t.y,t.z); _rdQ.set(r.x,r.y,r.z,r.w); _rdS.setScalar(p.scale);
-      p.mw.compose(_rdV, _rdQ, _rdS);
-      const parMW = (parent && e.parts[parent]) ? e.parts[parent].mw : (p.bone.parent ? p.bone.parent.matrixWorld : _rdID);
-      _rdMpi.copy(parMW).invert();
-      p.bone.matrix.multiplyMatrices(_rdMpi, p.mw);
+    for(const o of e.bones){
+      const par = o.parent, pmw = par ? par.matrixWorld : _rdID;
+      const p = e.parts[o.name];
+      if(p){ const t = p.body.translation(), r = p.body.rotation();
+        _rdV.set(t.x,t.y,t.z); _rdQ.set(r.x,r.y,r.z,r.w); _rdS.setScalar(p.scale);
+        _rdMW.compose(_rdV, _rdQ, _rdS);
+        _rdMpi.copy(pmw).invert();
+        o.matrix.multiplyMatrices(_rdMpi, _rdMW);                 // local = parentMonde^-1 * corpsMonde
+      }
+      o.matrixWorld.multiplyMatrices(pmw, o.matrix);              // pre-order : parent deja a jour
     }
     if(now - e.born > 6500){ disposeRapierRagdoll(e); rapierRagdolls.splice(i,1); if(e.s && typeof fadeOutSoldier==='function') fadeOutSoldier(e.s); }
   }
