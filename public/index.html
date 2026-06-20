@@ -2789,8 +2789,8 @@ const _isBodyBone = (n)=> n === 'DEF-hips';   // bone porteur du bob (position+r
 // Cache des clips de couche (calcule une fois sur le template). Cle = nom de clip source.
 let LAYER_CLIPS = null;   // { lower:{name:clip}, upper:{name:clip} } ou null si pas pret
 // Clips SOURCES (noms courts, prefixe 'Rig|' retire par _findClipByShortName) — vrais clips Crouch/Jump (plus de pose figee).
-const LOWER_CLIP_SOURCES = ['Idle_Loop','Walk_Loop','Jog_Fwd_Loop','Sprint_Loop','Crouch_Idle_Loop','Crouch_Fwd_Loop','Jump_Loop','Death01'];
-const UPPER_CLIP_SOURCES = ['Pistol_Idle_Loop','Pistol_Shoot','Sword_Idle','Sword_Attack','Hit_Chest','Hit_Head','Idle_Loop'];
+const LOWER_CLIP_SOURCES = ['Idle_Loop','Walk_Loop','Walk_Formal_Loop','Jog_Fwd_Loop','Sprint_Loop','Crouch_Idle_Loop','Crouch_Fwd_Loop','Jump_Loop','Death01'];
+const UPPER_CLIP_SOURCES = ['Pistol_Idle_Loop','Pistol_Aim_Neutral','Pistol_Shoot','Sword_Idle','Sword_Attack','Hit_Chest','Hit_Head','Idle_Loop'];
 function _findClipByShortName(clips, shortName){
   // les clips sont prefixes "CharacterArmature|" -> on matche le suffixe
   for(const c of clips){
@@ -3320,6 +3320,7 @@ function animateSoldierRigged(s, anim, dt, t){
     let lowKey = 'Idle_Loop', lowBlend = null;   // lowBlend = {a,b,w} pour Jog<->Sprint
     if(!grounded){ lowKey = 'Jump_Loop'; }                                       // en l'air = boucle de saut
     else if(crouch){ lowKey = (sp > TR_WALK) ? 'Crouch_Fwd_Loop' : 'Crouch_Idle_Loop'; }  // accroupi (vrais clips)
+    else if(anim.bot && sp <= 4){ lowKey = 'Walk_Formal_Loop'; }                 // BOT : velocite <= 4 -> marche formelle (inclut l'idle)
     else if(sp < TR_WALK){ lowKey = 'Idle_Loop'; }                               // immobile
     else if(moveOff < sideThresh){
       // deplacement VERS la visee : course = blend Sprint(lent) <-> Jog(rapide) par la vitesse
@@ -3358,7 +3359,7 @@ function animateSoldierRigged(s, anim, dt, t){
         else if(!s.upperOneShot) fireUpperShoot(s);
       } else {
         if(s.upperOneShot && s.upperCur && s.upperCur.isRunning()){ /* laisse finir le tir */ }
-        else crossfadeLayer(s, 'upper', 'Pistol_Idle_Loop', 0.12);
+        else crossfadeLayer(s, 'upper', (anim.aiming && s.upper['Pistol_Aim_Neutral']) ? 'Pistol_Aim_Neutral' : 'Pistol_Idle_Loop', 0.12);   // voit le joueur -> pose de visee ; sinon idle
       }
     }
     s._wasFiring = firing;
@@ -7004,6 +7005,7 @@ function updateLocalBots(dt){
     b.anim.m = realMove > 0.002 ? (run ? 0.9 : 0.5) : 0;
     b.anim.a = ai.air ? 1 : 0; b.anim.sl = 0; b.anim.c = 0;
     b.anim.f = (canFire && ai.reactT <= 0) ? 1 : 0;
+    b.anim.bot = 1; b.anim.aiming = see ? 1 : 0;   // bot : marche formelle (<=4) + pose de visee quand il voit le joueur
     // --- Anim en couches : vitesse LOCALE (repere du corps), grounded, arme, visee ---
     const _bodyYaw = b.yaw + Math.PI;                 // meme facing que le rendu (root.rotation.y)
     const _sB = Math.sin(_bodyYaw), _cB = Math.cos(_bodyYaw);
