@@ -3279,7 +3279,7 @@ function animateSoldierRigged(s, anim, dt, t){
     {
       const _aw = (typeof anim.aimYaw === 'number') ? anim.aimYaw : s.root.rotation.y;
       // NB: si en strafe les jambes pointent du MAUVAIS côté, inverser le signe de moveAng ci-dessous.
-      anim._legFace = (sp > TR_WALK) ? (_aw + moveAng) : _aw;
+      anim._legFace = (firing || sp <= TR_WALK) ? _aw : (_aw + moveAng);   // EN TIR : tout le corps fait FACE a la visee (joueur) -> le haut du corps te vise toujours ; sinon jambes vers le deplacement
     }
 
     // BAS DU CORPS : priorite air > crouch > locomotion. VRAIS clips en boucle (plus de pose figee).
