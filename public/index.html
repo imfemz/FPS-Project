@@ -2999,7 +2999,7 @@ function createSoldierRigged(accent){
   const spine = [];
   inst.traverse(n=>{ if(n && n.name && _spineNames.indexOf(n.name) !== -1){ n.userData.qRest = n.quaternion.clone(); spine.push(n); } });
   // Bones de jambes -> saut procedural (pose normale, plus de roulade)
-  const legs = {}; const _legMap = { ulL:'DEF-thigh.L', ulR:'DEF-thigh.R', llL:'DEF-shin.L', llR:'DEF-shin.R' };
+  const legs = {}; const _legMap = { ulL:'DEF-thigh.L', ulR:'DEF-thigh.R', llL:'DEF-shin.L', llR:'DEF-shin.R', ftL:'DEF-foot.L', ftR:'DEF-foot.R' };
   const _legNorm = {}; for(const k in _legMap) _legNorm[k] = _normBone(_legMap[k]);   // match tolerant: rig reel = UpperLegL (sans point)
   inst.traverse(n=>{ if(!n || !n.name) return; const nn = _normBone(n.name); for(const k in _legMap){ if(nn === _legNorm[k]){ n.userData.qRest = n.quaternion.clone(); legs[k] = n; } } });
 
@@ -3247,6 +3247,102 @@ function applyBodyAim(s, anim, dt){
   }
 }
 
+// ===================== IK PIEDS (terrain hauteur+pente+bassin ; + foot-lock anti-slide) =====================
+const _FIK = { hipW:new THREE.Vector3(), kneeW:new THREE.Vector3(), footW:new THREE.Vector3(),
+  kneeW2:new THREE.Vector3(), footW2:new THREE.Vector3(), tgt:new THREE.Vector3(), D:new THREE.Vector3(),
+  axis:new THREE.Vector3(), thighDir:new THREE.Vector3(), kneeTgt:new THREE.Vector3(),
+  v1:new THREE.Vector3(), v2:new THREE.Vector3(), nrm:new THREE.Vector3(),
+  pwq:new THREE.Quaternion(), pwqi:new THREE.Quaternion(), q:new THREE.Quaternion(),
+  up:new THREE.Vector3(0,1,0), I:new THREE.Quaternion() };
+function _fikGround(x,z){ return (typeof MAP!=='undefined' && MAP.groundHeightAt) ? MAP.groundHeightAt(x,z) : 0; }
+function _fikGroundNormal(x,z,e,out){
+  const a=_fikGround(x-e,z), b=_fikGround(x+e,z), c=_fikGround(x,z-e), d=_fikGround(x,z+e);
+  return out.set(a-b, 2*e, c-d).normalize();
+}
+function _fikRotateWorld(bone, q){          // applique une rotation MONDE q a un bone (compose en local)
+  bone.parent.getWorldQuaternion(_FIK.pwq); _FIK.pwqi.copy(_FIK.pwq).invert();
+  bone.quaternion.premultiply(_FIK.pwq).premultiply(q).premultiply(_FIK.pwqi);
+}
+function _fikAim(bone, jointW, childW, desiredChildW){
+  _FIK.v1.copy(childW).sub(jointW); if(_FIK.v1.lengthSq()<1e-10) return; _FIK.v1.normalize();
+  _FIK.v2.copy(desiredChildW).sub(jointW); if(_FIK.v2.lengthSq()<1e-10) return; _FIK.v2.normalize();
+  _FIK.q.setFromUnitVectors(_FIK.v1, _FIK.v2); _fikRotateWorld(bone, _FIK.q);
+}
+function _fikSolveLeg(hip, knee, foot, targetW){   // IK 2 os : place foot sur targetW (genou plie dans le plan courant)
+  hip.getWorldPosition(_FIK.hipW); knee.getWorldPosition(_FIK.kneeW); foot.getWorldPosition(_FIK.footW);
+  const L1=_FIK.hipW.distanceTo(_FIK.kneeW), L2=_FIK.kneeW.distanceTo(_FIK.footW);
+  if(L1<1e-5||L2<1e-5) return;
+  _FIK.tgt.copy(targetW).sub(_FIK.hipW); let dist=_FIK.tgt.length();
+  dist=Math.max(Math.abs(L1-L2)+0.002, Math.min((L1+L2)*0.998, dist));
+  _FIK.D.copy(_FIK.tgt).normalize();
+  _FIK.v1.copy(_FIK.kneeW).sub(_FIK.hipW); _FIK.v2.copy(_FIK.footW).sub(_FIK.kneeW);
+  _FIK.axis.copy(_FIK.v1).cross(_FIK.v2);
+  if(_FIK.axis.lengthSq()<1e-8){ _FIK.axis.copy(_FIK.D).cross(_FIK.up); if(_FIK.axis.lengthSq()<1e-8) _FIK.axis.set(1,0,0); }
+  _FIK.axis.normalize();
+  const cosA=Math.max(-1,Math.min(1,(L1*L1+dist*dist-L2*L2)/(2*L1*dist)));
+  _FIK.q.setFromAxisAngle(_FIK.axis, Math.acos(cosA));
+  _FIK.thighDir.copy(_FIK.D).applyQuaternion(_FIK.q);
+  _FIK.kneeTgt.copy(_FIK.hipW).addScaledVector(_FIK.thighDir, L1);
+  _fikAim(hip, _FIK.hipW, _FIK.kneeW, _FIK.kneeTgt);
+  hip.updateWorldMatrix(false, true);
+  knee.getWorldPosition(_FIK.kneeW2); foot.getWorldPosition(_FIK.footW2);
+  _FIK.tgt.copy(_FIK.hipW).addScaledVector(_FIK.D, dist);
+  _fikAim(knee, _FIK.kneeW2, _FIK.footW2, _FIK.tgt);
+  knee.updateWorldMatrix(false, true);
+}
+function _fikRelax(s, dt){
+  if(!s.ik) return;
+  s.ik.pelvis += (0 - s.ik.pelvis) * Math.min(1, dt*8);
+  if(s.inst) s.inst.position.y = (s.ik.pelvisB||0) + s.ik.pelvis;
+  if(s.ik.L) s.ik.L.lock=false; if(s.ik.R) s.ik.R.lock=false;
+}
+function applyFootIK(s, anim, dt){
+  const C=(GAMECFG.MODELS && GAMECFG.MODELS.foot_ik)||{};
+  if(C.enabled===false || C.terrain===false) return;
+  const lg=s.legs; if(!s.inst||!lg||!lg.ftL||!lg.ftR||!lg.ulL||!lg.ulR||!lg.llL||!lg.llR) return;
+  if(anim && (anim.a || anim.grounded===false)){ _fikRelax(s, dt); return; }
+  s.ik = s.ik || { L:{lock:false,x:0,z:0,w:0}, R:{lock:false,x:0,z:0,w:0}, pelvis:0, pelvisB:(s.inst.position.y||0) };
+  s.inst.updateWorldMatrix(true, true);
+  const rootGroundY = s.root ? s.root.position.y : 0;
+  const lockOn = (C.lock!==false);
+  const feet=[['L',lg.ulL,lg.llL,lg.ftL,s.ik.L],['R',lg.ulR,lg.llR,lg.ftR,s.ik.R]];
+  let pelvisCorr=0; const targets=[];
+  for(const [side,hip,knee,foot,st] of feet){
+    foot.getWorldPosition(_FIK.footW);
+    const animX=_FIK.footW.x, animZ=_FIK.footW.z, animY=_FIK.footW.y;
+    const lift=animY-rootGroundY;
+    let fx=animX, fz=animZ;
+    if(lockOn){
+      const planted = lift < (C.lock_plant_h ?? 0.07), swinging = lift > (C.lock_release_h ?? 0.14);
+      if(!st.lock && planted){ st.lock=true; st.x=animX; st.z=animZ; }
+      else if(st.lock && (swinging || Math.hypot(animX-st.x,animZ-st.z) > (C.lock_max_slide ?? 0.55))){ st.lock=false; }
+      st.w += ((st.lock?1:0) - st.w) * Math.min(1, dt*(C.lock_smooth ?? 14));
+      fx = animX + (st.x-animX)*st.w; fz = animZ + (st.z-animZ)*st.w;
+    } else { st.w=0; }
+    const tY=_fikGround(fx,fz) + lift;
+    targets.push({hip,knee,foot,fx,fz,tY});
+    pelvisCorr = Math.min(pelvisCorr, tY - animY);
+  }
+  let pelTgt = Math.max(-(C.pelvis_max ?? 0.45), pelvisCorr * (C.pelvis_factor ?? 0.6));
+  s.ik.pelvis += (pelTgt - s.ik.pelvis) * Math.min(1, dt*(C.smooth ?? 12));
+  s.inst.position.y = (s.ik.pelvisB||0) + s.ik.pelvis;
+  s.inst.updateWorldMatrix(true, true);
+  const fr=(C.foot_rot ?? 0.6), maxc=Math.cos((C.slope_max_deg ?? 40)*Math.PI/180);
+  for(const t of targets){
+    _FIK.tgt.set(t.fx, t.tY, t.fz);
+    _fikSolveLeg(t.hip, t.knee, t.foot, _FIK.tgt);
+    if(fr>0){
+      _fikGroundNormal(t.fx, t.fz, 0.25, _FIK.nrm);
+      if(_FIK.nrm.y < maxc) _FIK.nrm.lerp(_FIK.up, 0.5).normalize();
+      t.foot.getWorldQuaternion(_FIK.pwq);
+      _FIK.v1.set(0,1,0).applyQuaternion(_FIK.pwq).normalize();
+      _FIK.q.setFromUnitVectors(_FIK.v1, _FIK.nrm); _FIK.q.slerp(_FIK.I, 1-fr);
+      _fikRotateWorld(t.foot, _FIK.q);
+    }
+  }
+}
+window.footIK = function(on){ const C=GAMECFG.MODELS.foot_ik||(GAMECFG.MODELS.foot_ik={}); if(on&&typeof on==='object'){ Object.assign(C,on); } else { C.enabled = on!==false; } return JSON.stringify(C); };
+
 function animateSoldierRigged(s, anim, dt, t){
   // Si une anim one-shot (hit) est en cours, on la laisse finir avant de reprendre la normale
   if(s.currentKey === 'death'){ if(s.mixer) s.mixer.update(dt); return; }
@@ -3350,6 +3446,7 @@ function animateSoldierRigged(s, anim, dt, t){
     // (saut/crouch = clips FIGES sur le bas — plus de rotation manuelle des jambes)
     applySpineAim(s, anim);     // pitch (regard haut/bas)
     applyBodyAim(s, anim, dt);  // twist + DELAY de rotation haut/bas vers la visee
+    try { applyFootIK(s, anim, dt); } catch(e){ if(!s._ikErr){ s._ikErr=1; console.warn('[foot-ik]', e); } }
     return;
   }
 
@@ -3381,6 +3478,7 @@ function animateSoldierRigged(s, anim, dt, t){
   applyCrouchPose(s, s.crouchW || 0);
   applySpineAim(s, anim);
   applyBodyAim(s, anim, dt);   // twist vers la visee aussi en mode crouch/slide
+  if(s.ik) _fikRelax(s, dt);   // pas d'IK pieds en slide/climb -> on relache le bassin
 }
 // Jouer l'animation de mort (one-shot) puis figer
 // Coupe les couches lower/upper et remet les bones de visee a leur pose de repos.

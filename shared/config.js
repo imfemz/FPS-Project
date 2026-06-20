@@ -603,6 +603,12 @@
       // Visee CORPS (twist procedural Hips/Abdomen/Torso vers la cible) : le perso ne tourne plus
       // le dos en tirant. max_deg = torsion max avant que le corps pivote ; smooth = lissage.
       body_aim: { enabled: true, max_deg: 90, smooth: 12, turn_follow: 7, dist: { 'DEF-spine.001': 0.55, 'DEF-spine.002': 0.45 } },  // twist sur spine.001/002 (DEF-hips porte le bob, role 'Body'). turn_follow = vitesse a laquelle le BAS rattrape le regard.
+      // ===== IK PIEDS (3e personne : bots + joueurs distants) — terrain + foot-lock anti-glissement =====
+      // terrain: plaque chaque pied sur le sol reel sous lui (+ pente + bassin). lock: verrouille le pied
+      // pose pour tuer le glissement horizontal. Reglable a chaud via window.footIK(...). foot_rot=0 si le pied tourne mal.
+      foot_ik: { enabled: true, terrain: true, lock: true, foot_rot: 0.6, slope_max_deg: 40,
+                 pelvis_factor: 0.6, pelvis_max: 0.45, smooth: 12,
+                 lock_plant_h: 0.07, lock_release_h: 0.14, lock_max_slide: 0.55, lock_smooth: 14 },
       // Bas du corps par INPUT : VRAIS clips en boucle (Crouch_*, Jump_Loop) -> plus de pose figee.
       // lower_pose conserve (compat tuneLowerFrame) mais n'est plus lu par le driver en couches.
       lower_pose: { fps: 24, jump_clip: 'Jump_Loop', jump_frame: 0, crouch_clip: 'Crouch_Idle_Loop', crouch_frame: 0 },
