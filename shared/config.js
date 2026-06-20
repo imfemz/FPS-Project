@@ -860,7 +860,7 @@
       hideBox: true,        // cache la boite d'origine (la collision reste active)
       byType: {
         container: '/models/container.glb',
-        // metal : pas de modèle (cube.glb = placeholder blanc) -> rendu en boîte 'metal' grise (MAP_MAT.metal)
+        metal:     '/models/concrete_wall.glb',   // plateformes/piliers 'metal' -> texture béton (cube.glb était un placeholder blanc)
         wall:      '/models/concrete_wall.glb',
         crate:     '/models/crate.glb',
       },
