@@ -118,7 +118,9 @@ const server = http.createServer((req, res) => {
     if (err || !st.isFile()) { res.writeHead(404); return res.end('404'); }
     const headers = { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Content-Length': st.size };
     if (DEV) headers['Cache-Control'] = 'no-store';                 // toujours frais en local
-    else headers['Cache-Control'] = 'public, max-age=3600';         // prod : cache navigateur (allège le serveur)
+    else headers['Cache-Control'] = (/\.(html|js|css)$/i.test(file) || url === '/')
+        ? 'no-cache'                                                  // CODE : revalidé -> màj immédiates après redeploy (plus de version figée en cache)
+        : 'public, max-age=86400';                                    // ASSETS binaires (modèles/textures/sons) : cache long
     res.writeHead(200, headers);
     const stream = fs.createReadStream(file);
     stream.on('error', () => { try { res.destroy(); } catch (e) {} });
