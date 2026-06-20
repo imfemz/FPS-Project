@@ -7899,12 +7899,10 @@ function startSlide(inputDir){
   me.slide.active = true; me.slide.t = 0;
   // Direction du slide : priorité au STICK (input) → tu slides où tu pousses (ex: saut arrière = slide arrière).
   // Sinon élan, sinon regard.
-  if(inputDir && inputDir.lengthSq() > 0.01){
-    me.slide.dir = inputDir.clone().setY(0).normalize();
-  } else {
-    me.slide.dir = spd > 0.5 ? hv.normalize()
-      : new THREE.Vector3(-Math.sin(me.yaw),0,-Math.cos(me.yaw));
-  }
+  let _sd = null;
+  if(inputDir && inputDir.lengthSq() > 0.01){ const d = inputDir.clone().setY(0); if(d.lengthSq() > 1e-6) _sd = d.normalize(); }
+  if(!_sd) _sd = (spd > 0.5) ? hv.normalize() : new THREE.Vector3(-Math.sin(me.yaw),0,-Math.cos(me.yaw));
+  me.slide.dir = _sd;
   me.slide.speed = Math.max(CONFIG.SLIDE_INITIAL_SPEED, spd);
   playSfx('slide');
 }
@@ -7919,9 +7917,13 @@ function updateSlide(dt, crouchPressed, inputDir){
   // Pilotage STICK : on oriente le slide vers ton input. Pas d'input → on TIENT la direction
   // (plus de réorientation auto vers le regard qui ramenait un slide arrière vers l'avant).
   if(inputDir && inputDir.lengthSq() > 0.01){
-    const want = inputDir.clone().setY(0).normalize();
-    const steer = Math.min(1, CONFIG.SLIDE_STEER_RATE*dt);
-    s.dir.lerp(want, steer).normalize();
+    const want = inputDir.clone().setY(0);
+    if(want.lengthSq() > 1e-6){
+      want.normalize();
+      const steer = Math.min(1, CONFIG.SLIDE_STEER_RATE*dt);
+      s.dir.lerp(want, steer);
+      if(s.dir.lengthSq() > 1e-6) s.dir.normalize(); else s.dir.copy(want);   // input OPPOSÉ -> lerp passe par ~0 : pas de normalize(0)=NaN
+    }
   }
   me.vel.x = s.dir.x * s.speed;
   me.vel.z = s.dir.z * s.speed;
@@ -9220,8 +9222,10 @@ function playerUpdate(dt, g){
     /* Slide jump : conserve l'élan ×1.35 (le contrôle aérien réduit le préserve ensuite) */
     if((jumpGround || jumpEdge) && me.slide.active){
       const boosted = me.slide.speed * CONFIG.SLIDE_JUMP_BOOST;
-      me.vel.x = me.slide.dir.x * boosted;
-      me.vel.z = me.slide.dir.z * boosted;
+      if(isFinite(boosted) && isFinite(me.slide.dir.x) && isFinite(me.slide.dir.z)){
+        me.vel.x = me.slide.dir.x * boosted;
+        me.vel.z = me.slide.dir.z * boosted;
+      }
       me.vel.y = CONFIG.JUMP_VELOCITY;
       me.onGround = false;
       jumpNoseTarget = (GAMECFG.WEAPON_ANIM_BLEND && GAMECFG.WEAPON_ANIM_BLEND.airborne && GAMECFG.WEAPON_ANIM_BLEND.airborne.jump_nose_dip) || 0; // nez qui pique
