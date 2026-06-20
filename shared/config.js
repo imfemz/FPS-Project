@@ -606,7 +606,7 @@
       // ===== IK PIEDS (3e personne : bots + joueurs distants) — terrain + foot-lock anti-glissement =====
       // terrain: plaque chaque pied sur le sol reel sous lui (+ pente + bassin). lock: verrouille le pied
       // pose pour tuer le glissement horizontal. Reglable a chaud via window.footIK(...). foot_rot=0 si le pied tourne mal.
-      foot_ik: { enabled: true, terrain: true, lock: true, foot_rot: 0.6, slope_max_deg: 40,
+      foot_ik: { enabled: false, terrain: true, lock: true, foot_rot: 0.6, slope_max_deg: 40,   // IK pieds DÉSACTIVÉ (marchait mal) — footIK(true) en console pour réactiver
                  pelvis_factor: 0.6, pelvis_max: 0.45, smooth: 12,
                  lock_plant_h: 0.07, lock_release_h: 0.14, lock_max_slide: 0.55, lock_smooth: 14 },
       // Bas du corps par INPUT : VRAIS clips en boucle (Crouch_*, Jump_Loop) -> plus de pose figee.
