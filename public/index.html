@@ -6323,7 +6323,7 @@ function onBotRespawn(m){
    ========================================================================== */
 let localBotMode = false, localBotKills = 0;
 const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist: 12,
-  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4, spawn_sep: 15, MAX_BOTS: 8, waveMode: false, wave: 1,
+  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4, spawn_sep: 15, spawn_sep_by_diff: { easy: 20, medium: 15, hard: 10 }, MAX_BOTS: 8, waveMode: false, wave: 1,
   knock_dist: 3, knock_decay: 6,   // knockback au coup de sabre : ~knock_dist mètres ; knock_decay = vitesse de retombée du recul
   ai: {
     difficulty: 'medium',     // 'easy' | 'medium' | 'hard'
@@ -6599,7 +6599,7 @@ function initLocalBotAI(b){
 function lbotSpawnPoint(i, n, extra, minDist){ // >= MIN du joueur ET >= spawn_sep des autres bots
   const lim = (MAP.HALF || 30) - 4;
   const MIN = minDist || 10;
-  const SEP = LBOT.spawn_sep ?? 15;
+  const SEP = (LBOT.spawn_sep_by_diff && LBOT.spawn_sep_by_diff[LBOT.ai && LBOT.ai.difficulty]) || (LBOT.spawn_sep ?? 15);   // distance mini entre bots selon la difficulte
   const px = (me && me.pos) ? me.pos.x : 0, pz = (me && me.pos) ? me.pos.z : 0;
   function botClear(x, z){
     if(extra) for(const e of extra){ if(Math.hypot(e[0]-x, e[1]-z) < SEP) return false; }
