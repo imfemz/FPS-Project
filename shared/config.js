@@ -876,7 +876,7 @@
     DAMAGE_NUMBERS: {
       screen_size: 0.072,    // hauteur du chiffre = fraction de la hauteur d'écran (constante) — agrandi pour visibilité
       head_mult: 1.25,       // headshots un peu plus gros
-      color_shield: '#7fd4ff', // dégâts au BOUCLIER (bleu, image 1)
+      color_shield: '#3d98ec', // dégâts au BOUCLIER (bleu, image 1)
       color_health: '#ffe9c0', // dégâts aux PV (crème, image 2)
       color_head:   '#ff5a5a', // headshot
       glow_shield:  '#1f9dff', // halo bleu autour du chiffre quand on touche le bouclier (image 1)
