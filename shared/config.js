@@ -864,6 +864,9 @@
         wall:      '/models/concrete_wall.glb',
         crate:     '/models/crate.glb',
       },
+      // Texture FORCÉE par type (override le matériau du GLB s'il est blanc/cassé). PBR auto : _normal / _roughness.
+      texByType: { container: '/textures/Metal_Corrugated_018_SD/Metal_Corrugated_018_basecolor.png' },
+      texRepeat: { container: 1 },   // tuilage de la texture forcée : 1 = 1x1 (monte si la texture s'étale trop)
     },
     TEXTURES: {
       sky: '/textures/moon_sky.jpg', floor: '/textures/Concrete_Wall_016_SD/Concrete_Wall_016_basecolor.png',

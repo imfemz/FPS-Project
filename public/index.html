@@ -1461,6 +1461,22 @@ function mountStructureModels(){
     new GLTFLoader().load(url, gltf=>{
       try{
         const src = gltf.scene;
+        // TEXTURE FORCÉE (override le matériau du GLB, ex: container blanc -> Metal_Corrugated). Tuilage 1:1 (pas d'étalement).
+        const _ftexUrl = SM.texByType && SM.texByType[type];
+        if(_ftexUrl){
+          const _rep = (SM.texRepeat && SM.texRepeat[type]) || 1;
+          const _ani = (renderer && renderer.capabilities) ? Math.min(8, renderer.capabilities.getMaxAnisotropy()) : 1;
+          const _applyTex = (cb, u2, srgb)=> new THREE.TextureLoader().load(u2, t=>{
+            t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(_rep, _rep); t.anisotropy = _ani;
+            if('colorSpace' in t) t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+            src.traverse(o=>{ if(o.isMesh && o.material){ const ms = Array.isArray(o.material)?o.material:[o.material]; for(const m of ms){ if(m){ cb(m, t); m.needsUpdate = true; } } } });
+          }, undefined, ()=>{});
+          _applyTex((m,t)=>{ m.map = t; if(m.color) m.color.setScalar(1); }, _ftexUrl, true);
+          if(/_basecolor\./i.test(_ftexUrl)){
+            _applyTex((m,t)=>{ m.normalMap = t; }, _ftexUrl.replace(/_basecolor\./i,'_normal.'), false);
+            _applyTex((m,t)=>{ m.roughnessMap = t; m.roughness = 1; }, _ftexUrl.replace(/_basecolor\./i,'_roughness.'), false);
+          }
+        }
         const bb = new THREE.Box3().setFromObject(src);
         const size = bb.getSize(new THREE.Vector3());
         const ctr = bb.getCenter(new THREE.Vector3());
