@@ -5892,6 +5892,7 @@ const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist:
     difficulty: 'medium',     // 'easy' | 'medium' | 'hard'
     fire_range: 15,           // portee de tir des bots (m) -- ils ouvrent le feu en rafale des 15 m
     flee_below: 0.5,          // PV < 50% -> le bot fuit le joueur
+    aggro_time: 2,            // voit le joueur sans etre touche pendant Xs -> rush + tir continu
     first_hit_mult: 1.6,      // degats x1.6 tant que le joueur ne l'a pas touche (premier coup)
     view_range: 24, view_fov_deg: 120, sense_radius: 3,           // distance de detection (LOS) + poursuite
     forget_time: 3.0,         // memoire (s) apres perte de vue
@@ -6119,6 +6120,9 @@ function updateLocalBots(dt){
     if(see){ ai.lastX = me.pos.x; ai.lastZ = me.pos.z; }
     const knows = see || ai.seenT > 0;
     const inFire = see && alive && distP <= (A.fire_range ?? 15);
+    // AGRESSIVITE : voit le joueur sans etre touche pendant aggro_time -> rush + tir continu
+    if(see){ ai.noHitSeenT = (ai.noHitSeenT||0) + dt; } else { ai.noHitSeenT = 0; }
+    const aggro = knows && ((ai.noHitSeenT||0) >= (A.aggro_time ?? 2));
 
     // Tir + accuracy
     ai.fireT -= dt; ai.reloadT -= dt; ai.fireFlash = Math.max(0, ai.fireFlash - dt);
@@ -6137,7 +6141,7 @@ function updateLocalBots(dt){
         botShoot(b, tier, playerSpeed, distP);
         ai.shotsLeft--; ai.mag--;
         if(ai.mag <= 0){ ai.mag = magSize; ai.reloadT = reloadT; ai.shotsLeft = 0; }   // chargeur vide -> reload (temps de l'arme)
-        else if(ai.shotsLeft <= 0){ ai.fireT = _rR(tier.gap || [0.4,0.8]); }            // fin de rafale -> courte pause
+        else if(ai.shotsLeft <= 0){ ai.fireT = aggro ? fireRate : _rR(tier.gap || [0.4,0.8]); }   // fin rafale -> pause (aucune en aggro = tir continu)
         else { ai.fireT = fireRate; }                                                   // cadence intra-rafale
       }
     } else { ai.reactT = tier.react ?? 0.3; ai.shotsLeft = 0; }
@@ -6153,12 +6157,17 @@ function updateLocalBots(dt){
       run = true;
     } else if(see && distP <= (A.fire_range ?? 15)){
       const px = dxp/distP, pz = dzp/distP, sx = -pz, sz = px;
-      vx = sx*mv.strafeDir; vz = sz*mv.strafeDir;
-      const pref = A.preferred_dist ?? 4;
-      if(distP > pref+1){ vx += px*0.85; vz += pz*0.85; }
-      else if(distP < pref-1){ vx -= px*0.85; vz -= pz*0.85; }
+      vx = sx*mv.strafeDir; vz = sz*mv.strafeDir;          // strafe gauche/droite
+      if(aggro){
+        vx += px*1.0; vz += pz*1.0;                        // RUSH : fonce sur le joueur (zigzag)
+        run = true;
+      } else {
+        const pref = A.preferred_dist ?? 4;
+        if(distP > pref+1){ vx += px*0.85; vz += pz*0.85; }
+        else if(distP < pref-1){ vx -= px*0.85; vz -= pz*0.85; }
+        run = distP > pref+2.5;
+      }
       b.yaw = Math.atan2(-dxp, -dzp);
-      run = distP > pref+2.5;
     } else if(knows){
       const tx = see ? me.pos.x : ai.lastX, tz = see ? me.pos.z : ai.lastZ;
       const dx = tx - b.pos.x, dz = tz - b.pos.z, d = Math.hypot(dx,dz) || 0.0001;
@@ -6249,6 +6258,7 @@ function updateLocalBots(dt){
 function applyLocalBotDamage(id, b, dmg, head, melee){
   if(!b || b.dead) return;
   b.playerHit = true;   // le joueur a touche ce bot -> fin du bonus 'premier coup'
+  if(b.ai) b.ai.noHitSeenT = 0;   // touche -> reset le timer d'agressivite
   let rest = dmg;
   if(b.sh > 0){ const a = Math.min(b.sh, rest); b.sh -= a; rest -= a; }
   if(rest > 0) b.hp -= rest;
