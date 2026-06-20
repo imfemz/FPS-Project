@@ -16,6 +16,12 @@
 (function (root) {
   const HALF = 45;
 
+  // Map personnalisee (exportee depuis Blender via tools/blender_map_export.py) : si shared/map_custom.js
+  // fournit des blocs, ils REMPLACENT les blocs par defaut ci-dessous (ramps/plateforme/spawns inchanges).
+  let CUSTOM = null;
+  try { if (typeof module !== 'undefined' && module.exports) CUSTOM = require('./map_custom.js'); } catch (e) {}
+  if (!CUSTOM && root && root.__CUSTOM_BLOCKS) CUSTOM = root.__CUSTOM_BLOCKS;
+
   // Couleurs conteneurs (acier peint) + néons
   const RUST = 0x9e4b39, BLUE = 0x3f6f8e, AMBER = 0x9c7d3a, GREEN = 0x4f7a55;
   const CYAN = 0x59d8ff, WARN = 0xffb000;
@@ -132,7 +138,8 @@
     return walls;
   }
 
-  const MAP = { HALF, blocks, platform, ramps, spawns, groundHeightAt, rampSideWalls };
+  const finalBlocks = (Array.isArray(CUSTOM) && CUSTOM.length) ? CUSTOM : blocks;
+  const MAP = { HALF, blocks: finalBlocks, platform, ramps, spawns, groundHeightAt, rampSideWalls };
   if (typeof module !== 'undefined' && module.exports) module.exports = MAP;
   else root.MAP = MAP;
 })(typeof window !== 'undefined' ? window : globalThis);
