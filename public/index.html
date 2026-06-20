@@ -6732,9 +6732,25 @@ function initLocalBotAI(b){
            seenT: 0, fireFlash: 0, lastX: b.pos?b.pos.x:0, lastZ: b.pos?b.pos.z:0, jumpQueued: false };
   b.playerHit = false;   // nouveau spawn -> a de nouveau le bonus premier coup
 }
+// #16 : le joueur voit-il ce point ? cône FOV frontal (~120°) + raycast d'occlusion contre la map.
+// Sert à interdire le spawn des ennemis dans ma ligne de vue (ils apparaissent toujours hors de mon champ).
+function playerCanSee(x, z){
+  if(!me || !me.pos) return false;
+  const eyeP = (me.pos.y||0) + (CONFIG.EYE_STAND||1.62);
+  const dx = x - me.pos.x, dz = z - me.pos.z, dd = Math.hypot(dx, dz);
+  if(dd < 1.5) return true;                                  // collé à moi -> considéré vu
+  const fwdX = -Math.sin(me.yaw), fwdZ = -Math.cos(me.yaw);  // avant caméra (même repère que botSeesPlayer)
+  const cosAng = (fwdX*dx + fwdZ*dz) / (dd || 1);
+  if(cosAng < Math.cos(60 * Math.PI/180)) return false;      // hors du cône ~120° -> pas vu
+  _losO.set(me.pos.x, eyeP, me.pos.z);
+  _losDir.set(dx, 0, dz).multiplyScalar(1/(dd||1));
+  mapRay.set(_losO, _losDir); mapRay.far = dd - 0.4;
+  if(mapRay.intersectObjects(mapMeshes, false).length !== 0) return false;   // mur entre nous -> pas vu
+  return true;                                               // dans le champ + dégagé -> VU
+}
 function lbotSpawnPoint(i, n, extra, minDist){ // >= MIN du joueur ET >= spawn_sep des autres bots
   const lim = (MAP.HALF || 30) - 4;
-  const MIN = minDist || 10;
+  const MIN = minDist || Math.min(((typeof localBotMode!=='undefined' && localBotMode) ? 22 : 10), ((MAP.HALF||30)-4)*0.5);   // solo : spawn plus loin de moi
   const SEP = (LBOT.spawn_sep_by_diff && LBOT.spawn_sep_by_diff[LBOT.ai && LBOT.ai.difficulty]) || (LBOT.spawn_sep ?? 15);   // distance mini entre bots selon la difficulte
   const px = (me && me.pos) ? me.pos.x : 0, pz = (me && me.pos) ? me.pos.z : 0;
   function botClear(x, z){
@@ -6745,12 +6761,13 @@ function lbotSpawnPoint(i, n, extra, minDist){ // >= MIN du joueur ET >= spawn_s
   let best = [lim, 0, 0], bestScore = -1;
   for(let k=0; k<40; k++){
     const a = (k === 0 && i != null && n) ? (i / n) * Math.PI*2 + (Math.random()-0.5)*0.4 : Math.random()*Math.PI*2;
-    const r = Math.min(lim, MIN + 4 + Math.random()*12);
+    const r = Math.max(MIN, Math.min(lim, MIN + Math.random()*(lim - MIN)));   // réparti sur TOUTE l'arène
     const x = Math.cos(a)*r, z = Math.sin(a)*r;
     const dPlayer = Math.hypot(x - px, z - pz);
     const clear = botClear(x, z);
-    if(dPlayer >= MIN && clear) return [x, 0, z];
-    const score = Math.min(dPlayer, MIN*2) + (clear ? 100 : 0);
+    const unseen = !playerCanSee(x, z);                                        // #16 : hors de ma ligne de vue
+    if(dPlayer >= MIN && clear && unseen) return [x, 0, z];                     // idéal : loin + dégagé + hors-vue
+    const score = Math.min(dPlayer, MIN*2) + (clear ? 100 : 0) + (unseen ? 300 : 0);   // priorise fortement le hors-vue
     if(score > bestScore){ bestScore = score; best = [x, 0, z]; }
   }
   let dx = best[0]-px, dz = best[2]-pz, d = Math.hypot(dx,dz) || 1;
