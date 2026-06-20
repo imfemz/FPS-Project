@@ -4709,7 +4709,7 @@ function ensureBot(id, accent){
     if(localBotMode){ wi = (Math.random()*3)|0; accent = BOT_WEAPON_COLOR[wi]; }   // arme aléatoire (R69/Wingman/Sabre) + couleur par arme
     b = { soldier: null, buf: [], pos: new THREE.Vector3(), yaw: 0,
           anim: {m:0,c:0,a:0,r:0,sl:0,h:0,cl:0,f:0,ad:0}, dead: false, stepT: 0, accent,
-          weaponIdx: wi, rush: (wi === 2) };   // sabre -> charge (rush), ne tire pas
+          weaponIdx: wi, rush: (wi === 2), alertTime: (wi === 2 ? 0.8 : undefined) };   // sabre -> charge rapide (rush, télégraphe court), frappe au contact
     if(RIG_READY && RIG_TEMPLATE){ b.soldier = createSoldierRigged(accent); scene.add(b.soldier.root); }
     botMgr.set(id, b);
   }
@@ -6461,6 +6461,7 @@ const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist:
   separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4, spawn_sep: 15, spawn_sep_by_diff: { easy: 20, medium: 15, hard: 10 }, MAX_BOTS: 8, waveMode: false, wave: 1,
   fear: { radius: 3, time: 5, speed: 5 },   // bot voisin (<radius m) d'un bot tue -> panique : fuit le joueur (time s, velocite speed)
   knock_dist: 3, knock_decay: 6,   // knockback au coup de sabre : ~knock_dist mètres ; knock_decay = vitesse de retombée du recul
+  saber_dmg: 40, saber_range: 2.8, saber_cd: 0.95,   // bot SABRE : dégâts / portée / cadence de l'attaque au contact (il ne tire pas, il charge)
   ai: {
     difficulty: 'medium',     // 'easy' | 'medium' | 'hard'
     fire_range: 15,           // portee de tir des bots (m) -- ils ouvrent le feu en rafale des 15 m
@@ -6987,6 +6988,16 @@ function updateLocalBots(dt){
       }
     } else { ai.reactT = tier.react ?? 0.3; ai.shotsLeft = 0; }
 
+    // SABRE (idx 2) : ne tire pas -> attaque au CONTACT quand il me voit et est à portée (cooldown).
+    if(b.weaponIdx === 2 && !feared){
+      ai.meleeT = (ai.meleeT || 0) - dt;
+      if(see && distP <= (LBOT.saber_range ?? 2.8) && ai.meleeT <= 0){
+        ai.meleeT = (LBOT.saber_cd ?? 0.95);
+        b.saberSwingUntil = performance.now() + 360;          // déclenche l'anim Sword_Attack (3e pers)
+        if(!(LBOT.ai && LBOT.ai.damage_player === false)) damagePlayerLocal((LBOT.saber_dmg ?? 40), b.pos);
+      }
+    }
+
     // Decision de deplacement
     let vx=0, vz=0, run=false;
     const _flee = !b.noFlee && knows && (b.hp < maxHp * (A.flee_below ?? 0.5));   // PV bas -> fuite (sauf Sentinel)
@@ -7139,6 +7150,7 @@ function updateLocalBots(dt){
     b.anim.vz = (b.anim.vz != null ? b.anim.vz : _vzL) + (_vzL - (b.anim.vz != null ? b.anim.vz : _vzL)) * Math.min(1, dt*14);
     b.anim.grounded = !ai.air;
     b.anim.wi = (b.weaponIdx != null ? b.weaponIdx : 0);   // bots: pas de champ arme -> defaut R69 (0)
+    b.anim.saber_attack = !!(b.saberSwingUntil && performance.now() < b.saberSwingUntil);   // swing sabre -> Sword_Attack
     // visee = direction bot -> joueur, PRE-LISSEE (chemin court) pour eviter les sauts du twist
     // du torse a chaque tick d'IA — harmonise avec le lissage vx/vz (dt*14) et bodyYaw (dt*12).
     const _aimT = feared ? Math.atan2(-dxp, -dzp) : (_turnYaw != null ? _turnYaw : Math.atan2(dxp, dzp));   // peur: dos joueur ; demi-tour: vers le mouvement ; sinon: visée joueur
