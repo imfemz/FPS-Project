@@ -188,6 +188,13 @@
   #buffhalo{position:fixed;inset:0;pointer-events:none;z-index:6;opacity:0;background:radial-gradient(ellipse at center,transparent 60%,rgba(150,60,255,.42) 100%);transition:opacity .35s}
   #buffhalo.on{animation:buffpulse 1.15s ease-in-out infinite}
   @keyframes buffpulse{0%,100%{opacity:.30}50%{opacity:.80}}
+  #killpop{position:fixed;top:34%;left:50%;transform:translateX(-50%);z-index:9;display:flex;align-items:baseline;gap:12px;pointer-events:none}
+  #killpop .kp-plus{font-family:var(--mono);font-size:34px;font-weight:800;color:#fff;text-shadow:0 0 16px rgba(150,60,255,.6);opacity:0}
+  #killpop .kp-total{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--accent);opacity:0}
+  #killpop.show .kp-plus{animation:kpPop 1.05s ease-out forwards}
+  #killpop.show .kp-total{animation:kpTot 1.05s ease-out forwards}
+  @keyframes kpPop{0%{opacity:0;transform:translateY(8px) scale(1.4)}14%{opacity:1;transform:translateY(0) scale(1)}80%{opacity:1}100%{opacity:0}}
+  @keyframes kpTot{0%,22%{opacity:0}46%{opacity:1}84%{opacity:1}100%{opacity:0}}
   /* Indicateur directionnel de dégât : arc rouge pointant vers le tireur, tourne autour du centre écran */
   #dmgdir{position:fixed;left:50%;top:50%;width:0;height:0;z-index:6;pointer-events:none;opacity:0;transition:opacity .35s ease;transform:translate(-50%,-50%) rotate(0deg)}
   #dmgdir svg{position:absolute;left:-150px;top:-150px;width:300px;height:300px;overflow:visible}
@@ -541,6 +548,7 @@
 <div id="dmgdir"><svg viewBox="-150 -150 300 300"><path class="ddarc" d="M -46 -116 A 124.8 124.8 0 0 1 46 -116"/></svg></div>
 <div id="countdown"></div>
 <div id="buffhalo"></div>
+<div id="killpop"><span class="kp-plus">+1 KILL</span><span class="kp-total">0</span></div>
 <div id="gpcursor"></div>
 
 <div class="screen show" id="menu">
@@ -3713,7 +3721,8 @@ function redSkinWanted(){
   return !!(curWeapon().red && redActive(me.weaponIdx));         // flingue : pendant le bonus rouge (10 s)
 }
 function updateRedSkin(dt){
-  const want=redSkinWanted(), cur=weaponModels[me.weaponIdx];
+  const want=redSkinWanted();
+  const cur=((typeof isReloadVMActive==='function' && isReloadVMActive() && reloadVM) ? reloadVM : weaponModels[me.weaponIdx]);   // recharge R69 : le modele de reload est visible -> on le skinne aussi
   if(want && redSkin.model!==cur) applyRedSkin(cur);             // (re)applique sur l'arme tenue
   if(!redSkin.model) return;
   const target=(want && redSkin.model===cur) ? 1 : 0;
@@ -6073,6 +6082,15 @@ function onBotStart(m){
     }, 1000);
   }
 }
+// Reaction vocale du bot touche : un son aleatoire (bot_hit1/2/3), JAMAIS deux a la fois.
+let _botHitBusy = false;
+function playBotHitVoice(){
+  if(_botHitBusy) return;
+  const names = ['bot_hit1','bot_hit2','bot_hit3'].filter(n=>audioBuffers[n]);
+  if(!names.length) return;
+  const src = playSfx(names[(Math.random()*names.length)|0], 1);
+  if(src){ _botHitBusy = true; try{ src.onended = ()=>{ _botHitBusy = false; }; }catch(e){ _botHitBusy = false; } }
+}
 function onBotHit(m){
   if(m.melee){ meleeShake = Math.min(2.2, meleeShake + 0.35); melee.flare = 1; } // coup de sabre confirmé
   // son + chiffres de dégâts quand je touche un bot (mêmes sons qu'en 1v1)
@@ -6083,6 +6101,7 @@ function onBotHit(m){
     else playSfx(m.sh > 0 ? 'hit_shield' : 'hit_flesh');
     if(m.head) playSfx('hit_head');
     b._shPrev = m.sh;
+    if(b.type !== 'drone' && m.hp > 0) playBotHitVoice();   // grognement du bot touche (non letal)
     if(b.soldier && b.soldier.rigged && m.hp > 0) playHitAnim(b.soldier, m.head);
     if(b.pos){
       const np = b.pos.clone(); np.y += (b.type === 'drone' ? 0.5 : 2.0);
@@ -6095,6 +6114,13 @@ function onBotHit(m){
   else { const hm = document.getElementById('hitmarker');
     if(hm){ hm.classList.toggle('head', !!m.head); hm.style.opacity = 1; setTimeout(()=>{ hm.style.opacity = 0; }, m.head?140:95); } }
 }
+// Mode Kill contre la montre : pop "+1 KILL" (1 s) + total qui fade in a cote (remplace la banniere).
+function killPop(){
+  const el = document.getElementById('killpop'); if(!el) return;
+  const tot = el.querySelector('.kp-total'); if(tot) tot.textContent = localBotKills;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(()=>el.classList.remove('show'), 1100);
+}
 function onBotKill(m){
   const b = botMgr.get(m.id);
   if(b && b.type === 'drone'){
@@ -6102,7 +6128,7 @@ function onBotKill(m){
     if(b.drone){ spawnDroneExplosion(b.drone.position.clone()); b.drone.visible = false; } stopDroneSound(b);
     const _T = (LBOT.types && LBOT.types.drone) || {};
     playSfxAt(_T.explode_sfx || 'drone_explode', b.pos, 1.0);
-    killHealthBar('bot'+m.id); killFeed('VOUS ☠ DRONE');
+    killHealthBar('bot'+m.id); if(!(typeof INSANE!=='undefined' && INSANE.on)) killFeed('VOUS ☠ DRONE');
     return;
   }
   if(b && b.soldier){
@@ -6113,7 +6139,7 @@ function onBotKill(m){
       const yr = b.soldier.root.rotation.y;
       startRagdoll(b.soldier, b.pos.clone(), {x:Math.sin(yr), z:Math.cos(yr)});
     }
-    playSfxAt('death', b.pos, 1);
+    playSfxAt(b.type === 'sentinel' ? 'bot2_death' : 'death', b.pos, 1);   // Sentinel = son dedie
     fadeOutSoldier(b.soldier);
     killHealthBar('bot'+m.id);
   }
@@ -6121,7 +6147,7 @@ function onBotKill(m){
   if(localBotMode && b){
     spawnOrb('lb'+(nextLocalOrbId++), [b.pos.x, (b.pos.y||0)+1.1, b.pos.z]);
   }
-  killFeed('VOUS ☠ BOT' + (m.head ? ' (tête)' : ''));
+  if(!(typeof INSANE!=='undefined' && INSANE.on)) killFeed('VOUS ☠ BOT' + (m.head ? ' (tête)' : ''));
 }
 function onBotRespawn(m){
   const b = botMgr.get(m.id);
@@ -6792,9 +6818,9 @@ function applyLocalBotDamage(id, b, dmg, head, melee){
     if(b.mv && Math.random()<0.6) b.mv.strafeDir *= -1; }
   if(b.hp <= 0){
     onBotKill({ id, head: !!head });
-    showKillBanner('un bot', !!head);
     reloadedSinceKill = false;
     localBotKills++; const ps = document.getElementById('pscore'); if(ps) ps.textContent = localBotKills;
+    if(typeof INSANE!=='undefined' && INSANE.on) killPop(); else showKillBanner('un bot', !!head);   // chrono : +1 KILL anime
     checkOverchargeUnlock();   // 3 kills d'affilée → Overcharge dispo
     if(LBOT.waveMode){ checkWaveClear(); }
     else setTimeout(()=>{
