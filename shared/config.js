@@ -189,7 +189,7 @@
         mag: 30, fire_rate: 0.078, reload_t: 1.9,
         damage_body: 13, damage_head: 19,
         spread_hip: 0.050, spread_ads: 0.002,
-        red: { damage_body: 20, damage_head: 27, spread_hip: 0.018, sfx: 'shot_red' }, // BONUS ROUGE (3 kills) : +degats, spread reduit, 10s
+        red: { damage_body: 20, damage_head: 27, spread_hip: 0.018, fire_rate: 0.062, sfx: 'r69_buff' }, // BUFF : +degats, spread reduit, CADENCE 0.078->0.062, 10s
         recoil_mult: 1.0,
         recoil_vertical: 1.0,
         recoil_speed: 1.0,
@@ -211,7 +211,7 @@
         mag: 3, fire_rate: 0.545, reload_t: 1.04,
         damage_body: 70, damage_head: 90,   // tete revert a 90 (normal) — le BONUS ROUGE la remonte a 175
         spread_hip: 0.028, spread_ads: 0.0003,
-        red: { damage_body: 70, damage_head: 175, spread_hip: 0.010, sfx: 'shot_red' }, // BONUS ROUGE (3 kills) : +degats, spread reduit, 10s
+        red: { damage_body: 70, damage_head: 175, spread_hip: 0.010, sfx: 'wingman_buff' }, // BUFF : +degats, spread reduit, 10s
         recoil_mult: 1.4,
         recoil_vertical: 0.7,
         recoil_speed: 0.9,
@@ -310,7 +310,7 @@
         streak: 3,             // kills d'affilée requis pour débloquer
         window_ms: 15000,      // une fois dispo : si aucun HIT dans ce délai (15 s) → reset (refaire 3 kills)
         doubletap_ms: 300,     // fenêtre du double-tap d'attaque pour la lancer (quand dispo)
-        radius: 10,            // rayon de touche (m)
+        radius: 20,            // rayon de touche / portee du sabre lance (m) : +10m
         dmg_front: 140,        // dégâts en frontal (cône avant)
         dmg_side: 100,         // dégâts sur les côtés (dans le rayon, hors cône frontal)
         front_cone_deg: 70,    // ouverture du cône "frontal" (au-delà = côtés)
@@ -668,6 +668,8 @@
       drone_explode: '/audio/drone_explode.mp3',   // explosion du drone sonde (mort)
       sentinel: '/audio/sentinel.mp3',              // un Sentinel vient de reperer le joueur
       buff_activate: '/audio/buff_activate.mp3',    // deblocage du buff (arme violette)
+      insane_dead: '/audio/insane_dead.mp3',        // mort du joueur en mode Insane
+      r69_buff: '/audio/r69_buff.mp3', wingman_buff: '/audio/wingman_buff.mp3',   // tir des armes en BUFF
       wingman_shot: '/audio/wingman_shot.mp3', wingman_reload: '/audio/wingman_reload.mp3',
       // ===== UI / menu =====
       menu_audio: '/audio/menu_audio.mp3',   // musique d'accueil (boucle)
@@ -704,6 +706,7 @@
       slide: 1.0, slide_jump: 1.0, wallbounce: 1.0, mantle: 1.0, superglide: 1.0,
       holster: 1.0, equip: 1.0, crouch: 1.0,
       death: 1.0, orb_pickup: 1.0, drone_explode: 1.0, sentinel: 1.0, buff_activate: 1.0,
+      insane_dead: 1.0, r69_buff: 1.0, wingman_buff: 1.0,
       button1: 1.0, button2: 1.0, spawn: 1.0,
     },
     // ===== Sons d'impact de balle PAR SURFACE =====

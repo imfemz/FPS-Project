@@ -3635,6 +3635,7 @@ function activateGunRed(idx){
 // À chaque kill : 3 kills (toutes armes confondues) → arme l'arme EN MAIN
 // (sabre = overcharge dispo, flingue = bonus rouge 10 s auto).
 function checkOverchargeUnlock(){
+  if(typeof itemBuffActive==='function' && itemBuffActive()){ overBase = localBotKills; return; }   // buff d'item : kills non comptes pour re-stack
   const need = (GAMECFG.RED_BONUS && GAMECFG.RED_BONUS.streak) ?? overConfig().streak ?? 3;
   if((localBotKills - overBase) < need) return;
   const W = curWeapon();
@@ -5443,7 +5444,7 @@ function shoot(){
   shotsInBurst++;
   const W = curWeapon();
   me.mag--; me.mags[me.weaponIdx] = me.mag;
-  me.fireT = (W.fire_rate ?? CONFIG.FIRE_RATE); me.lastShotAt = now;
+  me.fireT = ((redActive(me.weaponIdx) && W.red && W.red.fire_rate) ? W.red.fire_rate : (W.fire_rate ?? CONFIG.FIRE_RATE)); me.lastShotAt = now;   // BUFF : cadence accrue
   // Secousse de tir LOURDE (ex: Wingman) : à-coup grave par balle pour "sentir" la puissance.
   if(W.fire_shake){ fireShake = 1; fireShakeT = 0; fireShakeCfg = W.fire_shake; }
   const rmult = (W.recoil_mult ?? 1);
@@ -6150,6 +6151,7 @@ function insaneUpdateTimerUI(){
 // Lance une session Insane (appelee depuis startLocalBotMode quand difficulty=insane).
 function startInsaneRun(){
   INSANE.on = true; INSANE.ended = false; INSANE.running = false; INSANE.introFreeze = false; INSANE.timeLeft = INSANE.total;
+  clearBuffItem(); buffItemT = 30; itemBuffUntil = 0;
   const cp = document.getElementById('compass'); if(cp) cp.style.display = 'none';
   const tm = document.getElementById('insanetimer'); if(tm){ tm.style.display = 'block'; tm.classList.remove('low'); tm.textContent = insaneFmt(INSANE.total); }
   { const hud = document.getElementById('hud'); if(hud) hud.style.opacity = '1'; }
@@ -6171,6 +6173,11 @@ function insaneTick(dt){
   INSANE.timeLeft -= dt;
   if(INSANE.timeLeft <= 0){ INSANE.timeLeft = 0; insaneUpdateTimerUI(); insaneEndScore(); return; }
   insaneUpdateTimerUI();
+  // ITEM de buff au sol : des la vague 4, 1 chance sur 4 toutes les 30 s, a 40 m du joueur
+  if((LBOT.wave||1) >= 4){
+    buffItemT -= dt;
+    if(buffItemT <= 0){ buffItemT = 30; if(!buffBall && Math.random() < 0.25) spawnBuffItem(); }
+  }
 }
 // Camera 3e personne a la mort (reutilise deathCam, sans killcam ni respawn).
 function startInsaneDeathCam(){
@@ -6189,7 +6196,7 @@ function startInsaneDeathCam(){
 }
 // Mort du joueur en Insane : esprit + freeze (pas de respawn).
 function insaneDeath(){
-  alive = false; playSfx('death');
+  alive = false; playSfx('insane_dead');
   INSANE.ended = true; INSANE.running = false;
   spawnSoulOrbs(new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z));
   document.exitPointerLock && document.exitPointerLock();
@@ -6243,6 +6250,52 @@ function updateSoulFx(dt){
     o.sp.position.y += o.vy*dt;
     o.sp.material.opacity = Math.sin(k*Math.PI) * 0.85;   // fade in puis out
     if(k >= 1){ scene.remove(o.sp); soulFx.splice(i,1); }
+  }
+}
+
+/* ============ ITEM DE BUFF au sol (mode Insane, des la vague 4) ============ */
+// Boule rouge glow qui flotte a 1 m : 1 chance/4 toutes les 30 s a 40 m. Ramassee -> buff arme 20 s.
+let buffBall = null, buffItemT = 30, itemBuffUntil = 0;
+function itemBuffActive(){ return performance.now() < itemBuffUntil; }
+function createBuffBall(pos){
+  const g = new THREE.Group(); g.position.copy(pos);
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 12), new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent:true, opacity:0.95 }));
+  g.add(core);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: ORB_TEX, color: 0xff3a3a, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  halo.scale.set(2.0, 2.0, 1); g.add(halo);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.03, 8, 36), new THREE.MeshBasicMaterial({ color: 0xff6a6a, transparent:true, opacity:0.8, blending:THREE.AdditiveBlending, depthWrite:false }));
+  ring.material.toneMapped = false; ring.rotation.x = Math.PI/2; g.add(ring);
+  const light = new THREE.PointLight(0xff2a2a, 1.4, 10); g.add(light);
+  g.userData = { core, halo, ring, light, baseY: pos.y, t: 0 };
+  scene.add(g); return g;
+}
+function spawnBuffItem(){
+  if(buffBall) return;
+  const ang = Math.random()*Math.PI*2, lim = (MAP.HALF || 45) - 2;
+  let x = me.pos.x + Math.cos(ang)*40, z = me.pos.z + Math.sin(ang)*40;
+  x = Math.max(-lim, Math.min(lim, x)); z = Math.max(-lim, Math.min(lim, z));
+  buffBall = createBuffBall(new THREE.Vector3(x, 1.0, z));
+}
+function clearBuffItem(){ if(buffBall){ scene.remove(buffBall); buffBall = null; } }
+// Active le buff arme pour 20 s sur TOUTES les armes a feu (+ marque la fenetre "kills non comptes").
+function activateItemBuff(){
+  const now = performance.now(), dur = 20000, W = GAMECFG.WEAPONS || [];
+  for(let i=0;i<W.length;i++){ if(W[i] && W[i].red) redUntil[i] = now + dur; }
+  itemBuffUntil = now + dur;
+  overBase = localBotKills;   // les kills sous ce buff ne re-stackent pas un autre buff
+  if(typeof playSfx==='function') playSfx('buff_activate');
+  if(typeof showHUDToast==='function') showHUDToast('SURCHARGE', 'bad', 2200);
+}
+function updateBuffItem(dt){
+  if(!buffBall) return;
+  const u = buffBall.userData; u.t += dt;
+  buffBall.position.y = u.baseY + Math.sin(u.t*2.2)*0.12;
+  buffBall.rotation.y += dt*1.2;
+  if(u.ring) u.ring.rotation.z += dt*1.6;
+  if(u.light) u.light.intensity = 1.2 + Math.sin(u.t*4)*0.45;
+  if(alive && localBotMode){
+    const dx = me.pos.x - buffBall.position.x, dy = (me.pos.y+1) - buffBall.position.y, dz = me.pos.z - buffBall.position.z;
+    if(dx*dx + dy*dy + dz*dz < 2.0*2.0){ activateItemBuff(); clearBuffItem(); }
   }
 }
 // ===== INSANE : courbe de difficulte EXPONENTIELLE par vague (baseline V1 douce -> plafond) =====
@@ -9401,6 +9454,7 @@ function animate(){
   }
   updateImpactEffects(dt);
   if(soulFx.length) updateSoulFx(dt);
+  updateBuffItem(dt);
   updateHealthBars(dt);
   updateDamageNumbers(dt);
   updateCorpseFades(dt);
