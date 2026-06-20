@@ -858,7 +858,7 @@
       enabled: true,
       hideBox: true,        // cache la boite d'origine (la collision reste active)
       byType: {
-        container: '/models/container.glb',
+        container: '/models/crate.glb',
         metal:     '/models/cube.glb',
         wall:      '/models/concrete_wall.glb',
         crate:     '/models/crate.glb',
@@ -867,7 +867,7 @@
     TEXTURES: {
       sky: '/textures/moon_sky.jpg', floor: '/textures/Concrete_Wall_016_SD/Concrete_Wall_016_basecolor.png',
       wall: '/textures/Concrete_Wall_016_SD/Concrete_Wall_016_basecolor.png', crate: '/textures/crate.jpg',
-      platform: '/textures/platform.jpg', ramp: '/textures/ramp.jpg',
+      platform: '/textures/platform.jpg', ramp: '/textures/Sci-fi_Metal_Walkway_001_SD/Sci-fi_Metal_Walkway_001_basecolor.png',
     },
     TEXTURE_REPEAT: { floor: 20, wall: 3, crate: 1, platform: 2, ramp: 2 },
     HUD: {
