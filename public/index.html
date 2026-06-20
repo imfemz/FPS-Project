@@ -6908,7 +6908,18 @@ function updateLocalBots(dt){
     const vlen = Math.hypot(vx,vz) || 1; vx/=vlen; vz/=vlen;
 
     // Horizontale + collision
-    const spd = (run ? (LBOT.run_speed ?? 4.6) : LBOT.speed) * (b.speedMul || 1);
+    let spd;
+    if(b.type === 'sentinel'){
+      spd = (run ? (LBOT.run_speed ?? 4.6) : LBOT.speed) * (b.speedMul || 1);
+    } else {
+      // Bots normaux : base 4, monte vers ~5.7 (aleatoire, lisse) quand ils engagent le joueur.
+      if(b._spd == null) b._spd = 4;
+      b._spdRoll = (b._spdRoll || 0) - dt;
+      if(b._spdRoll <= 0){ b._spdRoll = 2 + Math.random()*2; b._spdEng = 4.7 + Math.random()*1.0; }   // cible d'engagement ~4.7-5.7
+      const _tgt = knows ? (b._spdEng || 5.2) : 4;                                                     // engage -> ~5.7 ; sinon base 4
+      b._spd += (_tgt - b._spd) * Math.min(1, dt*3);                                                   // transition fluide
+      spd = b._spd;
+    }
     _botTmp.set(b.pos.x + (vx*spd + (b.knockX||0))*dt, 0, b.pos.z + (vz*spd + (b.knockZ||0))*dt); // + recul sabre (knockback)
     collide(_botTmp, LBOT.radius ?? 0.5, b.pos.y||0);
     const brad = LBOT.radius ?? 0.5;
