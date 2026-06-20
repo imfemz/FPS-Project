@@ -9976,6 +9976,9 @@ function animate(){
   if(playing && alive && !botFrozen) playerUpdate(dt, aMenuIsOpen() ? null : g);
   // FILET ANTI-NaN GLOBAL : neutralise tout NaN de mécanique (slide/wall-bounce) AVANT caméra/FX/tracers
   // -> caméra jamais NaN (plus d'écran gris) et géométries jamais NaN.
+  if(!(isFinite(me.vel.x)&&isFinite(me.vel.y)&&isFinite(me.vel.z)&&isFinite(me.pos.x)&&isFinite(me.pos.y)&&isFinite(me.pos.z))){
+    console.warn('[NaN-DIAG] vel='+me.vel.x+','+me.vel.y+','+me.vel.z+' pos='+me.pos.x+','+me.pos.y+','+me.pos.z+' | wb='+me.wallBounced+' boost='+me.wbBoostT+' slide='+(me.slide&&me.slide.active)+' climb='+(me.climb&&me.climb.active)+' mantle='+(me.mantle&&me.mantle.active)+' onGround='+me.onGround+' eye='+me.eye+' pitch='+me.pitch+' yaw='+me.yaw);
+  }
   if(!(isFinite(me.vel.x)&&isFinite(me.vel.y)&&isFinite(me.vel.z))) me.vel.set(0,0,0);
   if(!(isFinite(me.pos.x)&&isFinite(me.pos.y)&&isFinite(me.pos.z))){ const _s=(typeof MAP!=='undefined'&&MAP&&MAP.spawns&&MAP.spawns[0])||[0,0,0,0]; me.pos.set(_s[0]||0, 2, _s[2]||0); me.vel.set(0,0,0); if(me.slide) me.slide.active=false; }
   if(playing && alive && !botFrozen) applySaberMagnet(dt);   // aimant de visée quand le sabre est sorti près d'un ennemi
