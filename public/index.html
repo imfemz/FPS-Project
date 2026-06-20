@@ -3629,9 +3629,8 @@ let redUntil = [0, 0, 0];   // timestamp de fin du bonus rouge, par index d'arme
 function redActive(idx){ return performance.now() < (redUntil[idx] || 0); }
 function activateGunRed(idx){
   redUntil[idx] = performance.now() + ((GAMECFG.RED_BONUS && GAMECFG.RED_BONUS.duration) ?? 10) * 1000;
-  if(typeof playSfx === 'function') playSfx('buff_activate');   // son de deblocage du buff
+  if(typeof playSfx === 'function') playSfx('buff_activate');   // son de deblocage du buff (remplace les bips synth)
   if(typeof showHUDToast === 'function') showHUDToast('SURCHARGE', 'bad', 2200);
-  if(typeof sfx === 'function'){ sfx(230, 180, 0.16, 0.05, 'square'); sfx(110, 260, 0.20, 0.05, 'sawtooth'); }
 }
 // À chaque kill : 3 kills (toutes armes confondues) → arme l'arme EN MAIN
 // (sabre = overcharge dispo, flingue = bonus rouge 10 s auto).
@@ -6465,15 +6464,16 @@ function updateLocalBots(dt){
     ai.seenT = (see || wallKnow) ? (A.forget_time ?? 3) : Math.max(0, ai.seenT - dt);
     if(see || wallKnow){ ai.lastX = me.pos.x; ai.lastZ = me.pos.z; }
     const knows = see || wallKnow || ai.seenT > 0;
-    // SENTINEL : 1ere vue (LOS) -> son d'alerte, puis il CHARGE alert_time s plus tard (s'il voit encore)
+    // SENTINEL : 1ere vue (LOS) -> son d'alerte ; il CHARGE alert_time s plus tard s'il vous voit encore
     if(b.rush){
-      if(see && !ai.spotted){ ai.spotted = true; ai.alertT = (b.alertTime || 4); if(typeof playSfx==='function') playSfx('sentinel'); }
+      if(see && !ai.spotted){ ai.spotted = true; ai.alertT = (b.alertTime || 4); ai.charged = false; if(typeof playSfx==='function') playSfx('sentinel'); }
       if(ai.spotted && ai.alertT > 0) ai.alertT -= dt;
+      if(ai.spotted && (ai.alertT||0) <= 0 && see) ai.charged = true;   // demarre la charge des qu'il vous revoit apres le delai
     }
-    const charging = b.rush ? (ai.spotted && (ai.alertT||0) <= 0 && knows) : false;
-    const sentHold = b.rush && ai.spotted && (ai.alertT||0) > 0;     // telegraphe : fige avant de charger
+    const charging = b.rush ? !!ai.charged : false;
+    const sentHold = b.rush && ai.spotted && !ai.charged;            // figé (telegraphe) tant qu'il n'a pas (re)vu apres le delai
     const sentWander = b.rush && !ai.spotted;                        // pas encore repere : erre
-    const inFire = (b.rush ? charging : see) && alive && distP <= fireRange;   // sentinel ne tire qu'en charge
+    const inFire = (b.rush ? (charging && see) : see) && alive && distP <= fireRange;   // sentinel : tire en charge ET avec LOS reelle
     // AGRESSIVITE : vu sans etre touche pendant aggro_time -> rush + tir continu (Sentinel : charge differee)
     if(see){ ai.noHitSeenT = (ai.noHitSeenT||0) + dt; } else { ai.noHitSeenT = 0; }
     const aggro = b.rush ? charging : (knows && ((ai.noHitSeenT||0) >= (A.aggro_time ?? 2)));
