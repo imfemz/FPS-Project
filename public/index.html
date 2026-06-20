@@ -168,6 +168,7 @@
   .scorebox{font-family:var(--mono);padding:6px 16px;font-size:22px;font-weight:700;background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius-sm);backdrop-filter:blur(var(--blur))}
   #pscore{color:var(--txt)}#escore{color:var(--txt-dim)}
   #scoremid{font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--txt-faint);text-align:center}
+  #reloadmsg{display:none!important}   /* indicateur RECHARGEMENT retiré du HUD (le rechargement reste visible sur les munitions) */
   /* ===== Tableau des scores FFA — carte flottante, a GAUCHE du logo top-droite (aligne) ===== */
   #leaderboard{position:absolute;top:18px;right:312px;min-width:230px;
     background:var(--panel);border:1px solid var(--brd);border-radius:var(--radius-sm);padding:9px 12px 10px;
@@ -482,7 +483,7 @@
 </style>
 </head>
 <body>
-<script>(function(){var h=location.hostname;if(h!=='localhost'&&h!=='127.0.0.1')return;try{var es=new EventSource('/__dev_reload');es.onmessage=function(){location.reload();};}catch(e){}})();</script>
+<script>(function(){var h=location.hostname;if(h!=='localhost'&&h!=='127.0.0.1')return;var pend=false;function go(){if(document.pointerLockElement){pend=true;}else{location.reload();}}try{var es=new EventSource('/__dev_reload');es.onmessage=function(){go();};}catch(e){}setInterval(function(){if(pend&&!document.pointerLockElement)location.reload();},800);})();</script>
 <!-- Écran de CHARGEMENT : bloque le menu tant que tous les assets ne sont pas prêts -->
 <div id="preload" style="position:fixed;inset:0;z-index:9999;background:#0a0d12;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity .35s ease;font-family:inherit;color:#dfe7ef">
   <div style="font-size:30px;font-weight:800;letter-spacing:4px">FEMZ <b style="color:#36e3ff">FPS</b></div>
@@ -6871,10 +6872,13 @@ function startLocalBotMode(){
   if(LBOT.waveMode) setTimeout(()=>showWaveBanner(1), 250);
   const lb = document.getElementById('leaderboard'); if(lb) lb.style.display = 'none';
   const sc = document.getElementById('score');
-  if(sc){ sc.style.display = 'flex'; sc.style.flexDirection = 'column'; sc.style.gap = '3px';
-    const mid = document.getElementById('scoremid'); if(mid){ mid.textContent = (INSANE.on ? 'KILLS' : 'BOT MODE'); mid.style.order = '-1'; mid.style.fontSize = '11px'; mid.style.letterSpacing = '3px'; mid.style.color = 'var(--txt)'; }
-    const es = document.getElementById('escore'); if(es) es.style.display = 'none';
-    const ps = document.getElementById('pscore'); if(ps) ps.textContent = '0';
+  if(sc){
+    if(LBOT.waveMode){   // INSANE : on garde le compteur KILLS (haut droite)
+      sc.style.display = 'flex'; sc.style.flexDirection = 'column'; sc.style.gap = '3px';
+      const mid = document.getElementById('scoremid'); if(mid){ mid.textContent = 'KILLS'; mid.style.order = '-1'; mid.style.fontSize = '11px'; mid.style.letterSpacing = '3px'; mid.style.color = 'var(--txt)'; }
+      const es = document.getElementById('escore'); if(es) es.style.display = 'none';
+      const ps = document.getElementById('pscore'); if(ps) ps.textContent = '0';
+    } else { sc.style.display = 'none'; }   // ENTRAÎNEMENT : pas de bandeau score (écran propre)
   }
 }
 // ===== Mode INSANE : survie par VAGUES (3 bots au depart, +1/vague, plafonne a MAX_BOTS) =====
