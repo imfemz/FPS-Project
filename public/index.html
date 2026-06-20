@@ -6897,8 +6897,10 @@ function botMoveAcc(b){
 }
 function botShoot(b, tier, playerSpeed, distP){
   b.ai.fireFlash = 0.08;
-  // visuel de tir 3e personne (comme les adversaires en ligne) : muzzle flash au canon + tracer vers le joueur
-  if(b.soldier){
+  const _W = (GAMECFG.WEAPONS && GAMECFG.WEAPONS[b.weaponIdx||0]) || {};
+  const _melee = !!_W.melee;   // bot sabre : pas de tir balistique
+  // visuel de tir 3e personne (tracer + flash) : SEULEMENT pour les armes a feu (pas le sabre)
+  if(b.soldier && !_melee){
     const _eye = new THREE.Vector3(me.pos.x, me.pos.y + (me.eye || 1.62), me.pos.z);
     const _bp  = new THREE.Vector3(b.pos.x, b.pos.y + 1.4, b.pos.z);
     const _dir = _eye.clone().sub(_bp).normalize();
@@ -6919,11 +6921,12 @@ function botShoot(b, tier, playerSpeed, distP){
   const fr = A.fire_range ?? 15;
   const distF = 1 - Math.min(1, (distP||0) / fr) * (1 - (A.far_hit_mult ?? 0.6));
   if(Math.random() < (tier.hit_chance ?? 0.7) * moveF * distF){
-    const W = (GAMECFG.WEAPONS && GAMECFG.WEAPONS[b.weaponIdx||0]) || {};
     const _fhm = (!b.playerHit) ? ((LBOT.ai && LBOT.ai.first_hit_mult) ?? 1.6) : 1;   // bonus si le bot frappe AVANT d'etre touche
-    if((LBOT.ai && LBOT.ai.damage_player) !== false) damagePlayerLocal((W.damage_body ?? 15) * (tier.dmg_mult ?? 1) * _fhm, b.pos);
+    if((LBOT.ai && LBOT.ai.damage_player) !== false) damagePlayerLocal((_W.damage_body ?? 15) * (tier.dmg_mult ?? 1) * _fhm, b.pos);
   }
-  playSfxAt('shot', b.pos, 0.7, { refDistance: 8, maxDistance: 60, rolloff: 0.8 });
+  // SON DE L'ARME : R69='shot', Wingman='wingman_shot', Sabre = coup de sabre (saber1/2/3)
+  const _sfx = _melee ? (['saber1','saber2','saber3'][(Math.random()*3)|0]) : (_W.sfx_shot || 'shot');
+  playSfxAt(_sfx, b.pos, _melee ? 0.85 : 0.7, { refDistance: 8, maxDistance: 60, rolloff: 0.8 });
 }
 function updateLocalBots(dt){
   if(!localBotMode || !playing) return;
@@ -6945,7 +6948,7 @@ function updateLocalBots(dt){
 
     // Perception (Sentinel : wallhack = detecte/poursuit a travers les murs)
     const _vr = (b.view_range || A.view_range || 24);
-    const fireRange = (b.fireRange || A.fire_range || 15);
+    const fireRange = (b.fireRange || ((GAMECFG.WEAPONS && GAMECFG.WEAPONS[b.weaponIdx] && GAMECFG.WEAPONS[b.weaponIdx].melee) ? (LBOT.saber_range ?? 2.8) : (A.fire_range || 15)));
     const see = (distP < _vr) && alive && botSeesPlayer(b);            // LOS reel (pour le TIR)
     const wallKnow = !!b.wallhack && (distP < _vr) && alive;           // detection a travers mur (poursuite)
     ai.seenT = (see || wallKnow) ? (A.forget_time ?? 3) : Math.max(0, ai.seenT - dt);
@@ -6953,7 +6956,7 @@ function updateLocalBots(dt){
     const knows = see || wallKnow || ai.seenT > 0;
     // SENTINEL : 1ere vue (LOS) -> son d'alerte ; il CHARGE alert_time s plus tard s'il vous voit encore
     if(b.rush){
-      if(see && !ai.spotted){ ai.spotted = true; ai.alertT = (b.alertTime || 4); ai.charged = false; if(typeof playSfx==='function') playSfx('sentinel'); }
+      if(see && !ai.spotted){ ai.spotted = true; ai.alertT = (b.alertTime || 4); ai.charged = false; if(typeof playSfx==='function' && b.type === 'sentinel') playSfx('sentinel'); }   // alerte Sentinel : uniquement le vrai Sentinel (mode Insane)
       if(ai.spotted && ai.alertT > 0) ai.alertT -= dt;
       if(ai.spotted && (ai.alertT||0) <= 0 && see) ai.charged = true;   // demarre la charge des qu'il vous revoit apres le delai
     }
