@@ -2032,12 +2032,12 @@ function spawnOrb(id, p){
     new THREE.MeshBasicMaterial({color:0x7fd4ff, transparent:true, opacity:.95}));
   grp.add(core);
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({map:ORB_TEX, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false}));
-  halo.scale.set(2.1, 2.1, 1); grp.add(halo);
-  const light = new THREE.PointLight(0x66c8ff, 1.3, 9); grp.add(light);
+  halo.scale.set(1.1, 1.1, 1); grp.add(halo);                              // glow reduit
+  const light = new THREE.PointLight(0x66c8ff, 0.26, 6); grp.add(light);   // intensite -80%
   const parts = [];
-  for(let i=0;i<7;i++){ // particules bleues qui montent en boucle
+  for(let i=0;i<3;i++){ // particules bleues qui montent en boucle (nombre reduit)
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:ORB_TEX, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false}));
-    sp.scale.set(.22,.22,1);
+    sp.scale.set(.13,.13,1);
     const a = Math.random()*Math.PI*2;
     sp.userData = { a, r: .35 + Math.random()*.3, phase: Math.random()*1.4 };
     grp.add(sp); parts.push(sp);
@@ -2062,8 +2062,8 @@ function updateOrbs(dt){
     let fadeK = 1;
     if(o.fading){ o.fadeT -= dt; if(o.fadeT <= 0){ removeOrb(id); continue; } fadeK = Math.max(0, o.fadeT / (o.fadeDur || 0.45)); }
     if(o.core) o.core.material.opacity = .95 * fadeK;
-    if(o.halo) o.halo.material.opacity = fadeK;
-    if(o.light) o.light.intensity = 1.3 * fadeK;
+    if(o.halo) o.halo.material.opacity = 0.4 * fadeK;
+    if(o.light) o.light.intensity = 0.26 * fadeK;
     for(const sp of o.parts){
       const u = (o.t*0.65 + sp.userData.phase) % 1.4;
       sp.position.set(Math.cos(sp.userData.a)*sp.userData.r, u - .4, Math.sin(sp.userData.a)*sp.userData.r);
@@ -6003,11 +6003,15 @@ function onBotStart(m){
   document.getElementById('pscore').textContent = '0';
   document.getElementById('escore').textContent = '0';
   const cd = document.getElementById('countdown');
+  { const _ins = (typeof INSANE!=='undefined' && INSANE.on);
+    const cp = document.getElementById('compass'); if(cp) cp.style.display = _ins ? 'none' : '';
+    const tm = document.getElementById('insanetimer'); if(tm) tm.style.display = _ins ? 'block' : 'none'; }
   let n = Math.max(1, m.countdown||1); cd.style.display='flex'; cd.textContent = n;
   const iv = setInterval(()=>{
     n--;
     if(n<=0){ clearInterval(iv); cd.style.display='none'; playing = true;
-      document.getElementById('hud').style.display='block'; lock(); }
+      document.getElementById('hud').style.display='block';
+      if(typeof INSANE!=='undefined' && INSANE.on) insaneIntro(); else lock(); }
     else cd.textContent = n;
   }, 1000);
 }
@@ -6142,6 +6146,7 @@ function startInsaneRun(){
   INSANE.on = true; INSANE.ended = false; INSANE.running = false; INSANE.introFreeze = false; INSANE.timeLeft = INSANE.total;
   const cp = document.getElementById('compass'); if(cp) cp.style.display = 'none';
   const tm = document.getElementById('insanetimer'); if(tm){ tm.style.display = 'block'; tm.classList.remove('low'); tm.textContent = insaneFmt(INSANE.total); }
+  { const hud = document.getElementById('hud'); if(hud) hud.style.opacity = '1'; }
   hide('insanedeath');
 }
 // Apres le decompte 3-2-1 : freeze + message "2 minutes", puis le timer demarre.
@@ -6195,6 +6200,7 @@ function insaneEndScore(){
   if(INSANE.ended) return;
   INSANE.ended = true; INSANE.running = false;
   document.exitPointerLock && document.exitPointerLock();
+  { const hud = document.getElementById('hud'); if(hud) hud.style.opacity = '0'; }
   const el = document.getElementById('insanedeath');
   if(el){
     const t = el.querySelector('.id-title'); if(t) t.textContent = 'TEMPS ÉCOULÉ';
@@ -6291,8 +6297,9 @@ function startLocalBotMode(){
   // Mode solo : on coupe le réseau proprement (pas de message "connexion perdue")
   if(ws){ try{ ws.onclose = null; ws.close(); }catch(e){} ws = null; }
   spec.active = false; localBotMode = true; localBotKills = 0; resetOvercharge();
+  INSANE.on = false; INSANE.ended = false;
   LBOT.waveMode = (LBOT.ai.difficulty === 'insane'); LBOT.wave = 1;   // INSANE = survie par vagues
-  if(LBOT.waveMode) applyInsaneWave(1);
+  if(LBOT.waveMode){ applyInsaneWave(1); startInsaneRun(); }
   const _startCount = LBOT.waveMode ? botsForWave(1) : LBOT.count;
   const bots = []; const _placed = [];
   for(let i=0;i<_startCount;i++){ const _p = lbotSpawnPoint(i, _startCount, _placed); _placed.push([_p[0], _p[2]]); bots.push({ id: i+1, p: _p, yaw: Math.random()*Math.PI*2 }); }
@@ -6305,7 +6312,7 @@ function startLocalBotMode(){
   const lb = document.getElementById('leaderboard'); if(lb) lb.style.display = 'none';
   const sc = document.getElementById('score');
   if(sc){ sc.style.display = 'flex'; sc.style.flexDirection = 'column'; sc.style.gap = '3px';
-    const mid = document.getElementById('scoremid'); if(mid){ mid.textContent = 'BOT MODE'; mid.style.order = '-1'; mid.style.fontSize = '11px'; mid.style.letterSpacing = '3px'; mid.style.color = 'var(--txt)'; }
+    const mid = document.getElementById('scoremid'); if(mid){ mid.textContent = (INSANE.on ? 'KILLS' : 'BOT MODE'); mid.style.order = '-1'; mid.style.fontSize = '11px'; mid.style.letterSpacing = '3px'; mid.style.color = 'var(--txt)'; }
     const es = document.getElementById('escore'); if(es) es.style.display = 'none';
     const ps = document.getElementById('pscore'); if(ps) ps.textContent = '0';
   }
@@ -6373,6 +6380,7 @@ function botSeesPlayer(b){
 }
 function localPlayerDeath(){
   if(!alive) return;
+  if(LBOT.waveMode && INSANE.on){ insaneDeath(); return; }
   alive = false; playSfx('death');
   const _inMenu = (typeof aMenuIsOpen === 'function' && aMenuIsOpen()); // mort en plein menu → on y reste
   if(!_inMenu) show('deathscreen');
@@ -6802,6 +6810,8 @@ function toMenu(msg){
   stopSpectate();
   clearBots();
   localBotMode = false;   // quitter le mode entraînement
+  if(typeof INSANE!=='undefined'){ INSANE.on=false; INSANE.ended=false; INSANE.running=false; INSANE.introFreeze=false; }
+  { const cp=document.getElementById('compass'); if(cp) cp.style.display=''; const tm=document.getElementById('insanetimer'); if(tm) tm.style.display='none'; const idd=document.getElementById('insanedeath'); if(idd) idd.classList.remove('show'); const iii=document.getElementById('insaneintro'); if(iii) iii.classList.remove('show'); const hud=document.getElementById('hud'); if(hud) hud.style.opacity='1'; }
   playing = false; alive = true; myId = -1;
   if(ws){ ws.onclose=null; ws.close(); ws=null; }
   hideAll(); show('menu');
@@ -6813,7 +6823,7 @@ const gameEl = document.getElementById('game');
 // Un écran d'UI (menu/options/salon/pause/mort/fin) est-il ouvert ? → on bloque tir + re-lock
 // (sinon cliquer dans un menu déclenche un coup de feu / re-verrouille la souris par-dessus l'overlay).
 function uiBlocking(){
-  return ['menu','options','lobby','pause','deathscreen','endscreen'].some(id=>{
+  return ['menu','options','lobby','pause','deathscreen','endscreen','insanedeath','insaneintro'].some(id=>{
     const e = document.getElementById(id); return e && e.classList.contains('show');
   });
 }
@@ -7085,7 +7095,10 @@ document.getElementById('specbtn').onclick = ()=>{ if(ws && ws.readyState===1) w
 let optionsFrom = 'menu';
 document.getElementById('optbtn').onclick = ()=>{ hideAll(); buildOptions(); show('options'); optionsFrom='menu'; };
 document.getElementById('pauseopt').onclick = ()=>{ hide('pause'); buildOptions(); show('options'); optionsFrom='pause'; };
-document.getElementById('optback').onclick = ()=>{ hide('options'); if(optionsFrom==='pause') show('pause'); else show('menu'); };
+document.getElementById('optback').onclick = ()=>{ hide('options'); if(optionsFrom==='pause') show('pause'); else if(optionsFrom==='insanedeath') show('insanedeath'); else show('menu'); };
+document.getElementById('id-restart').onclick = ()=> insaneRestart();
+document.getElementById('id-salon').onclick = ()=>{ hide('insanedeath'); if(deathCam.active) endDeathCam(); if(typeof dcFade==='function') dcFade(false); INSANE.on=false; INSANE.ended=false; toMenu(); };
+document.getElementById('id-options').onclick = ()=>{ hide('insanedeath'); buildOptions(); show('options'); optionsFrom='insanedeath'; };
 document.getElementById('resumebtn').onclick = ()=>{ hide('pause'); lock(); };
 // QUITTER vers le salon (menu) pendant une partie — on pourra re-cliquer "Rejoindre" pour revenir
 const _pq = document.getElementById('pausequit'); if(_pq) _pq.onclick = ()=>{ toMenu(); };
@@ -8827,7 +8840,7 @@ function updateDeathCam(dt, g){
   // Bloqué pendant les premières 0.8s pour ne pas couper la séquence involontairement.
   const jumpNow = actionDown('jump', g);
   const canSkip = deathCam.t > 0.8;
-  if(canSkip && jumpNow && !deathCam.prevJump){
+  if(canSkip && jumpNow && !deathCam.prevJump && !deathCam.insane){
     deathCam.prevJump = jumpNow;
     if(deathCam.pendingRespawn){
       // le serveur a déjà autorisé le respawn → on réapparaît tout de suite
@@ -8861,8 +8874,8 @@ function updateDeathCam(dt, g){
     camera.fov = GAMECFG.FOV.VIEW; camera.updateProjectionMatrix();
 
     // fondu juste avant la fin de la phase
-    if(deathCam.t > (DC.tp_duration ?? 2.6) - (DC.fade_time ?? 0.4)) dcFade(true);
-    if(deathCam.t >= (DC.tp_duration ?? 2.6)){
+    if(!deathCam.insane && deathCam.t > (DC.tp_duration ?? 2.6) - (DC.fade_time ?? 0.4)) dcFade(true);
+    if(!deathCam.insane && deathCam.t >= (DC.tp_duration ?? 2.6)){
       // passage à la kill cam si activée ET si on a des frames enregistrées
       if(DC.killcam && startKillCam()){
         deathCam.phase = 'killcam';
@@ -8884,6 +8897,7 @@ function endDeathCam(){
   console.log('[NEON] endDeathCam | phase =', deathCam.phase, '| t =', deathCam.t.toFixed(2), '| pendingRespawn =', !!deathCam.pendingRespawn);
   deathCam.active = false;
   deathCam.phase = null;
+  deathCam.insane = false;
   if(deathCam.myBody){ scene.remove(deathCam.myBody.root); deathCam.myBody = null; }
   if(deathCam.kcBody){ scene.remove(deathCam.kcBody.root); deathCam.kcBody = null; }
   if(deathCam.kcEnemyBody){ scene.remove(deathCam.kcEnemyBody.root); deathCam.kcEnemyBody = null; }
@@ -9235,8 +9249,9 @@ function animate(){
   // cible pourtant centree dans le viseur.
   // FREEZE en mode bot quand un menu (pause/options) est ouvert : les bots ne bougent plus,
   // ne tirent plus, ne font plus de dégâts -> on ne peut plus se faire tuer dans les réglages.
-  const botFrozen = localBotMode && aMenuIsOpen();
+  const botFrozen = localBotMode && (aMenuIsOpen() || (typeof INSANE!=='undefined' && (INSANE.introFreeze || INSANE.ended)));
   if(localBotMode && !botFrozen) updateLocalBots(dt);   // IA des bots d'entrainement -> b.pos a jour
+  if(typeof INSANE!=='undefined' && INSANE.on) insaneTick(dt);
   else if(!spec.active && remote.exists && remote.buf && remote.buf.length >= 2) interpRemote(); // remote.pos a jour
   // Quand on navigue dans un MENU à la manette (pause/options en jeu), on COUPE l'input manette du
   // jeu (sinon le stick déplace le joueur et A = tir pendant qu'on clique). g=null = comme sans manette.
@@ -9362,6 +9377,7 @@ function animate(){
     if(t.life<=0){ scene.remove(t.line); if(t.line.geometry) t.line.geometry.dispose(); tracers.splice(i,1); }
   }
   updateImpactEffects(dt);
+  if(soulFx.length) updateSoulFx(dt);
   updateHealthBars(dt);
   updateDamageNumbers(dt);
   updateCorpseFades(dt);
