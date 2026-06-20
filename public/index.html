@@ -8142,19 +8142,23 @@ function triggerSpeedFx(dur){
   speedFxDur = dur || 1.8;
   speedFxT = speedFxDur;
 }
+let speedFxHold = false, speedFxOpa = 0, _speedFxClock = 0;   // hold = effet tenu pendant le son de vitesse
 function updateSpeedFx(dt){
+  if((speedFxT > 0 || speedFxHold || speedFxOpa > 0.003) && !speedFxCanvas) initSpeedFx();
   const el = speedFxCanvas; if(!el) return;
-  if(speedFxT <= 0){ if(el.style.opacity !== '0') el.style.opacity = '0'; return; }
-  speedFxT -= dt;
-  const p = Math.max(0, speedFxT / speedFxDur);     // 1 → 0
-  // fondu : apparition rapide, maintien, disparition
-  const fade = Math.min(1, (1-p)*6) * Math.min(1, p*4);
-  el.style.opacity = (fade*0.9).toFixed(3);
+  // cible d'opacite : son de VITESSE tenu (0.78) OU burst superglide (timer qui decroit)
+  let target = speedFxHold ? 0.78 : 0;
+  if(speedFxT > 0){ speedFxT -= dt; const p = Math.max(0, speedFxT / speedFxDur);
+    target = Math.max(target, Math.min(1, (1-p)*6) * Math.min(1, p*4) * 0.9); }
+  speedFxOpa += (target - speedFxOpa) * Math.min(1, dt*7);   // fondu entree/sortie doux
+  if(speedFxOpa < 0.003){ if(el.style.opacity !== '0') el.style.opacity = '0'; return; }
+  el.style.opacity = speedFxOpa.toFixed(3);
+  _speedFxClock += dt;
   const W = el.width = innerWidth, H = el.height = innerHeight;
   const cx = W/2, cy = H/2, R = Math.hypot(cx, cy);
   const ctx = speedFxCtx;
   ctx.clearRect(0,0,W,H);
-  const t = (speedFxDur - speedFxT);
+  const t = _speedFxClock;
   for(const L of speedLines){
     // les lignes "foncent" vers l'extérieur, le trou central grandit avec la vitesse
     const phase = (t*L.speed + L.off) % 1;
@@ -8224,7 +8228,7 @@ function updateVelocitySfx(){
     const spd = Math.hypot(me.vel.x, me.vel.z), hi = VC.speed ?? 13.5;
     want = _velOn ? (spd >= hi*0.85) : (spd >= hi);   // hystérésis : évite le clignotement au seuil
   }
-  _velOn = want;
+  _velOn = want; speedFxHold = want;   // effet vitesse visuel tant que le son de vitesse joue
   setVelocityGain(want ? (VC.volume ?? 0.6) * sfxGain('velocity') : 0);
 }
 function doSuperglide(){
