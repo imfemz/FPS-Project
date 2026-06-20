@@ -7188,7 +7188,7 @@ function updateLocalBots(dt){
     if(feared) spd = (LBOT.fear && LBOT.fear.speed) || 5;   // PEUR : velocite de fuite
     // #15 CAP DUR sur la vitesse REELLE de locomotion (apres strafe/rush/evade qui allongent le vecteur) :
     // 4 par defaut, 6 au sabre. Le knockback (recul d'un coup de sabre) s'ajoute PAR-DESSUS, non plafonne.
-    { let _lvx = vx*spd, _lvz = vz*spd; const _lm = Math.hypot(_lvx, _lvz), _cap = _sab ? 6 : 4;
+    { let _lvx = vx*spd, _lvz = vz*spd; const _lm = Math.hypot(_lvx, _lvz), _cap = (b.type === 'sentinel') ? 99 : (_sab ? 6 : 4);   // Sentinel EXEMPTÉ du cap (garde sa course ×1.5) ; autres = 4, sabre = 6
       if(_lm > _cap){ const _k = _cap/_lm; _lvx *= _k; _lvz *= _k; }
       _botTmp.set(b.pos.x + (_lvx + (b.knockX||0))*dt, 0, b.pos.z + (_lvz + (b.knockZ||0))*dt); }   // + recul sabre (knockback)
     collide(_botTmp, LBOT.radius ?? 0.5, b.pos.y||0);
