@@ -353,6 +353,25 @@
   #wavebanner.show{opacity:1;transform:translate(-50%,0)}
   #wavebanner .wv-n{font-family:var(--mono);font-size:30px;font-weight:800;letter-spacing:4px;color:var(--txt);text-shadow:0 2px 14px rgba(0,0,0,.7)}
   #wavebanner .wv-s{font-family:var(--mono);font-size:11px;letter-spacing:4px;color:var(--accent);margin-top:3px}
+  /* ===== INSANE : timer central + intro + ecran d'esprit ===== */
+  #insanetimer{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:none;z-index:8;font-family:var(--mono);font-size:34px;font-weight:800;letter-spacing:3px;color:var(--txt);text-shadow:0 2px 16px rgba(0,0,0,.7);padding:4px 18px}
+  #insanetimer.low{color:#ff5066;animation:itpulse .6s infinite}
+  @keyframes itpulse{0%,100%{opacity:1}50%{opacity:.4}}
+  #insaneintro{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;z-index:60;pointer-events:none;text-align:center;background:radial-gradient(ellipse at center,rgba(6,7,10,.55),rgba(6,7,10,.85))}
+  #insaneintro.show{display:flex;animation:iifade .35s ease}
+  @keyframes iifade{from{opacity:0;transform:scale(1.06)}to{opacity:1;transform:scale(1)}}
+  #insaneintro .ii-big{font-family:var(--mono);font-size:52px;font-weight:800;letter-spacing:5px;color:#fff;text-shadow:0 4px 26px rgba(255,40,60,.55)}
+  #insaneintro .ii-sub{font-family:var(--mono);font-size:22px;letter-spacing:8px;color:#ff4060;margin-top:16px}
+  #insanedeath{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;z-index:55;text-align:center;background:radial-gradient(ellipse at 50% 42%,rgba(8,4,8,.28),rgba(8,4,8,.74))}
+  #insanedeath.show{display:flex}
+  #insanedeath .id-title{font-family:var(--mono);font-size:44px;font-weight:800;letter-spacing:3px;color:#eaf2ff;text-shadow:0 4px 30px rgba(110,180,255,.5);max-width:92%;line-height:1.18}
+  #insanedeath .id-score{font-family:var(--mono);font-size:18px;letter-spacing:4px;color:var(--accent);margin-top:16px}
+  #insanedeath .id-restart{margin-top:34px;font-family:var(--mono);font-size:23px;font-weight:700;letter-spacing:3px;color:#8fd8ff;cursor:pointer;animation:idblink 1.05s infinite;pointer-events:auto;padding:8px 14px}
+  #insanedeath .id-restart:hover{color:#cfeeff}
+  @keyframes idblink{0%,100%{opacity:1}50%{opacity:.22}}
+  #insanedeath .id-row{margin-top:24px;display:flex;gap:26px}
+  #insanedeath .id-link{font-family:var(--mono);font-size:13px;letter-spacing:2px;color:var(--txt-dim);cursor:pointer;pointer-events:auto;padding:8px 16px;border:1px solid var(--brd);border-radius:8px}
+  #insanedeath .id-link:hover{color:#fff;border-color:rgba(255,255,255,.4)}
   /* ===== Mini-map / radar (haut gauche) : ennemis rouges clignotants + orbes, rayon 10 m ===== */
   /* mini-map CARRÉE (coins chanfreinés), même DA que les cartes : bordure fine bleue + relief */
   #minimap{position:absolute;top:18px;left:18px;width:280px;height:280px;border-radius:0;opacity:.85;
@@ -447,6 +466,7 @@
 <div id="hud">
   <canvas id="minimap" width="280" height="280"></canvas>
   <canvas id="compass" width="460" height="40"></canvas>
+  <div id="insanetimer">2:00</div>
   <div id="crosshair">
     <span class="ch ch-l"></span><span class="ch ch-r"></span><span class="ch ch-t"></span><span class="ch ch-b"></span>
     <span class="ch-dot"></span>
@@ -633,6 +653,15 @@
 <!-- Bandeau bas pendant la deathcam / killcam -->
 <div id="deathbanner" style="position:fixed;left:0;right:0;bottom:8%;text-align:center;display:none;z-index:51;pointer-events:none;font-family:inherit">
   <div id="deathbanner-txt" style="display:inline-block;padding:10px 26px;background:rgba(10,12,18,.62);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#eef2f6;font-size:20px;letter-spacing:.5px"></div>
+</div>
+
+<!-- INSANE : intro chrono + ecran d'esprit (mort / temps ecoule) -->
+<div id="insaneintro"><div class="ii-big">VOUS AVEZ 2 MINUTES</div><div class="ii-sub">TUEZ-LES TOUS</div></div>
+<div id="insanedeath">
+  <div class="id-title">VOTRE ESPRIT A QUITTÉ VOTRE CORPS</div>
+  <div class="id-score"></div>
+  <div class="id-restart" id="id-restart">SE REBRANCHER À LA MATRICE</div>
+  <div class="id-row"><div class="id-link" id="id-salon">REVENIR AU SALON</div><div class="id-link" id="id-options">OPTIONS</div></div>
 </div>
 
 <!-- Three.js r184 en modules ES (migration depuis r128). importmap = table des imports -->
@@ -6096,6 +6125,114 @@ LBOT.types = {
     explode_sfx: 'drone_explode'
   }
 };
+
+/* ============================================================================
+   MODE INSANE CHRONOMETRE : 2 min, compteur de kills, mort = esprit + freeze
+   ========================================================================== */
+const INSANE = { on:false, total:120, timeLeft:120, running:false, ended:false, introFreeze:false };
+const soulFx = [];
+function insaneFmt(t){ const x = Math.max(0, Math.ceil(t)); return Math.floor(x/60) + ':' + String(x%60).padStart(2,'0'); }
+function insaneUpdateTimerUI(){
+  const tm = document.getElementById('insanetimer'); if(!tm) return;
+  tm.textContent = insaneFmt(INSANE.timeLeft);
+  tm.classList.toggle('low', INSANE.timeLeft <= 20);
+}
+// Lance une session Insane (appelee depuis startLocalBotMode quand difficulty=insane).
+function startInsaneRun(){
+  INSANE.on = true; INSANE.ended = false; INSANE.running = false; INSANE.introFreeze = false; INSANE.timeLeft = INSANE.total;
+  const cp = document.getElementById('compass'); if(cp) cp.style.display = 'none';
+  const tm = document.getElementById('insanetimer'); if(tm){ tm.style.display = 'block'; tm.classList.remove('low'); tm.textContent = insaneFmt(INSANE.total); }
+  hide('insanedeath');
+}
+// Apres le decompte 3-2-1 : freeze + message "2 minutes", puis le timer demarre.
+function insaneIntro(){
+  INSANE.introFreeze = true; INSANE.running = false;
+  const el = document.getElementById('insaneintro'); if(el) el.classList.add('show');
+  setTimeout(()=>{
+    if(el) el.classList.remove('show');
+    INSANE.introFreeze = false; INSANE.running = true; INSANE.timeLeft = INSANE.total;
+    if(localBotMode && !INSANE.ended && !(typeof aMenuIsOpen==='function' && aMenuIsOpen())) lock();
+  }, 2600);
+}
+// Tick du chrono (appele dans animate). Decremente quand la partie tourne.
+function insaneTick(dt){
+  if(!INSANE.on || !INSANE.running || INSANE.ended || !alive) return;
+  INSANE.timeLeft -= dt;
+  if(INSANE.timeLeft <= 0){ INSANE.timeLeft = 0; insaneUpdateTimerUI(); insaneEndScore(); return; }
+  insaneUpdateTimerUI();
+}
+// Camera 3e personne a la mort (reutilise deathCam, sans killcam ni respawn).
+function startInsaneDeathCam(){
+  deathCam.active = true; deathCam.phase = 'tp'; deathCam.t = 0; deathCam.insane = true;
+  deathCam.killerSeat = -1; deathCam.pendingRespawn = null;
+  deathCam.orbitAng = me.yaw + Math.PI;
+  deathCam.center.set(me.pos.x, (me.pos.y||0) + 1.0, me.pos.z);
+  if(RIG_READY && RIG_TEMPLATE){
+    deathCam.myBody = createSoldierRigged(entColor(myId));
+    deathCam.myBody.root.position.set(me.pos.x, me.pos.y, me.pos.z);
+    deathCam.myBody.root.rotation.set(0, me.yaw + Math.PI, 0);
+    scene.add(deathCam.myBody.root);
+    if(deathCam.myBody.rigged) playDeathAnim(deathCam.myBody);
+  }
+  const hud = document.getElementById('hud'); if(hud) hud.style.opacity = '0';
+}
+// Mort du joueur en Insane : esprit + freeze (pas de respawn).
+function insaneDeath(){
+  alive = false; playSfx('death');
+  INSANE.ended = true; INSANE.running = false;
+  spawnSoulOrbs(new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z));
+  document.exitPointerLock && document.exitPointerLock();
+  startInsaneDeathCam();
+  const el = document.getElementById('insanedeath');
+  if(el){
+    const t = el.querySelector('.id-title'); if(t) t.textContent = 'VOTRE ESPRIT A QUITTÉ VOTRE CORPS';
+    const sc = el.querySelector('.id-score'); if(sc) sc.textContent = localBotKills + (localBotKills>1?' ÉLIMINATIONS':' ÉLIMINATION');
+  }
+  setTimeout(()=>{ if(INSANE.ended) show('insanedeath'); }, 650);
+}
+// Fin du chrono (2 min) : score final + freeze (le joueur reste en vie, fige sur place).
+function insaneEndScore(){
+  if(INSANE.ended) return;
+  INSANE.ended = true; INSANE.running = false;
+  document.exitPointerLock && document.exitPointerLock();
+  const el = document.getElementById('insanedeath');
+  if(el){
+    const t = el.querySelector('.id-title'); if(t) t.textContent = 'TEMPS ÉCOULÉ';
+    const sc = el.querySelector('.id-score'); if(sc) sc.textContent = localBotKills + (localBotKills>1?' ÉLIMINATIONS':' ÉLIMINATION');
+    show('insanedeath');
+  }
+}
+// Relance une partie Insane propre (kills 0, timer 2:00, vague 1).
+function insaneRestart(){
+  hide('insanedeath');
+  if(deathCam.active) endDeathCam();
+  if(typeof dcFade === 'function') dcFade(false);
+  localBotKills = 0;
+  startLocalBotMode();
+}
+// Orbes d'AME : 4 spheres bleues adoucies qui montent et s'estompent depuis le corps (au tir fatal).
+function spawnSoulOrbs(pos){
+  for(let i=0;i<4;i++){
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: ORB_TEX, color: 0x7fd4ff, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, opacity:0 }));
+    const sc = 0.45 + Math.random()*0.3; sp.scale.set(sc, sc, 1);
+    sp.position.set(pos.x + (Math.random()-.5)*0.6, pos.y + 0.7 + Math.random()*0.5, pos.z + (Math.random()-.5)*0.6);
+    scene.add(sp);
+    soulFx.push({ sp, vy: 0.45 + Math.random()*0.5, t: 0, delay: i*0.14, life: 2.1 + Math.random()*0.7 });
+  }
+  const light = new THREE.PointLight(0x66c8ff, 0.5, 6); light.position.set(pos.x, pos.y + 1.0, pos.z); scene.add(light);
+  soulFx.push({ light, t:0, life:1.5 });
+}
+function updateSoulFx(dt){
+  for(let i=soulFx.length-1;i>=0;i--){
+    const o = soulFx[i]; o.t += dt;
+    if(o.light){ o.light.intensity = Math.max(0, 0.5*(1 - o.t/o.life)); if(o.t >= o.life){ scene.remove(o.light); soulFx.splice(i,1); } continue; }
+    if(o.t < o.delay) continue;
+    const k = Math.min(1, (o.t - o.delay)/o.life);
+    o.sp.position.y += o.vy*dt;
+    o.sp.material.opacity = Math.sin(k*Math.PI) * 0.85;   // fade in puis out
+    if(k >= 1){ scene.remove(o.sp); soulFx.splice(i,1); }
+  }
+}
 // ===== INSANE : courbe de difficulte EXPONENTIELLE par vague (baseline V1 douce -> plafond) =====
 // stat(v) = base + (cap - base) * (1 - r^(v-1)) ; r = vitesse de montee (plus petit = monte plus vite).
 LBOT.ai.insaneCurve = {
