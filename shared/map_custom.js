@@ -1,9 +1,68 @@
-/* map_custom.js — BLOCS de map exportés depuis Blender (généré par tools/blender_map_export.py).
-   Vide par défaut => la map procédurale de map.js est utilisée.
-   Après un export Blender, ce fichier contient tes blocs et ils REMPLACENT les blocs par défaut.
-   (ramps / plateforme / spawns restent définis dans map.js pour l'instant.) */
+/* map_custom.js — généré depuis Blender (61 blocs). Ne pas éditer à la main. */
 (function (root) {
-  const BLOCKS = [];   // <-- rempli automatiquement par l'exporteur Blender
+  const BLOCKS = [
+    { x:-2.64, z:-64.89, w:15.07, h:5.98, d:17.13, y0:-0.54, type:'concrete' },
+    { x:-0.12, z:98.21, w:200.0, h:12.0, d:2.0, y0:-0.2, type:'concrete' },
+    { x:-0.12, z:-98.9, w:200.0, h:12.0, d:2.0, y0:-0.2, type:'concrete' },
+    { x:99.31, z:-0.4, w:2.0, h:12.0, d:200.0, y0:-0.2, type:'concrete' },
+    { x:-98.38, z:0.71, w:2.0, h:12.0, d:200.0, y0:-0.2, type:'concrete' },
+    { x:-70.11, z:-56.6, w:20.0, h:17.33, d:24.9, y0:-7.52, type:'concrete' },
+    { x:-78.92, z:-43.92, w:2.34, h:28.56, d:4.46, y0:-0.81, type:'concrete' },
+    { x:-61.41, z:-43.92, w:2.34, h:28.56, d:4.46, y0:-0.81, type:'concrete' },
+    { x:-51.4, z:-33.15, w:57.5, h:0.82, d:25.68, y0:8.89, type:'concrete' },
+    { x:-32.42, z:-9.65, w:20.0, h:17.33, d:24.9, y0:-7.52, type:'concrete' },
+    { x:-24.16, z:-22.46, w:2.34, h:28.56, d:4.46, y0:-0.81, type:'concrete' },
+    { x:-41.66, z:-22.46, w:2.34, h:28.56, d:4.46, y0:-0.81, type:'concrete' },
+    { x:-51.4, z:-33.15, w:63.48, h:3.17, d:28.15, y0:24.64, type:'concrete' },
+    { x:-79.79, z:-51.35, w:0.84, h:11.05, d:19.12, y0:-0.03, type:'concrete' },
+    { x:-60.44, z:-51.35, w:0.84, h:11.05, d:19.12, y0:-0.03, type:'concrete' },
+    { x:-22.77, z:-14.71, w:0.84, h:11.05, d:19.12, y0:-0.03, type:'concrete' },
+    { x:-42.12, z:-14.71, w:0.84, h:11.05, d:19.12, y0:-0.03, type:'concrete' },
+    { x:-66.68, z:-42.77, w:26.97, h:11.9, d:4.46, y0:-2.23, type:'concrete' },
+    { x:-34.79, z:-22.82, w:24.07, h:11.9, d:4.46, y0:-2.23, type:'concrete' },
+    { x:-55.9, z:-30.01, w:1.4, h:11.9, d:13.86, y0:-2.23, type:'concrete' },
+    { x:-20.53, z:-42.77, w:31.48, h:11.9, d:4.46, y0:-2.23, type:'concrete' },
+    { x:-79.09, z:-27.26, w:1.4, h:11.9, d:13.86, y0:-2.23, type:'concrete' },
+    { x:26.58, z:52.59, w:25.45, h:17.33, d:20.68, y0:-7.52, type:'concrete' },
+    { x:39.51, z:61.04, w:4.52, h:28.56, d:2.46, y0:-0.81, type:'concrete' },
+    { x:39.02, z:43.55, w:4.52, h:28.56, d:2.46, y0:-0.81, type:'concrete' },
+    { x:49.51, z:33.24, w:27.26, h:0.82, d:58.18, y0:8.89, type:'concrete' },
+    { x:72.48, z:13.62, w:25.45, h:17.33, d:20.68, y0:-7.52, type:'concrete' },
+    { x:59.45, z:5.72, w:4.52, h:28.56, d:2.46, y0:-0.81, type:'concrete' },
+    { x:59.93, z:23.21, w:4.52, h:28.56, d:2.46, y0:-0.81, type:'concrete' },
+    { x:49.51, z:33.24, w:29.89, h:3.17, d:64.23, y0:24.64, type:'concrete' },
+    { x:32.11, z:62.12, w:19.13, h:11.05, d:1.36, y0:-0.03, type:'concrete' },
+    { x:31.57, z:42.78, w:19.13, h:11.05, d:1.36, y0:-0.03, type:'concrete' },
+    { x:67.15, z:4.11, w:19.13, h:11.05, d:1.36, y0:-0.03, type:'concrete' },
+    { x:67.68, z:23.45, w:19.13, h:11.05, d:1.36, y0:-0.03, type:'concrete' },
+    { x:40.32, z:48.78, w:5.2, h:11.9, d:27.09, y0:-2.23, type:'concrete' },
+    { x:59.38, z:16.35, w:5.12, h:11.9, d:24.18, y0:-2.23, type:'concrete' },
+    { x:52.77, z:37.65, w:13.89, h:11.9, d:1.78, y0:-2.23, type:'concrete' },
+    { x:39.29, z:11.6, w:4.78, h:11.9, d:11.74, y0:-2.23, type:'concrete' },
+    { x:56.17, z:60.76, w:13.89, h:11.9, d:1.78, y0:-2.23, type:'concrete' },
+    { x:-55.46, z:34.4, w:58.1, h:23.01, d:5.11, y0:-6.69, type:'concrete' },
+    { x:-55.46, z:34.4, w:63.39, h:2.29, d:25.07, y0:15.52, type:'concrete' },
+    { x:-55.46, z:34.4, w:63.39, h:2.29, d:25.07, y0:15.52, type:'concrete' },
+    { x:-55.46, z:34.4, w:58.1, h:23.01, d:5.11, y0:-6.69, type:'concrete' },
+    { x:22.34, z:-28.91, w:106.78, h:2.29, d:163.75, y0:16.97, type:'concrete' },
+    { x:45.94, z:-72.12, w:31.08, h:23.01, d:54.02, y0:-4.16, type:'concrete' },
+    { x:11.54, z:-2.79, w:31.08, h:23.01, d:54.02, y0:-4.16, type:'concrete' },
+    { x:-10.83, z:69.67, w:26.56, h:2.29, d:63.96, y0:15.52, type:'concrete' },
+    { x:-10.83, z:69.67, w:6.48, h:23.01, d:58.2, y0:-6.69, type:'concrete' },
+    { x:-29.49, z:-80.36, w:4.91, h:19.58, d:36.68, y0:-6.07, type:'concrete' },
+    { x:-51.18, z:51.42, w:4.82, h:19.58, d:29.81, y0:-6.07, type:'concrete' },
+    { x:-90.07, z:-34.14, w:7.43, h:4.87, d:5.54, y0:0.02, type:'concrete' },
+    { x:67.23, z:-18.12, w:16.64, h:5.98, d:16.34, y0:-0.54, type:'concrete' },
+    { x:76.34, z:-50.32, w:15.5, h:5.98, d:17.05, y0:-0.54, type:'concrete' },
+    { x:-72.45, z:94.87, w:7.43, h:4.87, d:5.54, y0:0.02, type:'concrete' },
+    { x:-70.89, z:72.82, w:14.99, h:5.98, d:8.35, y0:-0.54, type:'concrete' },
+    { x:54.87, z:82.33, w:14.95, h:5.98, d:17.14, y0:-0.54, type:'concrete' },
+    { x:25.37, z:94.47, w:7.43, h:4.87, d:5.54, y0:0.02, type:'concrete' },
+    { x:58.7, z:57.85, w:8.23, h:4.87, d:6.73, y0:9.72, type:'concrete' },
+    { x:41.44, z:19.41, w:8.23, h:4.87, d:6.73, y0:9.72, type:'concrete' },
+    { x:-30.46, z:-39.1, w:7.72, h:4.87, d:8.76, y0:9.58, type:'concrete' },
+    { x:-71.44, z:-29.26, w:7.72, h:4.87, d:8.76, y0:9.58, type:'concrete' }
+  ];
   if (typeof module !== 'undefined' && module.exports) module.exports = BLOCKS;
   else root.__CUSTOM_BLOCKS = BLOCKS;
 })(typeof window !== 'undefined' ? window : globalThis);
