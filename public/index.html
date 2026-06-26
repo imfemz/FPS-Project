@@ -584,6 +584,7 @@
         <div class="fr-screen"><div class="fr-canvas" id="menuPreview"></div><span class="fr-live">LIVE</span></div>
         <p class="fr-rules" id="frRules"></p>
         <button class="fr-launch" id="menuLaunch">Lancer</button>
+        <button class="fr-launch" id="coopInviteBtn" style="display:none;margin-top:10px;background:transparent;color:var(--accent,#5ce0ff);border:1px solid var(--accent,#5ce0ff)">👥 Inviter un ami</button>
         <div class="fr-meleeinfo" id="frMeleeInfo">Mêlée en ligne · jusqu'à <b>6 joueurs</b> · premier à <b>10 éliminations</b><span class="fr-melee-live" id="frMeleeLive"></span></div>
         <div id="frLb"></div>
       </section>
@@ -711,6 +712,67 @@
   <div id="idLb"></div>
   <div class="id-restart" id="id-restart">SE REBRANCHER À LA MATRICE</div>
   <div class="id-row"><div class="id-link" id="id-salon">REVENIR AU SALON</div><div class="id-link" id="id-options">OPTIONS</div></div>
+</div>
+
+<!-- CO-OP INSANE : modale d'invitation (hôte) / de jonction (invité) -->
+<style>
+  #coopmodal{position:fixed;inset:0;z-index:120;display:none;align-items:center;justify-content:center;background:rgba(6,8,12,.72);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);font-family:var(--font,system-ui)}
+  #coopmodal.show{display:flex;animation:cmIn .25s ease both}
+  @keyframes cmIn{from{opacity:0}to{opacity:1}}
+  #coopmodal .cm-panel{position:relative;width:min(440px,92vw);background:linear-gradient(180deg,rgba(22,26,34,.96),rgba(14,17,23,.97));border:1px solid var(--brd-strong,rgba(255,255,255,.16));border-radius:16px;padding:26px 26px 20px;box-shadow:0 24px 80px rgba(0,0,0,.6),0 0 0 1px rgba(92,224,255,.08)}
+  #coopmodal .cm-close{position:absolute;top:12px;right:14px;background:none;border:none;color:var(--txt-dim,#9aa);font-size:18px;cursor:pointer;line-height:1;opacity:.7}
+  #coopmodal .cm-close:hover{opacity:1}
+  #coopmodal .cm-tag{font:800 11px/1 var(--font);letter-spacing:4px;color:var(--accent,#5ce0ff);text-transform:uppercase;margin-bottom:6px}
+  #coopmodal .cm-title{font:700 21px/1.2 var(--font);color:#fff;margin:0 0 18px}
+  #coopmodal .cm-lbl{display:block;font:600 11px/1 var(--font);letter-spacing:2px;text-transform:uppercase;color:var(--txt-faint,#778);margin:14px 0 7px}
+  #coopmodal .cm-linkrow{display:flex;gap:8px}
+  #coopmodal .cm-link{flex:1;min-width:0;padding:12px 14px;background:rgba(255,255,255,.05);border:1px solid var(--brd-strong,rgba(255,255,255,.16));border-radius:10px;color:#fff;font:600 14px/1 var(--font);outline:none}
+  #coopmodal .cm-link:focus{border-color:var(--accent,#5ce0ff)}
+  #coopmodal .cm-copy{padding:0 16px;background:var(--accent,#5ce0ff);color:#062028;border:none;border-radius:10px;font:800 12px/1 var(--font);letter-spacing:1px;cursor:pointer;text-transform:uppercase;white-space:nowrap}
+  #coopmodal .cm-copy:hover{filter:brightness(1.08)}
+  #coopmodal .cm-or{margin:14px 0 4px;color:var(--txt-dim,#9aa);font:600 13px/1 var(--font);text-align:center}
+  #coopmodal .cm-or b{color:#fff;letter-spacing:6px;font-size:22px;font-weight:800;margin-left:6px}
+  #coopmodal .cm-status{display:flex;align-items:center;gap:9px;margin:18px 0 6px;color:var(--txt-dim,#9aa);font:600 13px/1.3 var(--font)}
+  #coopmodal .cm-dot{width:9px;height:9px;border-radius:50%;background:#ffb000;box-shadow:0 0 9px #ffb000;animation:cmPulse 1.5s ease-in-out infinite}
+  #coopmodal .cm-dot.on{background:#36e07a;box-shadow:0 0 9px #36e07a;animation:none}
+  @keyframes cmPulse{0%,100%{opacity:.4}50%{opacity:1}}
+  #coopmodal .cm-launch{width:100%;margin-top:16px;padding:15px;background:var(--accent,#5ce0ff);color:#062028;border:none;border-radius:11px;font:800 15px/1 var(--font);letter-spacing:3px;text-transform:uppercase;cursor:pointer;transition:transform .12s,filter .2s}
+  #coopmodal .cm-launch:hover:not(:disabled){transform:translateY(-2px);filter:brightness(1.08)}
+  #coopmodal .cm-launch:disabled{opacity:.4;cursor:default}
+  #coopmodal .cm-err{margin-top:12px;padding:10px 12px;background:rgba(255,70,70,.12);border:1px solid rgba(255,90,90,.4);border-radius:9px;color:#ff8a8a;font:600 13px/1.3 var(--font)}
+  #coopmodal .cm-note{margin-top:16px;color:var(--txt-faint,#677);font:500 11px/1.4 var(--font);text-align:center}
+</style>
+<div id="coopmodal">
+  <div class="cm-panel">
+    <button class="cm-close" id="cmClose">✕</button>
+    <div class="cm-tag">INSANE · CO-OP</div>
+    <!-- HÔTE -->
+    <div id="cmHost">
+      <h2 class="cm-title">Invite un ami à survivre</h2>
+      <label class="cm-lbl">Lien de la partie</label>
+      <div class="cm-linkrow">
+        <input id="cmLink" class="cm-link" readonly value="…">
+        <button id="cmCopy" class="cm-copy">Copier</button>
+      </div>
+      <div class="cm-or">ou code : <b id="cmCode">····</b></div>
+      <div class="cm-status"><span class="cm-dot"></span><span id="cmStatusTxt">En attente de ton ami…</span></div>
+      <button class="cm-launch" id="cmLaunch" disabled>Lancer le co-op</button>
+    </div>
+    <!-- INVITÉ -->
+    <div id="cmGuest" style="display:none">
+      <h2 class="cm-title">Rejoindre la partie de <span id="cmHostName">…</span></h2>
+      <label class="cm-lbl">Ton pseudo</label>
+      <input id="cmGuestName" class="cm-link" maxlength="16" placeholder="Pseudo">
+      <div id="cmCodeWrap" style="display:none">
+        <label class="cm-lbl">Code de la partie</label>
+        <input id="cmCodeInput" class="cm-link" maxlength="4" placeholder="ABCD" style="text-transform:uppercase;letter-spacing:6px;text-align:center;font-size:20px;font-weight:800">
+      </div>
+      <button class="cm-launch" id="cmJoin">Rejoindre</button>
+      <div class="cm-status" id="cmGuestStatus" style="display:none"><span class="cm-dot on"></span><span id="cmGuestStatusTxt"></span></div>
+    </div>
+    <div class="cm-err" id="cmErr" style="display:none"></div>
+    <div class="cm-note">⚙️ Salon co-op opérationnel. La synchro de la partie à 2 (se voir + vagues partagées) arrive à l'étape suivante.</div>
+  </div>
 </div>
 
 <!-- Three.js r184 en modules ES (migration depuis r128). importmap = table des imports -->
@@ -5019,12 +5081,15 @@ function updateDrone(b, dt){
 
 /* ---------- Réseau ---------- */
 let ws = null, lastPingSent = 0, curPing = 0;
-function connect(){
+// CO-OP INSANE : état du salon privé (rooms relayées par le serveur). Voir docs/PLAN_coop_insane_invitation.md
+const COOP = { active:false, role:null, code:null, host:null, guest:null, pending:null, started:false };
+function connect(coop){
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}`);
-  ws.onopen = ()=>{ ws.send(JSON.stringify({t:'hello', name: myName})); };
+  ws.onopen = ()=>{ ws.send(JSON.stringify({t:'hello', name: myName, coop: !!coop})); };
   ws.onclose = ()=>{
-    if(playing || spec.active){ toMenu('Connexion perdue.'); }
+    if(COOP.active && !COOP.started){ /* salon co-op : déconnexion gérée par roomError/peerLeft */ }
+    else if(playing || spec.active){ toMenu('Connexion perdue.'); }
     else { const pb=document.getElementById('playbtn'); if(pb){ pb.disabled=false; pb.textContent='Mêlée Générale'; } }
   };
   ws.onmessage = (ev)=>{
@@ -5036,7 +5101,11 @@ function connect(){
           break;
         }
         myClientId = m.id; maxHp = m.maxHp||100; maxShield = m.maxShield||75;
-        MAX_PLAYERS = m.maxPlayers || MAX_PLAYERS; break;
+        MAX_PLAYERS = m.maxPlayers || MAX_PLAYERS;
+        if(COOP.pending){ const pj=COOP.pending; COOP.pending=null;   // co-op : créer ou rejoindre la room
+          if(pj.role==='host') ws.send(JSON.stringify({t:'createRoom', name: myName}));
+          else ws.send(JSON.stringify({t:'joinRoom', code: pj.code, name: myName})); }
+        break;
       case 'full': toMenu('Serveur plein (16 connectés). Réessayez plus tard.'); break;
       case 'spectatefull': showHUDToast('SALON PLEIN (6/6) — vous restez spectateur', 'warn', 2200); break;
       case 'joingame': onJoinGame(m); break;
@@ -5053,10 +5122,127 @@ function connect(){
       case 'respawn': onRespawn(m); break;
       case 'end': onEnd(m); break;
       case 'pong': { curPing = Math.round(performance.now() - lastPingSent); document.getElementById('ping').textContent = curPing + ' ms'; break; }
+      case 'roomCreated': onRoomCreated(m); break;
+      case 'roomReady': onRoomReady(m); break;
+      case 'roomError': onRoomError(m); break;
+      case 'roomPeerLeft': onRoomPeerLeft(m); break;
+      case 'roomMsg': onRoomMsg(m); break;
     }
   };
 }
 setInterval(()=>{ if(ws && ws.readyState===1){ lastPingSent = performance.now(); ws.send(JSON.stringify({t:'ping',n:1})); } }, 2000);
+
+/* ===================== CO-OP INSANE : invitation / jonction ===================== */
+function coopLink(code){ return location.origin + location.pathname + '?room=' + code; }
+function coopSend(payload){ if(ws && ws.readyState===1) ws.send(JSON.stringify({t:'relay', payload})); }
+function _cm(id){ return document.getElementById(id); }
+function showCoopModal(role){
+  const el = _cm('coopmodal'); if(!el) return;
+  _cm('cmHost').style.display = (role==='host') ? '' : 'none';
+  _cm('cmGuest').style.display = (role==='guest') ? '' : 'none';
+  _cm('cmErr').style.display = 'none';
+  if(role==='guest'){
+    const gn=_cm('cmGuestName'); if(gn) gn.value = myName||'';
+    _cm('cmCodeWrap').style.display = COOP.code ? 'none' : '';   // pas de code (saisie manuelle) -> affiche le champ
+  }
+  el.classList.add('show');
+}
+function hideCoopModal(){ const el=_cm('coopmodal'); if(el) el.classList.remove('show'); }
+function coopConnect(role, code){     // ouvre une connexion DÉDIÉE co-op (hello{coop} -> create/join)
+  COOP.role=role; COOP.code=code||null; COOP.started=false; COOP.active=false;
+  try{ if(ws){ ws.onclose=null; ws.close(); } }catch(e){}
+  ws=null; COOP.pending={ role, code: code||null };
+  connect(true);
+}
+function coopInviteHost(){            // bouton "Inviter un ami" (mode insane)
+  if(!myName){ myName = (_cm('pseudo') && _cm('pseudo').value.trim()) || 'Joueur'; }
+  showCoopModal('host');
+  _cm('cmLink').value='…'; _cm('cmCode').textContent='····';
+  _cm('cmStatusTxt').textContent='Connexion au serveur…';
+  coopConnect('host', null);
+}
+function coopShowGuest(code){ COOP.code = code||null; showCoopModal('guest'); }   // ouverture via lien ?room=
+function coopGuestJoin(){
+  const gn=_cm('cmGuestName'); if(gn && gn.value.trim()){ myName=gn.value.trim().slice(0,16); localStorage.setItem('nc_pseudo', myName); }
+  let code = COOP.code;
+  if(!code){ const ci=_cm('cmCodeInput'); code = ci ? ci.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4) : ''; }
+  if(!code || code.length<4){ onRoomError({reason:'notfound'}); return; }
+  COOP.code=code;
+  const jb=_cm('cmJoin'); if(jb){ jb.disabled=true; jb.textContent='Connexion…'; }
+  coopConnect('guest', code);
+}
+function onRoomCreated(m){
+  COOP.active=true; COOP.code=m.code; COOP.host=m.host;
+  const li=_cm('cmLink'); if(li) li.value=coopLink(m.code);
+  const cc=_cm('cmCode'); if(cc) cc.textContent=m.code;
+  const st=_cm('cmStatusTxt'); if(st) st.textContent='En attente de ton ami…';
+}
+function onRoomReady(m){
+  COOP.active=true; COOP.code=m.code; COOP.host=m.host; COOP.guest=m.guest; COOP.role=m.role;
+  if(m.role==='host'){
+    const st=_cm('cmStatusTxt'); if(st) st.textContent=(m.guest||'Ton ami')+' a rejoint ✓';
+    const dot=document.querySelector('#cmHost .cm-dot'); if(dot) dot.classList.add('on');
+    const lb=_cm('cmLaunch'); if(lb) lb.disabled=false;
+  } else {
+    const hn=_cm('cmHostName'); if(hn) hn.textContent=m.host||'Hôte';
+    const gs=_cm('cmGuestStatus'); if(gs) gs.style.display='';
+    const gt=_cm('cmGuestStatusTxt'); if(gt) gt.textContent='Connecté — en attente du lancement par l’hôte…';
+    const jb=_cm('cmJoin'); if(jb){ jb.disabled=true; jb.textContent='Connecté ✓'; }
+  }
+}
+function onRoomError(m){
+  const e=_cm('cmErr'); if(e){ e.style.display='';
+    e.textContent = (m.reason==='full') ? 'Cette partie est déjà pleine.' : (m.reason==='notfound') ? 'Partie introuvable (code expiré ?).' : 'Partie fermée.'; }
+  const jb=_cm('cmJoin'); if(jb){ jb.disabled=false; jb.textContent='Rejoindre'; }
+  COOP.active=false;
+}
+function onRoomPeerLeft(){
+  if(COOP.started){ if(typeof showHUDToast==='function') showHUDToast('Ton ami a quitté la partie', 'warn', 2600); }
+  else if(COOP.role==='host'){
+    const st=_cm('cmStatusTxt'); if(st) st.textContent='En attente de ton ami…';
+    const dot=document.querySelector('#cmHost .cm-dot'); if(dot) dot.classList.remove('on');
+    const lb=_cm('cmLaunch'); if(lb) lb.disabled=true;
+  } else {
+    const e=_cm('cmErr'); if(e){ e.style.display=''; e.textContent='L’hôte a fermé la partie.'; }
+  }
+  COOP.guest=null;
+}
+function onRoomMsg(m){
+  const p=m.payload; if(p==null) return;
+  if(p==='start' || (p && p.t==='start')){ coopStart(); }
+  // snapshots / inputs de jeu : étape suivante (cf. plan)
+}
+function coopStart(){                 // FOUNDATION : démarre l'insane des 2 côtés (synchro 2 joueurs = étape suivante)
+  COOP.started=true; hideCoopModal();
+  LBOT.ai.difficulty='insane';
+  const bb=_cm('botbtnmenu'); if(bb) bb.click();   // lance l'insane (grande map)
+}
+function coopLaunchHost(){ if(!COOP.active) return; coopSend('start'); coopStart(); }
+function coopCancel(){
+  try{ if(ws && ws.readyState===1) ws.send(JSON.stringify({t:'leaveRoom'})); }catch(e){}
+  COOP.active=false; COOP.pending=null; COOP.role=null; hideCoopModal();
+}
+function copyCoopLink(){
+  const li=_cm('cmLink'); if(!li) return; const txt=li.value;
+  const done=()=>{ const b=_cm('cmCopy'); if(b){ const o=b.textContent; b.textContent='Copié ✓'; setTimeout(()=>{ b.textContent=o; },1500); } };
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done).catch(()=>{ try{ li.select(); document.execCommand('copy'); done(); }catch(e){} }); }
+  else { try{ li.select(); document.execCommand('copy'); done(); }catch(e){} }
+}
+// Câblage des boutons de la modale + détection du lien ?room=
+(function wireCoop(){
+  const bind=(id,fn,ev)=>{ const el=_cm(id); if(el) el.addEventListener(ev||'click', fn); };
+  bind('coopInviteBtn', coopInviteHost);
+  bind('cmCopy', copyCoopLink);
+  bind('cmLaunch', coopLaunchHost);
+  bind('cmJoin', coopGuestJoin);
+  bind('cmClose', coopCancel);
+  const sh=_cm('cmShare');
+  try{
+    const rc = new URLSearchParams(location.search).get('room');
+    if(rc){ const code = rc.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
+      if(code.length===4) setTimeout(()=>coopShowGuest(code), 500); }
+  }catch(e){}
+})();
 setInterval(()=>{
   if(!playing || !alive || !ws || ws.readyState!==1) return;
   const holstered = weapon.state==='holstered' || weapon.state==='holstering';
@@ -6914,7 +7100,7 @@ function startLocalBotMode(){
   // MAP par mode : INSANE = grande map (HALF=109) ; entraînement = arène (HALF=45). Avant tout calcul de spawn (MAP.HALF).
   setMapVariant(LBOT.ai.difficulty === 'insane' ? 'big' : 'arena');
   // Mode solo : on coupe le réseau proprement (pas de message "connexion perdue")
-  if(ws){ try{ ws.onclose = null; ws.close(); }catch(e){} ws = null; }
+  if(ws && !(COOP && COOP.started)){ try{ ws.onclose = null; ws.close(); }catch(e){} ws = null; }   // garde la connexion en co-op (relais)
   spec.active = false; localBotMode = true; localBotKills = 0; resetOvercharge();
   INSANE.on = false; INSANE.ended = false;
   LBOT.waveMode = (LBOT.ai.difficulty === 'insane'); LBOT.wave = 1;   // INSANE = survie par vagues
@@ -7665,6 +7851,7 @@ document.getElementById('botbtnmenu').onclick = ()=>{
     $('mode-melee').classList.toggle('sel',m==='melee');
     $('mode-time').classList.toggle('sel',m==='time');
     $('mode-bots').classList.toggle('sel',m==='bots');
+    { var ci=$('coopInviteBtn'); if(ci) ci.style.display = (m==='time') ? '' : 'none'; }   // INSANE -> option co-op
     $('frRules').innerHTML=RULES[m]||'';
     var TH=$('frTimeHint'); if(TH){ if(m==='time'){ TH.classList.remove('show'); void TH.offsetWidth; TH.classList.add('show'); try{ if(typeof playSfx==='function') playSfx('button1'); }catch(e){} } else TH.classList.remove('show'); }
     var LB=$('frLb'); if(LB){ if(m==='time'){ LB.classList.add('show'); if(typeof timeFetchLeaderboard==='function') timeFetchLeaderboard().then(function(d){ renderLeaderboard(LB, d, myName); }); } else LB.classList.remove('show'); }
