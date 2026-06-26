@@ -145,6 +145,32 @@ function send(c, msg) { if (c && c.ws.readyState === 1) c.ws.send(JSON.stringify
 function broadcast(msg) { for (const c of clients.values()) send(c, msg); }
 function broadcastExcept(id, msg) { for (const c of clients.values()) if (c.id !== id) send(c, msg); }
 
+/* ---------- ROOMS PRIVÉES (co-op INSANE) : le serveur ne fait que RELAYER entre 2 pairs ----------
+   Indépendant de la mêlée FFA. Un client en room n'occupe pas de siège FFA. */
+const rooms = new Map();              // code -> { code, hostId, guestId|null }
+const ROOM_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // sans 0/O/1/I/L (lisible)
+function genRoomCode() {
+  let code;
+  do { code = ''; for (let i = 0; i < 4; i++) code += ROOM_ALPHABET[Math.floor(Math.random() * ROOM_ALPHABET.length)]; }
+  while (rooms.has(code));
+  return code;
+}
+function roomPeer(c) {                // l'autre client de la room de c
+  if (!c.room) return null;
+  const r = rooms.get(c.room); if (!r) return null;
+  const otherId = (r.hostId === c.id) ? r.guestId : r.hostId;
+  return (otherId != null) ? clients.get(otherId) : null;
+}
+function destroyRoom(code, exceptId) { // prévient l'autre pair puis supprime la room
+  const r = rooms.get(code); if (!r) return;
+  for (const pid of [r.hostId, r.guestId]) {
+    if (pid == null) continue;
+    const pc = clients.get(pid);
+    if (pc) { pc.room = null; if (pid !== exceptId) send(pc, { t: 'roomPeerLeft' }); }
+  }
+  rooms.delete(code);
+}
+
 function playerCount() { let n = 0; for (const s of seats) if (s !== null) n++; return n; }
 function freeSeat() { for (let s = 0; s < N; s++) if (seats[s] === null) return s; return -1; }
 function nameOf(seat) { const c = seats[seat] != null && clients.get(seats[seat]); return c ? c.name : ('Joueur ' + (seat + 1)); }
@@ -388,7 +414,7 @@ function resetMatch() {
 const wss = new WebSocketServer({ server });
 wss.on('connection', (ws) => {
   if (clients.size >= CONFIG.MAX_CLIENTS) { ws.send(JSON.stringify({ t: 'full' })); return ws.close(); }
-  const c = { id: nextId++, ws, name: 'Joueur ' + nextId, seat: null };
+  const c = { id: nextId++, ws, name: 'Joueur ' + nextId, seat: null, room: null };
   clients.set(c.id, c);
 
   ws.on('message', (raw) => {
@@ -397,9 +423,56 @@ wss.on('connection', (ws) => {
     if (m.t === 'hello') {
       c.name = String(m.name || '').replace(/[<>&]/g, '').trim().slice(0, 16) || ('Joueur ' + c.id);
       send(c, { t: 'init', proto: CONFIG.PROTO, id: c.id, maxHp: CONFIG.MAX_HP, maxShield: CONFIG.MAX_SHIELD, maxPlayers: N });
+      if (m.coop) return;                         // co-op INSANE : pas de siège FFA, on attend createRoom/joinRoom
       const seat = seatClient(c);                 // siège libre -> joueur, sinon spectateur
       send(c, joinMsg(seat));
       broadcastRoster();
+      return;
+    }
+
+    // ----- ROOMS co-op : créer / rejoindre / relayer / quitter -----
+    if (m.t === 'createRoom') {
+      if (c.room) destroyRoom(c.room, c.id);
+      if (c.seat !== null) {                       // libère un éventuel siège FFA (on bascule en room)
+        const s = c.seat; seats[s] = null; players[s] = null; scores[s] = 0; c.seat = null;
+        broadcast({ t: 'playerleft', seat: s, name: c.name });
+        if (playerCount() === 0) { phase = 'idle'; orbs = []; } else promoteSpectator(c.id);
+        broadcastRoster();
+      }
+      if (m.name) c.name = String(m.name).replace(/[<>&]/g, '').trim().slice(0, 16) || c.name;
+      const code = genRoomCode();
+      rooms.set(code, { code, hostId: c.id, guestId: null });
+      c.room = code;
+      send(c, { t: 'roomCreated', code, host: c.name });
+      return;
+    }
+    if (m.t === 'joinRoom') {
+      const code = String(m.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+      const r = rooms.get(code);
+      if (!r) { send(c, { t: 'roomError', reason: 'notfound' }); return; }
+      if (r.guestId != null && r.guestId !== c.id) { send(c, { t: 'roomError', reason: 'full' }); return; }
+      if (m.name) c.name = String(m.name).replace(/[<>&]/g, '').trim().slice(0, 16) || c.name;
+      if (c.room && c.room !== code) destroyRoom(c.room, c.id);
+      if (c.seat !== null) {                       // libère un éventuel siège FFA
+        const s = c.seat; seats[s] = null; players[s] = null; scores[s] = 0; c.seat = null;
+        broadcast({ t: 'playerleft', seat: s, name: c.name });
+        if (playerCount() === 0) { phase = 'idle'; orbs = []; } else promoteSpectator(c.id);
+        broadcastRoster();
+      }
+      r.guestId = c.id; c.room = code;
+      const host = clients.get(r.hostId);
+      send(c, { t: 'roomReady', code, role: 'guest', host: host ? host.name : 'Hôte', guest: c.name });
+      if (host) send(host, { t: 'roomReady', code, role: 'host', host: host.name, guest: c.name });
+      return;
+    }
+    if (m.t === 'relay') {                         // transport pur entre les 2 pairs de la room
+      const peer = roomPeer(c);
+      if (peer) send(peer, { t: 'roomMsg', payload: m.payload });
+      return;
+    }
+    if (m.t === 'leaveRoom') {
+      if (c.room) destroyRoom(c.room, c.id);
+      c.room = null;
       return;
     }
 
@@ -528,6 +601,7 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
+    if (c.room) destroyRoom(c.room, c.id);   // co-op : prévient l'autre pair + supprime la room
     const wasSeat = c.seat;
     clients.delete(c.id);
     if (wasSeat !== null) {
