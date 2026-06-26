@@ -1401,6 +1401,39 @@ const colliders = [];
 const mapMeshes = [];
 let floorMesh = null, platMesh = null;
 const wallMeshes = [], crateMeshes = [], rampMeshes = [];
+
+// ===== MAP PAR MODE : arène HALF=45 (1v1 + entraînement) / grande map HALF=109 (insane) =====
+// Toute la map vit dans UN groupe `mapRoot` -> on peut la reconstruire proprement en changeant de mode.
+let mapRoot = null;
+let _mapVariant = 'arena';   // variante actuellement construite ('arena' | 'big')
+function _disposeGroup(g){
+  if(!g) return;
+  g.traverse(function(o){
+    if(o.geometry && o.geometry.dispose) o.geometry.dispose();
+    if(o.material){ const ms = Array.isArray(o.material) ? o.material : [o.material];
+      ms.forEach(function(m){ if(!m) return; if(m.map && m.map.dispose) m.map.dispose(); if(m.dispose) m.dispose(); }); }
+  });
+}
+// Construit la map courante (buildMap + structures) DANS mapRoot, en capturant tous les scene.add synchrones.
+function buildMapGrouped(){
+  mapRoot = new THREE.Group();
+  scene.add(mapRoot);                                  // vrai add (avant redirection)
+  const realAdd = scene.add.bind(scene);
+  scene.add = function(){ mapRoot.add.apply(mapRoot, arguments); return scene; };  // redirige les ajouts de buildMap
+  try { buildMap(); } finally { scene.add = realAdd; }
+  mountStructureModels();                              // async : capture mapRoot en interne
+}
+// Bascule la map selon le mode. variant 'big' = insane (HALF=109), sinon arène HALF=45. No-op si déjà bonne.
+function setMapVariant(variant){
+  if(variant !== 'big') variant = 'arena';
+  if(variant === _mapVariant && mapRoot) return;
+  if(mapRoot){ scene.remove(mapRoot); _disposeGroup(mapRoot); mapRoot = null; }
+  mapMeshes.length = 0; colliders.length = 0; wallMeshes.length = 0; crateMeshes.length = 0; rampMeshes.length = 0;
+  floorMesh = null; platMesh = null;
+  window.MAP = (variant === 'big' && window.MAP_BIG) ? window.MAP_BIG : (window.MAP_ARENA || window.MAP);
+  _mapVariant = variant;
+  buildMapGrouped();
+}
 function mat(c, e, ei){ return new THREE.MeshStandardMaterial({color:c, roughness:.8, emissive:e||0x000000, emissiveIntensity:ei||0}); }
 // ===== Matériaux de la map par TYPE (DA industrielle : béton / acier / conteneur / caillebotis) =====
 const MAP_MAT = {
@@ -1462,6 +1495,7 @@ function addContactShadow(cx, cz, w, d){
 function mountStructureModels(){
   const SM = GAMECFG.STRUCTURE_MODELS || {};
   if(SM.enabled === false || !SM.byType || typeof GLTFLoader === 'undefined') return;
+  const _root = mapRoot || scene;   // groupe de la map au moment de l'appel (chargement GLB async)
   const byType = {};
   for(const b of MAP.blocks){ const u = SM.byType[b.type]; if(u){ (byType[b.type] = byType[b.type] || []).push(b); } }
   const ge = (GAMECFG.GRAPHICS||{}).env_intensity ?? 1;
@@ -1505,7 +1539,7 @@ function mountStructureModels(){
               if(mm.map && 'colorSpace' in mm.map) mm.map.colorSpace = THREE.SRGBColorSpace;
               mm.needsUpdate = true;
             } } });
-          scene.add(wrap);
+          _root.add(wrap);
           if(SM.hideBox !== false && b._boxMesh) b._boxMesh.visible = false;
         }
       }catch(e){ console.warn('[structures]', type, e); }
@@ -6316,6 +6350,7 @@ function onRemoteSwing(m){
 }
 // Entrée en jeu / promotion spectateur->joueur / relance auto après victoire.
 function onJoinGame(m){
+  setMapVariant('arena');   // 1v1/mêlée en ligne = arène HALF=45 (doit matcher la map du serveur)
   if(m.names){ seatNames = []; for(const k in m.names) seatNames[+k] = m.names[k]; }
   if(m.scores) lastScores = m.scores;
   myId = (typeof m.seat === 'number') ? m.seat : -1;
@@ -6876,6 +6911,8 @@ function lbotSpawnPoint(i, n, extra, minDist){ // >= MIN du joueur ET >= spawn_s
   return [ Math.max(-lim, Math.min(lim, px + Math.cos(af)*MIN)), 0, Math.max(-lim, Math.min(lim, pz + Math.sin(af)*MIN)) ];
 }
 function startLocalBotMode(){
+  // MAP par mode : INSANE = grande map (HALF=109) ; entraînement = arène (HALF=45). Avant tout calcul de spawn (MAP.HALF).
+  setMapVariant(LBOT.ai.difficulty === 'insane' ? 'big' : 'arena');
   // Mode solo : on coupe le réseau proprement (pas de message "connexion perdue")
   if(ws){ try{ ws.onclose = null; ws.close(); }catch(e){} ws = null; }
   spec.active = false; localBotMode = true; localBotKills = 0; resetOvercharge();
@@ -10198,7 +10235,7 @@ addEventListener('resize', ()=>{
   if(gtaoPass && gtaoPass.setSize) gtaoPass.setSize(innerWidth, innerHeight);
 });
 
-buildScene(); buildMap(); mountStructureModels(); buildViewmodel(); buildReloadViewmodel(); applyCustomModels(); loadRiggedTemplate(); initAudio(); recInit();
+buildScene(); buildMapGrouped(); buildViewmodel(); buildReloadViewmodel(); applyCustomModels(); loadRiggedTemplate(); initAudio(); recInit();
 applyCustomHUD();
 applyWeaponHUD();
 applyHudScales();
