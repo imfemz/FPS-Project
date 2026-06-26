@@ -6524,10 +6524,10 @@ function onBotRespawn(m){
    ========================================================================== */
 let localBotMode = false, localBotKills = 0;
 const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist: 12,
-  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4, spawn_sep: 15, spawn_sep_by_diff: { easy: 20, medium: 15, hard: 10 }, MAX_BOTS: 14, waveMode: false, wave: 1,
+  separation: 5.0, sep_force: 3.2, radius: 0.5, hit_pad: 1.4, spawn_sep: 15, spawn_sep_by_diff: { easy: 20, medium: 15, hard: 10 }, MAX_BOTS: 28, waveMode: false, wave: 1,
   count_by_diff: { easy: 4, medium: 6, hard: 9 },        // ENTRAÎNEMENT : bots VIVANTS visés (densité de rencontre)
   group_size_by_diff: { easy: 2, medium: 3, hard: 4 },   // taille d'une VAGUE / groupe d'apparition
-  group_radius: 9, group_min_dist: 24, spawn_max_dist: 55,   // dispersion d'un groupe ; anneau d'apparition autour du joueur (m) -> on les croise vite, hors-vue
+  group_radius: 9, group_min_dist: 24, spawn_max_dist: 75,   // dispersion d'un groupe ; anneau d'apparition autour du joueur (m) -> on les croise vite, hors-vue
   fear: { radius: 3, time: 5, speed: 5 },   // bot voisin (<radius m) d'un bot tue -> panique : fuit le joueur (time s, velocite speed)
   knock_dist: 3, knock_decay: 6,   // knockback au coup de sabre : ~knock_dist mètres ; knock_decay = vitesse de retombée du recul
   saber_dmg: 40, saber_range: 2.8, saber_cd: 0.95,   // bot SABRE : dégâts / portée / cadence de l'attaque au contact (il ne tire pas, il charge)
@@ -6558,7 +6558,7 @@ const LBOT = { count: 5, speed: 1.9, run_speed: 4.6, respawn: 1500, engage_dist:
 // ===== TYPES D'ENNEMIS (apparaissent par PALIERS en mode INSANE) =====
 LBOT.types = {
   sentinel: {                          // BOT 2 — gros soldat noir, traqueur implacable
-    from_wave: 3, max: 3, per: 2,      // des la vague 3 ; jusqu'a 3 ; +1 toutes les 2 vagues
+    from_wave: 2, max: 5, per: 1,      // des la vague 2 ; jusqu'a 5 ; +1 chaque vague (bcp plus frequent)
     color: 0x080808, scale: 1.5, hp_mult: 1.8,   // mesh noir, taille/hitbox x1.5, plus resistant
     weapon: 1,                         // WINGMAN (memes degats que le wingman : 70 corps)
     speed_mult: 1.5,                   // vitesse de course x1.5
@@ -6567,7 +6567,7 @@ LBOT.types = {
     no_flee: true, dodge_jump_below: 0.2              // ne fuit jamais ; < 20% PV -> sauts G/D
   },
   drone: {                             // BOT 3 — sonde cybernetique rouge volante
-    from_wave: 3, max: 2, per: 3,
+    from_wave: 2, max: 4, per: 1,      // des la vague 2 ; jusqu'a 4 ; +1 chaque vague (bcp plus frequent)
     color: 0xff2a2a, hp: 60,
     hover: 4.0, follow_radius: 6.0, speed: 7,   // flotte 4m au-dessus, suit dans 6m, velocite 7
     view_fov_deg: 40, sense_radius: 5,          // FOV 40deg ; detecte a travers mur si < 5m
@@ -6850,7 +6850,7 @@ function queueLocalGroupRespawn(id){
 }
 function lbotSpawnPoint(i, n, extra, minDist){ // >= MIN du joueur ET >= spawn_sep des autres bots
   const lim = (MAP.HALF || 30) - 4;
-  const MIN = minDist || Math.min(((typeof localBotMode!=='undefined' && localBotMode) ? 22 : 10), ((MAP.HALF||30)-4)*0.5);   // solo : spawn plus loin de moi
+  const MIN = minDist || Math.min(((typeof localBotMode!=='undefined' && localBotMode) ? 26 : 10), ((MAP.HALF||30)-4)*0.7);   // solo : spawn plus loin de moi (rayon agrandi -> on farme moins au meme endroit)
   const SEP = (LBOT.spawn_sep_by_diff && LBOT.spawn_sep_by_diff[LBOT.ai && LBOT.ai.difficulty]) || (LBOT.spawn_sep ?? 15);   // distance mini entre bots selon la difficulte
   const px = (me && me.pos) ? me.pos.x : 0, pz = (me && me.pos) ? me.pos.z : 0;
   function botClear(x, z){
@@ -6908,15 +6908,16 @@ function startLocalBotMode(){
   if(sc){ sc.style.display = 'none'; }   // mode bots (ENTRAÎNEMENT *et* INSANE) : pas de bandeau score top-left (barre grise/MODE retirée). Kills via le pop +1 KILL + l'écran de fin.
 }
 // ===== Mode INSANE : survie par VAGUES (3 bots au depart, +1/vague, plafonne a MAX_BOTS) =====
-function botsForWave(w){ return Math.min(LBOT.MAX_BOTS ?? 14, Math.max(4, Math.round(4 * Math.pow(1.3, (w||1) - 1)))); }   // INSANE plus dense : v1=4, v2=5, v3=7, v4=9, v5=11, v6+=14
+function botsForWave(w){ return Math.min(LBOT.MAX_BOTS ?? 28, Math.max(8, Math.round(8 * Math.pow(1.3, (w||1) - 1)))); }   // INSANE 2x plus dense : v1=8, v2=10, v3=14, v4=18, v5=23, v6+=28
 function spawnBotWave(n){
   for(const _id of Array.from(botMgr.keys())){ if(_id > n) removeEntity(_id); }  // anti sur-spawn : jamais plus que l'effectif de la vague
   const w = LBOT.wave || 1, ST = (LBOT.types && LBOT.types.sentinel) || {}, DT = (LBOT.types && LBOT.types.drone) || {};
   let nSent  = (w >= (ST.from_wave || 99)) ? Math.min(ST.max || 0, 1 + Math.floor((w - (ST.from_wave || 0)) / (ST.per || 2))) : 0;
   let nDrone = (w >= (DT.from_wave || 99)) ? Math.min(DT.max || 0, 1 + Math.floor((w - (DT.from_wave || 0)) / (DT.per || 3))) : 0;
-  // Drones et Sentinels ne coexistent JAMAIS dans une vague : on alterne (impair = Sentinels, pair = Drones)
-  if(nSent > 0 && nDrone > 0){ if(w % 2 === 0) nSent = 0; else nDrone = 0; }
+  // Drones ET Sentinels coexistent desormais (on les voit beaucoup plus souvent) ; on garde au moins ~1/3 de normaux
+  const _specCap = Math.max(1, Math.floor(n * 0.66));   // plafond combine des speciaux -> il reste des normaux
   nSent = Math.min(nSent, n); nDrone = Math.min(nDrone, Math.max(0, n - nSent));
+  if(nSent + nDrone > _specCap){ nDrone = Math.max(0, _specCap - nSent); }
   const _placed = [];
   for(let i=0;i<n;i++){
     const id = i+1;
@@ -10237,26 +10238,6 @@ animate();
     }
   }, 100);
 })();
-window.__face = {
-  // place un bot 5 m devant le joueur, applique l'IA (yaw face joueur) + le rendu, et oriente la caméra dessus
-  test(){
-    let b=null; for(const x of botMgr.values()){ if(x&&x.soldier&&!x.dead){ b=x; break; } } if(!b) return 'no bot';
-    me.pos.set(0,1.6,0); me.yaw=Math.PI; me.pitch=-0.04;        // joueur regarde +z
-    b.pos.set(0,0,6);                                            // bot devant (à +z)
-    updateLocalBots(0.016);                                      // applique l'IA (b.yaw face joueur)
-    b.soldier.root.position.set(b.pos.x,b.pos.y,b.pos.z);
-    b.soldier.root.rotation.set(0, b.yaw + Math.PI, 0);          // même rendu qu'en jeu
-    b.soldier.root.updateMatrixWorld(true);
-    return { bYaw:+b.yaw.toFixed(2), rotY:+(b.yaw+Math.PI).toFixed(2) };
-  },
-  rampClip(){ // teste si un bot peut entrer dans l'emprise d'une rampe
-    let b=null; for(const x of botMgr.values()){ if(x&&x.soldier&&!x.dead){ b=x; break; } } if(!b) return 'no bot';
-    const r=MAP.ramps[0]; b.pos.set(r.x, 0, r.z); // on le téléporte AU CENTRE de la rampe
-    for(let i=0;i<60;i++) updateLocalBots(0.016);  // l'IA doit le repousser dehors
-    const inside = (Math.abs(b.pos.x-r.x)<r.w/2 && Math.abs(b.pos.z-r.z)<r.d/2);
-    return { rampCenter:[r.x,r.z], botPos:[+b.pos.x.toFixed(1),+b.pos.z.toFixed(1)], stillInsideRamp: inside };
-  }
-};
 </script>
 </body>
 </html>
