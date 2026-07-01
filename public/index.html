@@ -506,6 +506,28 @@
 <div id="hud">
   <canvas id="minimap" width="280" height="280"></canvas>
   <canvas id="compass" width="460" height="40"></canvas>
+  <!-- CO-OP : état du/des coéquipier(s) sous la mini-map (vie + pseudo, live) -->
+  <div id="coopTeam" style="position:absolute;top:306px;left:18px;width:280px;display:none;z-index:6;font-family:var(--font,system-ui)">
+    <div style="display:flex;align-items:center;gap:9px;padding:8px 11px;background:rgba(10,14,20,.62);border:1px solid rgba(120,210,255,.28);border-radius:9px;backdrop-filter:blur(3px)">
+      <span id="coopTeamDot" style="width:10px;height:10px;border-radius:50%;background:#36e07a;box-shadow:0 0 8px #36e07a;flex:none"></span>
+      <div style="flex:1;min-width:0">
+        <div id="coopTeamName" style="color:#e6f2ff;font:700 12px/1 var(--font);letter-spacing:.6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Ami</div>
+        <div style="height:6px;background:rgba(255,255,255,.12);border-radius:3px;margin-top:5px;overflow:hidden"><div id="coopTeamHp" style="height:100%;width:100%;background:#36e07a;transition:width .18s,background .18s"></div></div>
+      </div>
+    </div>
+  </div>
+  <!-- CO-OP : invite à réanimer (près d'un ami à terre) -->
+  <div id="coopRevive" style="position:fixed;left:50%;bottom:26%;transform:translateX(-50%);display:none;z-index:22;text-align:center;font-family:var(--font,system-ui);pointer-events:none">
+    <div style="color:#fff;font:700 15px/1 var(--font);letter-spacing:1px;text-shadow:0 2px 8px #000"><span id="coopReviveKey" style="display:inline-block;min-width:22px;padding:2px 7px;background:#5ce0ff;color:#062028;border-radius:5px;font-weight:800;margin-right:6px">E</span>Maintiens pour réanimer <span id="coopReviveName">ton ami</span></div>
+    <div style="width:220px;height:7px;background:rgba(255,255,255,.15);border-radius:4px;margin:9px auto 0;overflow:hidden"><div id="coopReviveBar" style="height:100%;width:0%;background:#36e07a"></div></div>
+  </div>
+  <!-- CO-OP : je suis à terre -->
+  <div id="coopDowned" style="position:fixed;inset:0;display:none;z-index:21;pointer-events:none;background:radial-gradient(ellipse at center,rgba(120,0,0,0) 40%,rgba(90,0,0,.42) 100%)">
+    <div style="position:absolute;top:20%;left:50%;transform:translateX(-50%);text-align:center;font-family:var(--font,system-ui)">
+      <div style="color:#ff5a5a;font:800 30px/1 var(--font);letter-spacing:5px;text-shadow:0 2px 12px #000">À TERRE</div>
+      <div id="coopDownedSub" style="color:#ffd0d0;font:600 14px/1.3 var(--font);margin-top:10px;text-shadow:0 2px 8px #000">Tiens bon — ton ami peut te réanimer</div>
+    </div>
+  </div>
   <div id="insanetimer">2:00</div>
   <div id="crosshair">
     <span class="ch ch-l"></span><span class="ch ch-r"></span><span class="ch ch-t"></span><span class="ch ch-b"></span>
@@ -5082,7 +5104,10 @@ function updateDrone(b, dt){
 /* ---------- Réseau ---------- */
 let ws = null, lastPingSent = 0, curPing = 0;
 // CO-OP INSANE : état du salon privé (rooms relayées par le serveur). Voir docs/PLAN_coop_insane_invitation.md
-const COOP = { active:false, role:null, code:null, host:null, guest:null, pending:null, started:false };
+const COOP = { active:false, role:null, code:null, host:null, guest:null, pending:null, started:false,
+  peer: { hasData:false, hp:100, sh:0, downed:false, dead:false, name:'' },   // état de l'ami (reçu en live)
+  reviveT:0, bleedT:0 };   // reviveT = progression du hold réanimation ; bleedT = compte à rebours à terre
+const REVIVE = { range:2.6, time:2.4, hp:60, bleed:60 };   // portée (m), durée du hold (s), PV rendus, bleed-out (s)
 function connect(coop){
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}`);
@@ -5211,6 +5236,7 @@ function onRoomMsg(m){
   const p=m.payload; if(p==null) return;
   if(p==='start' || (p && p.t==='start')){ coopStart(); return; }
   if(p && p.t==='cs'){ onCoopPeerState(p); return; }
+  if(p && p.t==='revive'){ coopReviveMe(); return; }   // mon ami m'a réanimé
   // snapshots des bots (host-autoritaire) : étape suivante
 }
 function coopEnsurePeer(){             // crée le mesh de l'ami (réutilise l'objet `remote`) + horloge d'interp locale
@@ -5219,20 +5245,90 @@ function coopEnsurePeer(){             // crée le mesh de l'ami (réutilise l'o
   }
   if(svClockOff === null) svClockOff = 0;   // pas de 'snap' serveur en insane -> horloge locale pour interpRemote
 }
-function onCoopPeerState(p){           // position de l'ami reçue -> alimente le buffer d'interpolation de `remote`
+function onCoopPeerState(p){           // état de l'ami reçu -> buffer d'interpolation de `remote` + vie/à-terre
   if(!COOP.started) return;
   coopEnsurePeer();
-  remote.exists = true; remote.dead = false;
-  remote.buf.push({ at: performance.now(), p: p.p, yaw: p.yaw, pitch: p.pitch||0, anim: p.anim||{}, dead: false });
+  COOP.peer.hasData = true;
+  if(p.hp != null) COOP.peer.hp = p.hp;
+  COOP.peer.sh = p.sh || 0;
+  COOP.peer.downed = !!p.dn;
+  COOP.peer.dead = !!p.dd;
+  if(p.nm) COOP.peer.name = p.nm;
+  remote.exists = true;
+  remote.dead = !!p.dd;              // mort complète = corps au sol (anim mort) ; à-terre = reste affiché
+  remote.downed = !!p.dn;
+  remote.buf.push({ at: performance.now(), p: p.p, yaw: p.yaw, pitch: p.pitch||0, anim: p.anim||{}, dead: !!p.dd });
   if(remote.buf.length > 45) remote.buf.shift();
   if(p.w != null) remote.netW = p.w|0;
 }
 function coopStart(){                  // démarre l'insane + active la synchro d'avatars (on se voit)
   COOP.started=true; hideCoopModal();
   remote.exists=false; remote.dead=false; remote.buf.length=0;   // reset avant de recevoir l'ami
+  COOP.peer.hasData=false; COOP.peer.downed=false; COOP.peer.dead=false; COOP.peer.hp=100;
+  COOP.reviveT=0; COOP.bleedT=0; me.downed=false;
   LBOT.ai.difficulty='insane';
   const bb=_cm('botbtnmenu'); if(bb) bb.click();   // lance l'insane (grande map)
   coopEnsurePeer();
+}
+// ===== À TERRE / RÉANIMATION =====
+function coopCanDown(){ return COOP.started && COOP.peer.hasData && !COOP.peer.downed && !COOP.peer.dead; }
+function coopGoDowned(){               // je meurs mais un ami est debout -> je tombe à terre (réanimable)
+  if(me.downed) return;
+  alive = false; me.downed = true; me.hp = 0; me.vel && me.vel.set && me.vel.set(0,0,0);
+  COOP.bleedT = REVIVE.bleed;
+  updateHPShieldUI(); try{ playSfx('death'); }catch(e){}
+  resetOvercharge();
+  const dm=document.getElementById('coopDowned'); if(dm) dm.style.display='';
+}
+function coopReviveMe(){               // reçu 'revive' de l'ami -> je me relève
+  if(!me.downed) return;
+  me.downed = false; alive = true; me.hp = REVIVE.hp; me.sh = 0;
+  updateHPShieldUI(); try{ playSfx('spawn'); }catch(e){}
+  const dm=document.getElementById('coopDowned'); if(dm) dm.style.display='none';
+  if(typeof showHUDToast==='function') showHUDToast('Réanimé ! Reste en vie.', 'ok', 1800);
+}
+function coopFullDeath(){              // plus d'ami pour me relever -> vraie mort insane
+  me.downed = false;
+  const dm=document.getElementById('coopDowned'); if(dm) dm.style.display='none';
+  alive = true;   // insaneDeath repart d'un état vivant pour la transition
+  if(LBOT.waveMode && INSANE.on) insaneDeath(); else localPlayerDeath();
+}
+// Boucle co-op : réanimation (si debout près d'un ami à terre) + bleed-out (si je suis à terre) + HUD.
+function coopUpdate(dt, g){
+  if(!COOP.started){ const rv=document.getElementById('coopRevive'); if(rv&&rv.style.display!=='none') rv.style.display='none'; return; }
+  updateCoopHUD();
+  // JE SUIS À TERRE : compte à rebours ; si l'ami meurt aussi -> vraie mort
+  if(me.downed){
+    if(COOP.peer.dead || (COOP.peer.hasData && COOP.peer.downed)){ coopFullDeath(); return; }
+    COOP.bleedT -= dt;
+    const sub=document.getElementById('coopDownedSub');
+    if(sub) sub.textContent = 'Tiens bon — ' + Math.ceil(Math.max(0,COOP.bleedT)) + 's';
+    if(COOP.bleedT <= 0){ coopFullDeath(); }
+    return;
+  }
+  // JE SUIS DEBOUT : puis-je réanimer un ami à terre à portée ?
+  const rv=document.getElementById('coopRevive');
+  const peerDown = COOP.peer.hasData && COOP.peer.downed && !COOP.peer.dead && remote.exists && remote.pos;
+  const near = peerDown && alive && (Math.hypot(remote.pos.x-me.pos.x, remote.pos.z-me.pos.z) < REVIVE.range);
+  if(near){
+    const holding = (typeof keysDown!=='undefined' && keysDown.has('KeyE')) || !!(g && g.buttons && g.buttons[5] && g.buttons[5].pressed);   // E (PC) / R1=RB (manette)
+    if(holding) COOP.reviveT += dt; else COOP.reviveT = Math.max(0, COOP.reviveT - dt*2);
+    if(COOP.reviveT >= REVIVE.time){ COOP.reviveT = 0; coopSend({ t:'revive' }); if(typeof showHUDToast==='function') showHUDToast('Ami réanimé', 'ok', 1500); }
+    if(rv){ rv.style.display='';
+      const nm=document.getElementById('coopReviveName'); if(nm) nm.textContent = COOP.peer.name||'ton ami';
+      const kb=document.getElementById('coopReviveKey'); if(kb) kb.textContent = (inputDevice==='gamepad') ? 'R1' : 'E';
+      const bar=document.getElementById('coopReviveBar'); if(bar) bar.style.width = Math.min(100, COOP.reviveT/REVIVE.time*100) + '%'; }
+  } else { COOP.reviveT = 0; if(rv && rv.style.display!=='none') rv.style.display='none'; }
+}
+function updateCoopHUD(){              // panneau coéquipier sous la mini-map (pseudo + barre de vie live)
+  const el=document.getElementById('coopTeam'); if(!el) return;
+  if(!COOP.started || !COOP.peer.hasData){ if(el.style.display!=='none') el.style.display='none'; return; }
+  if(el.style.display==='none') el.style.display='';
+  const nm=document.getElementById('coopTeamName'), hp=document.getElementById('coopTeamHp'), dot=document.getElementById('coopTeamDot');
+  const base = COOP.peer.name || 'Ami';
+  if(COOP.peer.dead){ if(nm) nm.textContent = base+' — MORT'; if(hp){ hp.style.width='0%'; } if(dot){ dot.style.background='#ff5a5a'; dot.style.boxShadow='0 0 8px #ff5a5a'; } }
+  else if(COOP.peer.downed){ if(nm) nm.textContent = base+' — À TERRE'; if(hp){ hp.style.width='100%'; hp.style.background='#ffb000'; } if(dot){ dot.style.background='#ffb000'; dot.style.boxShadow='0 0 8px #ffb000'; } }
+  else { const pct=Math.max(0,Math.min(100,COOP.peer.hp||0)); if(nm) nm.textContent=base; if(hp){ hp.style.width=pct+'%'; hp.style.background = pct>30?'#36e07a':'#ffb000'; } if(dot){ dot.style.background='#36e07a'; dot.style.boxShadow='0 0 8px #36e07a'; } }
 }
 function coopLaunchHost(){ if(!COOP.active) return; coopSend('start'); coopStart(); }
 function coopCancel(){
@@ -5278,9 +5374,14 @@ setInterval(()=>{
     t:'state', p:[me.pos.x, me.pos.y, me.pos.z], yaw: me.yaw, pitch: me.pitch,
     anim: lastMyAnim, w: me.weaponIdx,   // arme tenue (le serveur valide le coup de sabre)
   }));
-  // CO-OP : relaie MA position à mon ami (il me rend via l'objet `remote`)
-  if(COOP.started) coopSend({ t:'cs', p:[me.pos.x, me.pos.y, me.pos.z], yaw: me.yaw, pitch: me.pitch, anim: lastMyAnim, w: me.weaponIdx });
 }, 33);
+// CO-OP : relaie MON état à l'ami (position + vie + à-terre). Tourne AUSSI quand je suis à terre (alive=false).
+setInterval(()=>{
+  if(!COOP.started || !ws || ws.readyState!==1 || !me || !me.pos) return;
+  coopSend({ t:'cs', p:[me.pos.x, me.pos.y, me.pos.z], yaw: me.yaw, pitch: me.pitch, anim: lastMyAnim || {}, w: me.weaponIdx,
+    hp: Math.max(0, Math.round(me.hp||0)), sh: Math.max(0, Math.round(me.sh||0)),
+    dn: me.downed ? 1 : 0, dd: (!alive && !me.downed) ? 1 : 0, nm: myName });
+}, 50);
 
 function onRoster(m){
   if(m.names){ seatNames = []; for(const k in m.names) seatNames[+k] = m.names[k]; }
@@ -7215,6 +7316,7 @@ function botSeesPlayer(b){
 }
 function localPlayerDeath(){
   if(!alive) return;
+  if(coopCanDown()){ coopGoDowned(); return; }   // CO-OP : un ami est debout -> je tombe à terre (réanimable) au lieu de mourir
   if(LBOT.waveMode && INSANE.on){ insaneDeath(); return; }
   spawnSoulOrbs(new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z));   // particules bleues a la frame de mort
   alive = false; playSfx('death');
@@ -7742,7 +7844,8 @@ function toMenu(msg){
   stopSpectate();
   clearBots();
   localBotMode = false;   // quitter le mode entraînement
-  if(typeof COOP!=='undefined'){ COOP.started=false; COOP.active=false; COOP.role=null; remote.exists=false; }   // fin co-op
+  if(typeof COOP!=='undefined'){ COOP.started=false; COOP.active=false; COOP.role=null; remote.exists=false; me.downed=false;   // fin co-op
+    for(const _id of ['coopDowned','coopRevive','coopTeam']){ const _e=document.getElementById(_id); if(_e) _e.style.display='none'; } }
   if(typeof INSANE!=='undefined'){ INSANE.on=false; INSANE.ended=false; INSANE.running=false; INSANE.introFreeze=false; }
   { const cp=document.getElementById('compass'); if(cp) cp.style.display=''; const tm=document.getElementById('insanetimer'); if(tm) tm.style.display='none'; const idd=document.getElementById('insanedeath'); if(idd) idd.classList.remove('show'); const iii=document.getElementById('insaneintro'); if(iii) iii.classList.remove('show'); const hud=document.getElementById('hud'); if(hud) hud.style.opacity='1'; }
   playing = false; alive = true; myId = -1;
@@ -7987,12 +8090,22 @@ function updateMinimap(){
   // Ennemis (rouge clignotant, fondu avec la distance, invisibles au-delà de 10 m)
   const enemies=[];
   if(typeof botMgr!=='undefined' && botMgr) for(const b of botMgr.values()){ if(b && !b.dead && b.pos) enemies.push(b.pos); }
-  if(typeof remote!=='undefined' && remote && remote.pos && !remote.dead) enemies.push(remote.pos);
+  // en co-op, `remote` est mon COÉQUIPIER (pas un ennemi) -> on ne le met pas en rouge
+  if(!(typeof COOP!=='undefined' && COOP.started) && typeof remote!=='undefined' && remote && remote.pos && !remote.dead) enemies.push(remote.pos);
   for(const ep of enemies){ const q=plot(ep.x,ep.z); if(!q) continue;
     const a=Math.max(0,(1-q.dist/RANGE))*blink;
     ctx.shadowColor='rgba(255,40,40,'+a.toFixed(3)+')'; ctx.shadowBlur=9;
     ctx.fillStyle='rgba(255,60,60,'+a.toFixed(3)+')';
     ctx.beginPath(); ctx.arc(q.x,q.y,5.4,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; }
+  // CO-OP : coéquipier en VERT (à-terre = orange, mort = rouge). Clampé au bord si hors portée -> direction visible.
+  if(typeof COOP!=='undefined' && COOP.started && COOP.peer.hasData && typeof remote!=='undefined' && remote && remote.pos){
+    const dx=remote.pos.x-me.pos.x, dz=remote.pos.z-me.pos.z;
+    let rx=(-dx*fz + dz*fx)*scale, ry=-(dx*fx + dz*fz)*scale;
+    const rr=Math.hypot(rx,ry)||1e-4, lim=S-6; if(rr>lim){ rx*=lim/rr; ry*=lim/rr; }
+    const col = COOP.peer.dead ? '255,90,90' : (COOP.peer.downed ? '255,176,0' : '60,224,122');
+    ctx.shadowColor='rgba('+col+',.9)'; ctx.shadowBlur=8; ctx.fillStyle='rgba('+col+',.96)';
+    ctx.beginPath(); ctx.arc(cx+rx, cy+ry, 5.8, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
+  }
   // Moi au centre : flèche blanche pointant vers le haut (ma direction)
   ctx.fillStyle='rgba(255,255,255,.95)';
   ctx.beginPath(); ctx.moveTo(cx,cy-9); ctx.lineTo(cx-6.5,cy+7); ctx.lineTo(cx+6.5,cy+7); ctx.closePath(); ctx.fill();
@@ -10255,6 +10368,7 @@ function animate(){
     else { const _s=(typeof MAP!=='undefined'&&MAP&&MAP.spawns&&MAP.spawns[0])||[0,0,0,0]; me.pos.set(_s[0]||0, 2, _s[2]||0); }
     me.vel.set(0,0,0); if(me.slide) me.slide.active=false; me.wallBounced=false; me.wbBoostT=0;
   }
+  if(typeof coopUpdate==='function') coopUpdate(dt, g);   // CO-OP : réanimation / à-terre / HUD coéquipier (tourne même à terre)
   if(playing && alive && !botFrozen) applySaberMagnet(dt);   // aimant de visée quand le sabre est sorti près d'un ennemi
   // mes propres pas, réactifs à la vitesse (cadence + volume + pitch)
   if(playing && alive && me.onGround && !me.slide.active && !me.mantle.active){
