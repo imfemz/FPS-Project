@@ -5108,6 +5108,8 @@ const COOP = { active:false, role:null, code:null, host:null, guest:null, pendin
   peer: { hasData:false, hp:100, sh:0, downed:false, dead:false, name:'' },   // état de l'ami (reçu en live)
   reviveT:0, bleedT:0 };   // reviveT = progression du hold réanimation ; bleedT = compte à rebours à terre
 const REVIVE = { range:2.6, time:2.4, hp:60, bleed:60 };   // portée (m), durée du hold (s), PV rendus, bleed-out (s)
+const _coopLieQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), Math.PI/2);   // bascule un perso debout -> allongé au sol
+const _coopDownAnim = { m:0, c:0, a:0, r:0, sl:0, h:0, cl:0, f:0, ad:0, pitch:0 };                 // pose neutre (membres au repos) quand à terre
 function connect(coop){
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}`);
@@ -10412,7 +10414,12 @@ function animate(){
     remote.soldier.root.visible = !kc;
     if(!kc){
       interpRemote();
-      if(!remote.dead && !remote.soldier.ragdolling){
+      if(remote.downed && !remote.dead){
+        // CO-OP : ami À TERRE -> corps allongé au sol (bascule procédurale, réversible à la réanimation)
+        remote.soldier.root.position.set(remote.pos.x, remote.pos.y + 0.28, remote.pos.z);
+        remote.soldier.root.quaternion.setFromEuler(new THREE.Euler(0, remote.yaw + Math.PI, 0)).multiply(_coopLieQ);
+        animateSoldier(remote.soldier, _coopDownAnim, dt, performance.now()*0.001);   // membres au repos
+      } else if(!remote.dead && !remote.soldier.ragdolling){
         remote.soldier.root.position.set(remote.pos.x, remote.pos.y, remote.pos.z);
         // perso DEBOUT : on force l'axe vertical (sinon un reste de ragdoll/anim le laisse penché)
         remote.soldier.root.rotation.set(0, remote.yaw + Math.PI, 0);
