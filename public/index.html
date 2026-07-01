@@ -5197,7 +5197,7 @@ function onRoomError(m){
   COOP.active=false;
 }
 function onRoomPeerLeft(){
-  if(COOP.started){ if(typeof showHUDToast==='function') showHUDToast('Ton ami a quitté la partie', 'warn', 2600); }
+  if(COOP.started){ if(typeof showHUDToast==='function') showHUDToast('Ton ami a quitté la partie', 'warn', 2600); remote.exists=false; if(remote.soldier&&remote.soldier.root) remote.soldier.root.visible=false; }
   else if(COOP.role==='host'){
     const st=_cm('cmStatusTxt'); if(st) st.textContent='En attente de ton ami…';
     const dot=document.querySelector('#cmHost .cm-dot'); if(dot) dot.classList.remove('on');
@@ -5209,13 +5209,30 @@ function onRoomPeerLeft(){
 }
 function onRoomMsg(m){
   const p=m.payload; if(p==null) return;
-  if(p==='start' || (p && p.t==='start')){ coopStart(); }
-  // snapshots / inputs de jeu : étape suivante (cf. plan)
+  if(p==='start' || (p && p.t==='start')){ coopStart(); return; }
+  if(p && p.t==='cs'){ onCoopPeerState(p); return; }
+  // snapshots des bots (host-autoritaire) : étape suivante
 }
-function coopStart(){                 // FOUNDATION : démarre l'insane des 2 côtés (synchro 2 joueurs = étape suivante)
+function coopEnsurePeer(){             // crée le mesh de l'ami (réutilise l'objet `remote`) + horloge d'interp locale
+  if(!remote.soldier && typeof RIG_READY!=='undefined' && RIG_READY && RIG_TEMPLATE){
+    remote.soldier = createSoldierRigged(0x5ce0ff); scene.add(remote.soldier.root);
+  }
+  if(svClockOff === null) svClockOff = 0;   // pas de 'snap' serveur en insane -> horloge locale pour interpRemote
+}
+function onCoopPeerState(p){           // position de l'ami reçue -> alimente le buffer d'interpolation de `remote`
+  if(!COOP.started) return;
+  coopEnsurePeer();
+  remote.exists = true; remote.dead = false;
+  remote.buf.push({ at: performance.now(), p: p.p, yaw: p.yaw, pitch: p.pitch||0, anim: p.anim||{}, dead: false });
+  if(remote.buf.length > 45) remote.buf.shift();
+  if(p.w != null) remote.netW = p.w|0;
+}
+function coopStart(){                  // démarre l'insane + active la synchro d'avatars (on se voit)
   COOP.started=true; hideCoopModal();
+  remote.exists=false; remote.dead=false; remote.buf.length=0;   // reset avant de recevoir l'ami
   LBOT.ai.difficulty='insane';
   const bb=_cm('botbtnmenu'); if(bb) bb.click();   // lance l'insane (grande map)
+  coopEnsurePeer();
 }
 function coopLaunchHost(){ if(!COOP.active) return; coopSend('start'); coopStart(); }
 function coopCancel(){
@@ -5261,6 +5278,8 @@ setInterval(()=>{
     t:'state', p:[me.pos.x, me.pos.y, me.pos.z], yaw: me.yaw, pitch: me.pitch,
     anim: lastMyAnim, w: me.weaponIdx,   // arme tenue (le serveur valide le coup de sabre)
   }));
+  // CO-OP : relaie MA position à mon ami (il me rend via l'objet `remote`)
+  if(COOP.started) coopSend({ t:'cs', p:[me.pos.x, me.pos.y, me.pos.z], yaw: me.yaw, pitch: me.pitch, anim: lastMyAnim, w: me.weaponIdx });
 }, 33);
 
 function onRoster(m){
@@ -7723,6 +7742,7 @@ function toMenu(msg){
   stopSpectate();
   clearBots();
   localBotMode = false;   // quitter le mode entraînement
+  if(typeof COOP!=='undefined'){ COOP.started=false; COOP.active=false; COOP.role=null; remote.exists=false; }   // fin co-op
   if(typeof INSANE!=='undefined'){ INSANE.on=false; INSANE.ended=false; INSANE.running=false; INSANE.introFreeze=false; }
   { const cp=document.getElementById('compass'); if(cp) cp.style.display=''; const tm=document.getElementById('insanetimer'); if(tm) tm.style.display='none'; const idd=document.getElementById('insanedeath'); if(idd) idd.classList.remove('show'); const iii=document.getElementById('insaneintro'); if(iii) iii.classList.remove('show'); const hud=document.getElementById('hud'); if(hud) hud.style.opacity='1'; }
   playing = false; alive = true; myId = -1;
