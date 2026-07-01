@@ -5235,6 +5235,10 @@ function coopStart(){                  // démarre l'insane + active la synchro 
   coopEnsurePeer();
 }
 function coopLaunchHost(){ if(!COOP.active) return; coopSend('start'); coopStart(); }
+window.__coopDbg = function(){ return { started: COOP.started, exists: remote.exists, buf: remote.buf.length,
+  hasSoldier: !!remote.soldier, vis: !!(remote.soldier && remote.soldier.root && remote.soldier.root.visible),
+  pos: remote.pos ? [+remote.pos.x.toFixed(1), +remote.pos.y.toFixed(1), +remote.pos.z.toFixed(1)] : null }; };
+window.__coopFeed = function(){ COOP.started = true; for(let i=0;i<5;i++) onCoopPeerState({ t:'cs', p:[8, 0, 12+i*0.5], yaw:1.2, pitch:0, anim:{m:0.4}, w:0 }); return window.__coopDbg(); };
 function coopCancel(){
   try{ if(ws && ws.readyState===1) ws.send(JSON.stringify({t:'leaveRoom'})); }catch(e){}
   COOP.active=false; COOP.pending=null; COOP.role=null; hideCoopModal();
